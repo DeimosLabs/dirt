@@ -22,7 +22,7 @@
  *
  * compile:
  * g++ -O3 -std=c++17 dirt.cpp -o dirt -lsndfile -lfftw3 -ljack
- * (or just use the included build.sh script)
+ * (or just use cmake)
  *
  * usage examples:
  *
@@ -103,7 +103,7 @@ struct s_prefs {
   bool verbose = false;
   bool sweepwait = false;
 
-  double sweep_seconds      = DEFAULT_SWEEP_SEC;   // default not really used
+  double sweep_seconds      = DEFAULT_SWEEP_SEC;   // default value not really used
   double preroll_seconds    = DEFAULT_PREROLL_SEC;
   double marker_seconds     = DEFAULT_MARKER_SEC;  // alignment marker
   double marker_gap_seconds = DEFAULT_MARKGAP_SEC;
@@ -168,10 +168,10 @@ public:
                                    bool trim_end = true,
                                    bool trim_start = false);
 
-  bool set_dry_from_buffer(const std::vector<float>& buf, int sr);
-  bool set_wet_from_buffer(const std::vector<float>& bufL,
-                           const std::vector<float>& bufR,
-                           int sr);
+  bool set_dry_from_buffer (const std::vector<float>& buf, int sr);
+  bool set_wet_from_buffer (const std::vector<float>& bufL,
+                            const std::vector<float>& bufR,
+                            int sr);
 
   bool init_jack (const std::string clientname,
                   sig_channels chan_in = sig_channels::chn_stereo,
@@ -179,11 +179,11 @@ public:
   bool jack_play (std::vector<float> &buf, int samplerate, const char *portname);
   bool jack_rec  (std::vector<float> &buf, int samplerate, const char *portname);
   
-  bool jack_playrec_sweep(const std::vector<float> &sweep,
-                          int samplerate,
-                          const char *jack_out_port,
-                          const char *jack_in_port,
-                          std::vector<float> &captured);
+  bool jack_playrec_sweep (const std::vector<float> &sweep,
+                           int samplerate,
+                           const char *jack_out_port,
+                           const char *jack_in_port,
+                           std::vector<float> &captured);
 private:
   bool set_samplerate_if_needed (int sr);
   
