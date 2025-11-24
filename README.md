@@ -16,3 +16,8 @@ dirt <sweep_dry.wav> <sweep_wet.wav> <output_ir.wav>
 dirt <out_jack_port> <in_jack_port> -o <output_ir.wav>
 ```
 See --help text for more info/options
+
+## License
+
+DIRT is licensed under the GNU General Public License v3.0 (GPL-3.0-or-later).
+See the COPYING file for full license text.
