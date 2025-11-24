@@ -1532,12 +1532,14 @@ bool c_deconvolver::jack_play (std::vector<float> &sig,
 
 static void print_usage (const char *prog) {
   std::cerr <<
+    "DIRT - Delt's Impulse Response Tool, version " << DIRT_VERSION << "\n\n"
     "Usage:\n"
     "  " << prog << " [options] dry.wav wet.wav out.wav\n"
     "  " << prog << " [options] -d dry.wav -w wet.wav -o out.wav\n"
     "\n"
     "Deconvolver options:\n"
-    "  -h, --help               Show this help/usage text\n"
+    "  -h, --help               Show this help/usage text and version\n"
+    "  -V, --version            Same as --help\n"
     "  -d, --dry FILE           Dry sweep WAV file\n"
     "  -w, --wet FILE           Recorded (wet) sweep WAV file\n"
     "  -o, --out FILE           Output IR WAV file\n"
@@ -1591,7 +1593,7 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
   for (int i = 1; i < argc; ++i) {
     std::string arg = argv [i];
 
-    if (arg == "-h" || arg == "--help") {
+    if (arg == "-h" || arg == "--help" || arg == "-V" || arg == "--version") {
       print_usage (argv [0]);
       exit (0);
     } else if (arg == "-d" || arg == "--dry") {
