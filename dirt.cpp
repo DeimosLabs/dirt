@@ -1588,7 +1588,7 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
     return ret_err;
   }
   
-  // First pass: parse flags
+  // First pass: parse flags 
   std::vector<const char *> positionals;
   for (int i = 1; i < argc; ++i) {
     std::string arg = argv [i];
