@@ -1,7 +1,0 @@
-/usr/src/dirt/build/CMakeFiles/dirt.dir
-/usr/src/dirt/build/CMakeFiles/edit_cache.dir
-/usr/src/dirt/build/CMakeFiles/rebuild_cache.dir
-/usr/src/dirt/build/CMakeFiles/list_install_components.dir
-/usr/src/dirt/build/CMakeFiles/install.dir
-/usr/src/dirt/build/CMakeFiles/install/local.dir
-/usr/src/dirt/build/CMakeFiles/install/strip.dir
