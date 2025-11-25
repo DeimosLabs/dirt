@@ -11,6 +11,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Option to explicitly disable JACK
 option(DONT_USE_JACK "Disable JACK support even if the library is available" OFF)
+option(DEBUG "Debug build" OFF)
 
 find_package(PkgConfig REQUIRED)
 
@@ -51,6 +52,11 @@ elseif (DONT_USE_JACK)
 else()
     message(STATUS "JACK: not found")
 endif()
+
+if (DEBUG)
+    MESSAGE(STATUS "Debug enabled")
+    target_compile_definitions(dirt PRIVATE DEBUG)
+endif()    
 
 # Nice default: `cmake -DCMAKE_BUILD_TYPE=Release ..`
 if (NOT CMAKE_BUILD_TYPE)
