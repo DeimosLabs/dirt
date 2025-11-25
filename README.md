@@ -5,7 +5,7 @@ DIRT - Delt's Impulse Response Tool
 A simple, open-source sinewave sweep generator, recorder, and deconvolver. In its simplest usage, takes two sinewave sweeps, one generated (dry) and the other (wet) recorded through a cab, reverb, etc. and outputs an impulse response.
 
 Compiles and installs with cmake.
-Required libraries: libsndfile, fftw3, jack
+Required libraries: libsndfile, libfftw3, (for JACK support) libjack
 
 Usage examples:
 ```
