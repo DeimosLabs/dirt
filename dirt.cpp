@@ -25,6 +25,13 @@
 
 #include "dirt.h"
 
+#ifdef DEBUG
+#define CMDLINE_IMPLEMENTATION // This should only be in ONE implementation file!!
+#define CMDLINE_DEBUG
+#include "cmdline/cmdline.h"
+#define debug(...) cmdline_debug(stderr,ANSI_RED,__FILE__,__LINE__,__FUNC__,__VA_ARGS__)
+#endif
+
 // our random number generator
 class c_randomgen {
 public:
@@ -82,13 +89,18 @@ private:
 
 // some static helper functions
 
-static bool file_exists(const std::string &path) {
+static bool file_exists (const std::string &path) {
   struct stat st{};
   return (::stat(path.c_str(), &st) == 0 && S_ISREG(st.st_mode));
 }
 
-static bool looks_like_jack_port(const std::string &s) {
-  return (s.find(':') != std::string::npos);
+// for now just check if given name contains a ":"
+static bool looks_like_jack_port (const std::string &s) {
+  if ((s.find(':') != std::string::npos) &&
+     (s [0] >= 'A' && s [0] <= 'z'))
+    return true;
+  
+  return false;
 }
 
 static inline size_t next_pow2 (size_t n) {
@@ -122,312 +134,351 @@ static size_t detect_sweep_start_with_marker (const std::vector<float> &buf,
                                               bool verbose,
                                               size_t *out_marker_len = NULL,
                                               size_t *out_gap_len = NULL) {
-    // default outputs
-    if (out_marker_len) *out_marker_len = 0;
-    if (out_gap_len)    *out_gap_len    = 0;
+  debug ("start");
+  
+  // default outputs
+  if (out_marker_len) *out_marker_len = 0;
+  if (out_gap_len)    *out_gap_len    = 0;
 
-    if (buf.empty ()) return 0;
-    
-    float sweep_amp_linear = db_to_linear (sweep_amp_db);
+  if (buf.empty ()) return 0;
+  
+  float sweep_amp_linear = db_to_linear (sweep_amp_db);
 
-    // 1) first non-silent sample in the whole file
-    size_t i0 = find_first_nonsilent(buf, silence_thresh);
-    if (i0 >= buf.size ()) return 0; // all silent, fall back
+  // 1) first non-silent sample in the whole file
+  size_t i0 = find_first_nonsilent(buf, silence_thresh);
+  if (i0 >= buf.size ()) return 0; // all silent, fall back
 
-    if (marker_freq <= 0.0) {
-        // No marker mode, just use the first non-silent sample like before
-        if (verbose) {
-            std::cerr << "No marker_freq configured, using first non-silent at "
-                      << i0 << "\n";
-        }
-        return i0;
+  if (marker_freq <= 0.0) {
+    // No marker mode, just use the first non-silent sample like before
+    if (verbose) {
+      std::cerr << "No marker_freq configured, using first non-silent at "
+                << i0 << "\n";
     }
+    debug ("return");
+    return i0;
+  }
 
-    // 2) analyze a short window after i0 to see if it's our marker square wave
-    const double max_marker_window_sec = (marker_seconds_hint > 0.0)
-                                         ? marker_seconds_hint
-                                         : 0.2; // 200 ms default window
-    const size_t max_window_samples =
-        std::min (buf.size() - i0,
-                 (size_t) (max_marker_window_sec * samplerate));
+  // 2) analyze a short window after i0 to see if it's our marker square wave
+  const double max_marker_window_sec = (marker_seconds_hint > 0.0)
+                                       ? marker_seconds_hint
+                                       : 0.2; // 200 ms default window
+  const size_t max_window_samples =
+      std::min (buf.size() - i0,
+               (size_t) (max_marker_window_sec * samplerate));
 
-    if (max_window_samples < 8) {
-        // Not enough samples to decide, just fall back
-        if (verbose) {
-            std::cerr << "Marker window too short, using first non-silent at "
-                      << i0 << "\n";
-        }
-        return i0;
+  if (max_window_samples < 8) {
+    // Not enough samples to decide, just fall back
+    if (verbose) {
+      std::cerr << "Marker window too short, using first non-silent at "
+                << i0 << "\n";
     }
+    debug ("return");
+    return i0;
+  }
 
-    // Count sign flips above some amplitude
-    const float amp_thresh = 0.5f * sweep_amp_linear; // strong signal only
-    int last_sign = 0;
-    size_t last_flip_idx = 0;
-    int flip_count = 0;
-    size_t first_flip_idx = 0;
+  // Count sign flips above some amplitude
+  const float amp_thresh = 0.5f * sweep_amp_linear; // strong signal only
+  int last_sign = 0;
+  size_t last_flip_idx = 0;
+  int flip_count = 0;
+  size_t first_flip_idx = 0;
 
-    for (size_t n = 0; n < max_window_samples; ++n) {
+  for (size_t n = 0; n < max_window_samples; ++n) {
+    float v = buf[i0 + n];
+    if (std::fabs(v) < amp_thresh) continue;
+
+    int s = (v > 0.0f) ? 1 : -1;
+    if (last_sign == 0) {
+      last_sign = s;
+      first_flip_idx = n;
+      last_flip_idx = n;
+    } else if (s != last_sign) {
+      last_sign = s;
+      flip_count++;
+      last_flip_idx = n;
+    }
+  }
+
+  if (flip_count < 4) {
+    // Not enough flips for a clean square wave, treat as no marker
+    if (verbose) {
+      std::cerr << "Not enough marker sign flips ("
+                << flip_count << "), using first non-silent at "
+                << i0 << "\n";
+    }
+    debug ("return");
+    return i0;
+  }
+
+  double avg_samples_per_flip =
+      (double)(last_flip_idx - first_flip_idx) / flip_count;
+
+  // For a square wave, 2 flips per full period
+  double est_period = 2.0 * avg_samples_per_flip;
+  double est_freq   = (est_period > 0.0)
+                      ? (double)samplerate / est_period
+                      : 0.0;
+
+  double rel_err = std::fabs(est_freq - marker_freq) / marker_freq;
+
+  if (verbose) {
+    std::cerr << "Marker detect: est_freq=" << est_freq
+              << " Hz (target " << marker_freq << " Hz), rel_err="
+              << rel_err << ", flips=" << flip_count << "\n";
+  }
+
+  if (est_freq <= 0.0 || rel_err > 0.2) {
+    // >20% off -> probably not our marker
+    if (verbose) {
+        std::cerr << "Marker frequency mismatch, using first non-silent at "
+                  << i0 << "\n";
+    }
+    debug ("return");
+    return i0;
+  }
+
+  // 3) marker looks valid -> decide where it ends
+  size_t marker_end = i0;
+  if (marker_seconds_hint > 0.0) {
+    marker_end = i0 + (size_t)(marker_seconds_hint * samplerate);
+    if (marker_end > buf.size()) marker_end = buf.size();
+  } else {
+    // Auto: extend until signal no longer looks like strong marker
+    const size_t max_marker_samples =
+        std::min(buf.size() - i0,
+                 (size_t)(0.5 * samplerate)); // up to 0.5s
+    marker_end = i0;
+    for (size_t n = 0; n < max_marker_samples; ++n) {
         float v = buf[i0 + n];
-        if (std::fabs(v) < amp_thresh) continue;
-
-        int s = (v > 0.0f) ? 1 : -1;
-        if (last_sign == 0) {
-            last_sign = s;
-            first_flip_idx = n;
-            last_flip_idx = n;
-        } else if (s != last_sign) {
-            last_sign = s;
-            flip_count++;
-            last_flip_idx = n;
+        if (std::fabs(v) < amp_thresh * 0.3f) { // decayed significantly
+            marker_end = i0 + n;
+            break;
         }
     }
+    if (marker_end <= i0) marker_end = i0 + max_marker_samples;
+    if (marker_end > buf.size())      marker_end = buf.size();
+  }
 
-    if (flip_count < 4) {
-        // Not enough flips for a clean square wave, treat as no marker
-        if (verbose) {
-            std::cerr << "Not enough marker sign flips ("
-                      << flip_count << "), using first non-silent at "
-                      << i0 << "\n";
-        }
-        return i0;
-    }
+  if (verbose) {
+    std::cerr << "Marker detected from " << i0
+              << " to " << marker_end << " samples\n";
+  }
 
-    double avg_samples_per_flip =
-        (double)(last_flip_idx - first_flip_idx) / flip_count;
+  // 4) Skip gap (silence) after marker
+  size_t gap_start = marker_end;
+  size_t gap_end   = gap_start;
 
-    // For a square wave, 2 flips per full period
-    double est_period = 2.0 * avg_samples_per_flip;
-    double est_freq   = (est_period > 0.0)
-                        ? (double)samplerate / est_period
-                        : 0.0;
+  const size_t min_gap_samples =
+      (gap_seconds_hint > 0.0)
+      ? (size_t)(gap_seconds_hint * samplerate)
+      : (size_t)(0.05 * samplerate); // 50 ms minimum
 
-    double rel_err = std::fabs(est_freq - marker_freq) / marker_freq;
-
-    if (verbose) {
-        std::cerr << "Marker detect: est_freq=" << est_freq
-                  << " Hz (target " << marker_freq << " Hz), rel_err="
-                  << rel_err << ", flips=" << flip_count << "\n";
-    }
-
-    if (est_freq <= 0.0 || rel_err > 0.2) {
-        // >20% off -> probably not our marker
-        if (verbose) {
-            std::cerr << "Marker frequency mismatch, using first non-silent at "
-                      << i0 << "\n";
-        }
-        return i0;
-    }
-
-    // 3) marker looks valid -> decide where it ends
-    size_t marker_end = i0;
-    if (marker_seconds_hint > 0.0) {
-        marker_end = i0 + (size_t)(marker_seconds_hint * samplerate);
-        if (marker_end > buf.size()) marker_end = buf.size();
+  // find first non-silent after marker
+  // but ensure at least min_gap_samples of silence if possible
+  size_t silent_run = 0;
+  bool in_silence = false;
+  for (size_t i = marker_end; i < buf.size(); ++i) {
+    if (std::fabs(buf[i]) < silence_thresh) {
+      if (!in_silence) {
+        in_silence = true;
+        silent_run = 1;
+        gap_start  = i;
+      } else {
+        silent_run++;
+      }
     } else {
-        // Auto: extend until signal no longer looks like strong marker
-        const size_t max_marker_samples =
-            std::min(buf.size() - i0,
-                     (size_t)(0.5 * samplerate)); // up to 0.5s
-        marker_end = i0;
-        for (size_t n = 0; n < max_marker_samples; ++n) {
-            float v = buf[i0 + n];
-            if (std::fabs(v) < amp_thresh * 0.3f) { // decayed significantly
-                marker_end = i0 + n;
-                break;
-            }
-        }
-        if (marker_end <= i0) marker_end = i0 + max_marker_samples;
-        if (marker_end > buf.size())      marker_end = buf.size();
+      if (in_silence && silent_run >= min_gap_samples) {
+        gap_end = i;
+        break;
+      }
+      // reset and keep looking for a clean run
+      in_silence = false;
+      silent_run = 0;
     }
+  }
+
+  size_t sweep_start = 0;
+  if (gap_end > gap_start && gap_end < buf.size()) {
+    sweep_start = gap_end;
+  } else {
+    // No clear long silence run; just take first non-silent after marker_end
+    std::vector<float> tail (buf.begin() + marker_end, buf.end ());
+    size_t rel = find_first_nonsilent (tail, silence_thresh);
+    sweep_start = rel + marker_end;
+  }
+
+  if (sweep_start >= buf.size ()) sweep_start = i0; // fallback
+
+  // Compute marker_len and gap_len in samples,
+  // defined relative to first non-silent (i0)
+  if (sweep_start != i0 && marker_end > i0) {
+    size_t marker_len = marker_end - i0;
+    size_t gap_len    = sweep_start - marker_end;  // silence between marker and sweep
+
+    if (out_marker_len) *out_marker_len = marker_len;
+    if (out_gap_len)    *out_gap_len    = gap_len;
 
     if (verbose) {
-        std::cerr << "Marker detected from " << i0
-                  << " to " << marker_end << " samples\n";
+      std::cerr << "marker_len=" << marker_len
+                << " gap_len="   << gap_len << "\n";
     }
+  }
 
-    // 4) Skip gap (silence) after marker
-    size_t gap_start = marker_end;
-    size_t gap_end   = gap_start;
+  if (verbose) {
+    std::cerr << "Sweep start index = " << sweep_start << "\n";
+  }
 
-    const size_t min_gap_samples =
-        (gap_seconds_hint > 0.0)
-        ? (size_t)(gap_seconds_hint * samplerate)
-        : (size_t)(0.05 * samplerate); // 50 ms minimum
-
-    // find first non-silent after marker
-    // but ensure at least min_gap_samples of silence if possible
-    size_t silent_run = 0;
-    bool in_silence = false;
-    for (size_t i = marker_end; i < buf.size(); ++i) {
-        if (std::fabs(buf[i]) < silence_thresh) {
-            if (!in_silence) {
-                in_silence = true;
-                silent_run = 1;
-                gap_start  = i;
-            } else {
-                silent_run++;
-            }
-        } else {
-            if (in_silence && silent_run >= min_gap_samples) {
-                gap_end = i;
-                break;
-            }
-            // reset and keep looking for a clean run
-            in_silence = false;
-            silent_run = 0;
-        }
-    }
-
-    size_t sweep_start = 0;
-    if (gap_end > gap_start && gap_end < buf.size()) {
-        sweep_start = gap_end;
-    } else {
-        // No clear long silence run; just take first non-silent after marker_end
-        std::vector<float> tail (buf.begin() + marker_end, buf.end ());
-        size_t rel = find_first_nonsilent (tail, silence_thresh);
-        sweep_start = rel + marker_end;
-    }
-
-    if (sweep_start >= buf.size ()) sweep_start = i0; // fallback
-
-    // Compute marker_len and gap_len in samples,
-    // defined relative to first non-silent (i0)
-    if (sweep_start != i0 && marker_end > i0) {
-        size_t marker_len = marker_end - i0;
-        size_t gap_len    = sweep_start - marker_end;  // silence between marker and sweep
-
-        if (out_marker_len) *out_marker_len = marker_len;
-        if (out_gap_len)    *out_gap_len    = gap_len;
-
-        if (verbose) {
-            std::cerr << "marker_len=" << marker_len
-                      << " gap_len="   << gap_len << "\n";
-        }
-    }
-
-    if (verbose) {
-        std::cerr << "Sweep start index = " << sweep_start << "\n";
-    }
-
-    return sweep_start;
+  debug ("end");
+  return sweep_start;
 }
 
+// actually look for preroll, marker, gap
 size_t detect_dry_sweep_start (const std::vector<float> &dry,
                                int samplerate,
-                               s_prefs &prefs)
-{
-    size_t marker_len = 0;
-    size_t gap_len    = 0;
+                               s_prefs &prefs) {
+  debug ("start");
+  
+  size_t marker_len = 0;
+  size_t gap_len    = 0;
 
-    size_t start = detect_sweep_start_with_marker(
-        dry,
-        samplerate,
-        prefs.silence_thresh,  // FIXED: these were swapped
-        prefs.sweep_amp_db,    // 
-        MARKER_FREQ,
-        prefs.marker_seconds,
-        prefs.marker_gap_seconds,
-        prefs.verbose,
-        &marker_len,
-        &gap_len);
+  size_t start = detect_sweep_start_with_marker (
+                              dry,
+                              samplerate,
+                              prefs.silence_thresh,  // FIXED: these were swapped
+                              prefs.sweep_amp_db,    // 
+                              MARKER_FREQ,
+                              prefs.marker_seconds,
+                              prefs.marker_gap_seconds,
+                              prefs.verbose,
+                              &marker_len,
+                              &gap_len);
 
-    prefs.cache_dry_marker_len = marker_len;
-    prefs.cache_dry_gap_len    = gap_len;
+  prefs.cache_dry_marker_len = marker_len;
+  prefs.cache_dry_gap_len    = gap_len;
 
-    if (prefs.verbose) {
-        std::cerr << "dry: start=" << start
-                  << " marker_len=" << marker_len
-                  << " gap_len="    << gap_len << "\n";
-    }
-
-    return start;
+  if (prefs.verbose) {
+      std::cerr << "dry: start=" << start
+                << " marker_len=" << marker_len
+                << " gap_len="    << gap_len << "\n";
+  }
+  
+  debug ("end");
+  return start;
 }
 
+// use preroll/marker/gap positions found in dry, then find next nonsilent
 size_t detect_wet_sweep_start (const std::vector<float> &wet,
                                int samplerate,
-                               const s_prefs &prefs)
-{
-    size_t first = find_first_nonsilent (wet, prefs.silence_thresh);
+                               const s_prefs &prefs) {
+  debug ("start");
+  
+  size_t first = find_first_nonsilent (wet, prefs.silence_thresh);
 
-    if (prefs.cache_dry_marker_len || prefs.cache_dry_gap_len) {
-        size_t start = first
-                     + prefs.cache_dry_marker_len
-                     + prefs.cache_dry_gap_len;
-
-        if (prefs.verbose) {
-            std::cerr << "wet: first=" << first
-                      << " +marker=" << prefs.cache_dry_marker_len
-                      << " +gap="    << prefs.cache_dry_gap_len
-                      << " -> start=" << start << "\n";
-        }
-
-        return start;
-    }
-
-    // fallback: no cache (e.g. no marker detected in dry)
-    size_t start = detect_sweep_start_with_marker(
-        wet,
-        samplerate,
-        prefs.silence_thresh,  // FIXED: these were swapped
-        prefs.sweep_amp_db,    // 
-        MARKER_FREQ,
-        prefs.marker_seconds,
-        prefs.marker_gap_seconds,
-        prefs.verbose);
+  if (prefs.cache_dry_marker_len || prefs.cache_dry_gap_len) {
+    size_t start = first
+                 + prefs.cache_dry_marker_len
+                 + prefs.cache_dry_gap_len;
 
     if (prefs.verbose) {
-        std::cerr << "wet: no cached marker, start=" << start << "\n";
+        std::cerr << "wet: first=" << first
+                  << " +marker=" << prefs.cache_dry_marker_len
+                  << " +gap="    << prefs.cache_dry_gap_len
+                  << " -> start=" << start << "\n";
     }
 
+    debug ("return");
     return start;
+  }
+
+  // fallback: no cached values (e.g. no marker detected in dry)
+  size_t start = detect_sweep_start_with_marker (
+                                wet,
+                                samplerate,
+                                prefs.silence_thresh,  // FIXED: these were swapped
+                                prefs.sweep_amp_db,    // 
+                                MARKER_FREQ,
+                                prefs.marker_seconds,
+                                prefs.marker_gap_seconds,
+                                prefs.verbose);
+  if (prefs.verbose) {
+    std::cerr << "wet: no cached marker, start=" << start << "\n";
+  }
+
+  debug ("end");
+  return start;
 }
 
-static bool read_mono_wav (const char *path,
-                           std::vector<float> &out,
-                           int &samplerate) {
-  SF_INFO info { };
-  SNDFILE *f = sf_open (path, SFM_READ, &info);
+#include <sndfile.h>
+#include <vector>
+#include <iostream>
+
+bool read_wav (const char *filename,
+                std::vector<float> &left,
+                std::vector<float> &right,
+                int &sr) {
+  debug ("start");
+  
+  left.clear ();
+  right.clear ();
+
+  SF_INFO info {};
+  SNDFILE *f = sf_open (filename, SFM_READ, &info);
   if (!f) {
-    std::cerr << "Error: cannot open file " << path << ": "
-              << sf_strerror (nullptr) << "\n";
+    std::cerr << "Error: failed to open WAV file: " << filename << "\n";
     return false;
   }
 
-  samplerate = info.samplerate;
-  const sf_count_t frames = info.frames;
-  const int chans = info.channels;
+  sr = info.samplerate;
+  int chans = info.channels;
+  sf_count_t frames = info.frames;
 
   if (frames <= 0 || chans <= 0) {
-    std::cerr << "Error: invalid format in " << path << "\n";
+    std::cerr << "Error: invalid WAV format in " << filename << "\n";
     sf_close (f);
     return false;
   }
-
+  
   std::vector<float> buf (frames * chans);
-  sf_count_t read = sf_readf_float (f, buf.data (), frames);
+  sf_count_t readFrames = sf_readf_float (f, buf.data (), frames);
   sf_close (f);
 
-  if (read <= 0) {
-    std::cerr << "Error: no samples read from " << path << "\n";
+  if (readFrames <= 0) {
+    std::cerr << "Error: no samples read from " << filename << "\n";
     return false;
   }
 
-  out.resize (read);
-  for (sf_count_t i = 0; i < read; ++i) {
-    float sum = 0.0f;
-    for (int ch = 0; ch < chans; ++ch) {
-      sum += buf [i * chans + ch];
-    }
-    out [i] = sum / chans;
+  if (chans == 1) {
+    // mono: store in left channel only
+    left.assign (buf.begin (), buf.begin () + readFrames);
+    // right stays empty
+    debug ("return (mono)");
+    return true;
   }
 
-  return true;
+  if (chans == 2) {
+    // stereo: split into left/right
+    left.resize (readFrames);
+    right.resize (readFrames);
+    
+    for (sf_count_t i = 0; i < readFrames; ++i) {
+      left[i]  = buf [2 * i + 0];
+      right[i] = buf [2 * i + 1];
+    }
+
+    debug ("return (stereo)");
+    return true;
+  }
+
+  // More than 2 channels is unsupported (consistent with your earlier code)
+  std::cerr << "Error: only mono or stereo WAV files supported: "
+            << filename << "\n";
+  return false;
 }
 
 static bool write_mono_wav (const char *path,
                             const std::vector<float> &data,
                             int samplerate) {
+  debug ("start");
   SF_INFO info { };
   info.channels   = 1;
   info.samplerate = samplerate;
@@ -448,6 +499,7 @@ static bool write_mono_wav (const char *path,
     std::cerr << "Warning: wrote only " << written
               << " of " << frames << " frames to " << path << "\n";
   }
+  debug ("end");
   return true;
 }
 
@@ -455,6 +507,8 @@ static bool write_stereo_wav (const char *path,
                               const std::vector<float> &L,
                               const std::vector<float> &R,
                               int samplerate) {
+  debug ("start");
+  
   if (L.size () != R.size ()) {
     std::cerr << "Internal error: L/R size mismatch in write_stereo_wav\n";
     return false;
@@ -486,6 +540,7 @@ static bool write_stereo_wav (const char *path,
     std::cerr << "Warning: wrote only " << written
               << " of " << frames << " frames to " << path << "\n";
   }
+  debug ("end");
   return true;
 }
 
@@ -509,6 +564,7 @@ static void generate_log_sweep (double seconds,
 
   std::cerr << "Generating sweep:   " << seconds << ((seconds == 1) ?
                                          " second\n" : " seconds\n") <<
+               "  Frequency range:  " << f1 << "Hz to " << f2 << " Hz" <<
                "  Preroll:          " << NPRE << 
              "\n  Marker:           " << NM << 
              "\n  Gap after marker: " << NGAP << "\n\n";
@@ -655,10 +711,11 @@ void c_deconvolver::set_prefs (struct s_prefs *prefs) {
 }
 
 bool c_deconvolver::load_sweep_dry (const char *in_filename) {
+  debug ("start");
   int sr = 0;
-  std::vector<float> tmp;
+  std::vector<float> tmp, tmp_r;
 
-  if (!read_mono_wav (in_filename, tmp, sr)) {
+  if (!read_wav (in_filename, tmp, tmp_r, sr)) {
     std::cerr << "Failed to load dry sweep: " << in_filename << "\n";
     return false;
   }
@@ -679,49 +736,37 @@ bool c_deconvolver::load_sweep_dry (const char *in_filename) {
 #else
   dry_offset_ = 0;
 #endif
-
+  
+  debug ("end");
   return true;
 }
 
 bool c_deconvolver::load_sweep_wet (const char *in_filename) {
-  SF_INFO info { };
-  SNDFILE *f = sf_open (in_filename, SFM_READ, &info);
-  if (!f) {
-    std::cerr << "Failed to open wet sweep: " << in_filename << "\n";
+  debug ("start");
+
+  int sr = 0;
+  std::vector<float> left;
+  std::vector<float> right;
+
+  if (!read_wav (in_filename, left, right, sr)) {
+    std::cerr << "Failed to load wet sweep: " << in_filename << "\n";
     return false;
   }
 
-  int sr        = info.samplerate;
-  int chans     = info.channels;
-  sf_count_t frames = info.frames;
+  bool is_stereo = (right.size () > 1);
 
   if (!set_samplerate_if_needed (sr)) {
     std::cerr << "Samplerate mismatch in wet sweep: " << in_filename << "\n";
-    sf_close (f);
-    return false;
-  }
-
-  if (frames <= 0 || chans <= 0) {
-    std::cerr << "Error: invalid format in " << in_filename << "\n";
-    sf_close (f);
-    return false;
-  }
-
-  std::vector<float> buf (frames * chans);
-  sf_count_t readFrames = sf_readf_float (f, buf.data (), frames);
-  sf_close (f);
-
-  if (readFrames <= 0) {
-    std::cerr << "Error: no samples read from " << in_filename << "\n";
     return false;
   }
 
   wet_L_.clear ();
   wet_R_.clear ();
 
-  if (chans == 1) {
-    // mono wet -> only L
-    wet_L_.assign (buf.begin (), buf.begin () + readFrames);
+  if (!is_stereo) {
+    // --- MONO WET: only L channel is used ---
+    wet_L_ = std::move (left);
+
 #ifndef DISABLE_LEADING_SILENCE_DETECTION
     wet_offset_ = detect_wet_sweep_start (wet_L_, samplerate_, *prefs_);
     if (prefs_->verbose) {
@@ -731,21 +776,21 @@ bool c_deconvolver::load_sweep_wet (const char *in_filename) {
 #else
     wet_offset_ = 0;
 #endif
-  } else if (chans == 2) {
-    wet_L_.resize (readFrames);
-    wet_R_.resize (readFrames);
-    for (sf_count_t i = 0; i < readFrames; ++i) {
-      wet_L_ [i] = buf [2 * i + 0];
-      wet_R_ [i] = buf [2 * i + 1];
-    }
+
+  } else {
+    // --- STEREO WET: L/R in separate vectors ---
+    wet_L_ = std::move (left);
+    wet_R_ = std::move (right);
 
 #ifndef DISABLE_LEADING_SILENCE_DETECTION
-    // For detection, use a mono mix so we get a single start index
-    std::vector<float> mix (readFrames);
-    for (sf_count_t i = 0; i < readFrames; ++i) {
-      mix[i] = 0.5f * (wet_L_[i] + wet_R_[i]);
+    // for detection, use a mono mix so we get a single start index
+    // kind of hackish, but meh
+    const sf_count_t frames = std::min (wet_L_.size (), wet_R_.size ());
+    std::vector<float> mix (frames);
+    for (sf_count_t i = 0; i < frames; ++i) {
+      mix [i] = 0.5f * (wet_L_ [i] + wet_R_ [i]);
     }
-
+    
     wet_offset_ = detect_wet_sweep_start (mix, samplerate_, *prefs_);
     if (prefs_->verbose) {
       std::cerr << "Wet sweep (stereo) start offset: "
@@ -754,21 +799,21 @@ bool c_deconvolver::load_sweep_wet (const char *in_filename) {
 #else
     wet_offset_ = 0;
 #endif
-  } else {
-    std::cerr << "Only mono or stereo wet sweeps supported.\n";
-    return false;
   }
 
   have_wet_ = true;
+
+  debug ("end");
   return true;
 }
 
 bool c_deconvolver::set_dry_from_buffer (const std::vector<float>& buf, int sr) {
+  debug ("start");
   if (buf.empty()) {
     std::cerr << "Dry buffer is empty.\n";
     return false;
   }
-  if (!set_samplerate_if_needed(sr)) {
+  if (!set_samplerate_if_needed (sr)) {
     std::cerr << "Samplerate mismatch for dry buffer.\n";
     return false;
   }
@@ -786,12 +831,14 @@ bool c_deconvolver::set_dry_from_buffer (const std::vector<float>& buf, int sr) 
   dry_offset_ = 0;
 #endif
 
+  debug ("end");
   return true;
 }
 
 bool c_deconvolver::set_wet_from_buffer (const std::vector<float>& bufL,
                                          const std::vector<float>& bufR,
                                          int sr) {
+  debug ("start");
   if (bufL.empty () && bufR.empty ()) {
     std::cerr << "Wet buffers are empty.\n";
     return false;
@@ -804,7 +851,7 @@ bool c_deconvolver::set_wet_from_buffer (const std::vector<float>& bufL,
   wet_L_ = bufL;
   wet_R_ = bufR;
 
-#ifndef DISABLE_LEADING_SILENCE_DETECTION
+#ifndef DISABLE_LEADING_SILENCE_DETECTION  
   if (!wet_R_.empty ()) {
     const size_t n = std::min(wet_L_.size (), wet_R_.size ());
     std::vector<float> mix (n);
@@ -825,10 +872,13 @@ bool c_deconvolver::set_wet_from_buffer (const std::vector<float>& bufL,
 #endif
 
   have_wet_ = true;
+  debug ("end");
   return true;
 }
 
+// ok THIS WORKS DON'T TOUCH IT!!!
 bool c_deconvolver::output_ir (const char *out_filename, long ir_length_samples) {
+  debug ("start");
   std::vector<float> irL;
   std::vector<float> irR;
 
@@ -839,8 +889,8 @@ bool c_deconvolver::output_ir (const char *out_filename, long ir_length_samples)
   }
 
   // --- deconvolve right if we have input data ---
-  const bool haveRightInput = !wet_R_.empty ();
-  if (haveRightInput) {
+  const bool have_right_channel = !wet_R_.empty ();
+  if (have_right_channel) {
     if (!calc_ir_raw (wet_R_, dry_, irR, ir_length_samples)) {
       std::cerr << "Error: calc_ir_raw failed for right channel.\n";
       return false;
@@ -857,16 +907,16 @@ bool c_deconvolver::output_ir (const char *out_filename, long ir_length_samples)
   normalize_and_trim_stereo (irL, irR);
 
   // Decide mono vs stereo based on whether right has any energy left
-  bool rightHasEnergy = false;
-  const float energyThresh = 1e-5f;
+  bool have_right_energy = false;
+  const float thr = 0.0001;
   for (float v : irR) {
-    if (std::fabs (v) > energyThresh) {
-      rightHasEnergy = true;
+    if (std::fabs (v) > thr) {
+      have_right_energy = true;
       break;
     }
   }
   
-  if (!haveRightInput || !rightHasEnergy || irR.empty ()) {
+  if (!have_right_channel || !have_right_energy || irR.empty ()) {
     // MONO IR
     if (!write_mono_wav (out_filename, irL, samplerate_)) {
       std::cerr << "Error: failed to write mono IR to " << out_filename << "\n";
@@ -874,6 +924,7 @@ bool c_deconvolver::output_ir (const char *out_filename, long ir_length_samples)
     }
     std::cout << "Wrote MONO IR: " << out_filename
               << " (" << irL.size () << " samples @ " << samplerate_ << " Hz)\n";
+    debug ("return");
     return true;
   }
 
@@ -889,6 +940,7 @@ bool c_deconvolver::output_ir (const char *out_filename, long ir_length_samples)
 
   std::cout << "Wrote STEREO IR: " << out_filename
             << " (" << len << " samples @ " << samplerate_ << " Hz)\n";
+  debug ("end");
   return true;
 }
 
@@ -951,9 +1003,9 @@ bool c_deconvolver::calc_ir_raw (const std::vector<float> &wet,
   }
 
   // Frequency-domain buffers
-  fftw_complex* X = (fftw_complex*) fftw_malloc (sizeof (fftw_complex) * nFreq);
-  fftw_complex* Y = (fftw_complex*) fftw_malloc (sizeof (fftw_complex) * nFreq);
-  fftw_complex* H = (fftw_complex*) fftw_malloc (sizeof (fftw_complex) * nFreq);
+  fftw_complex *X = (fftw_complex *) fftw_malloc (sizeof (fftw_complex) * nFreq);
+  fftw_complex *Y = (fftw_complex *) fftw_malloc (sizeof (fftw_complex) * nFreq);
+  fftw_complex *H = (fftw_complex *) fftw_malloc (sizeof (fftw_complex) * nFreq);
   if (!X || !Y || !H) {
     std::cerr << "Error: FFTW malloc failed.\n";
     if (X) fftw_free (X);
@@ -985,6 +1037,7 @@ bool c_deconvolver::calc_ir_raw (const std::vector<float> &wet,
   fftw_execute (planY);
 
   // H = Y * conj(X) / (|X|^2 + eps)
+
   double maxMag2 = 0.0;
   for (size_t k = 0; k < nFreq; ++k) {
     double xr = X [k] [0];
@@ -992,28 +1045,61 @@ bool c_deconvolver::calc_ir_raw (const std::vector<float> &wet,
     double mag2 = xr * xr + xi * xi;
     if (mag2 > maxMag2) maxMag2 = mag2;
   }
+  
   //double eps = (maxMag2 > 0.0) ? maxMag2 * 1e-8 : 1e-12;
-  double reg = (maxMag2 > 0.0) ? maxMag2 * 1e-4 : 1e-8;
+  double eps = (maxMag2 > 0.0) ? maxMag2 * 1e-10 : 1e-14;
+  //double reg = (maxMag2 > 0.0) ? maxMag2 * 1e-4 : 1e-8;
+  
+  // TEST
+  //for (size_t k = 0; k < nFreq; ++k) {
+  //  H[k][0] = 1.0;
+  //  H[k][1] = 0.0;
+  //} if (0) // for (size_t k = 0; ....)
+  
+  double tiny = (maxMag2 > 0.0) ? maxMag2 * 1e-16 : 1e-30;
+  
+  // IMPROVED: maximum allowed |H[k]| gain (linear). 10 == +20 dB, 32 ~= +30 dB.
+  // this gives us flawless 1:1 identity IR when deconvolving a sweep with itself,
+  // AND no noise floor added in the >= upper sweep frequency
+  const double max_H_gain = 32.0;
 
   for (size_t k = 0; k < nFreq; ++k) {
-    double xr = X [k] [0];
-    double xi = X [k] [1];
-    double yr = Y [k] [0];
-    double yi = Y [k] [1];
+      double xr = X [k] [0];
+      double xi = X [k] [1];
+      double yr = Y [k] [0];
+      double yi = Y [k] [1];
 
-    //double mag2 = xr * xr + xi * xi + eps;
-    double mag2 = xr * xr + xi * xi + reg;
+      double mag2 = xr * xr + xi * xi;
 
-    // conj(X)
-    double cr = xr;
-    double ci = -xi;
+      // effectively zero energy here -> don't try to invert it.
+      if (mag2 < tiny) {
+        H [k] [0] = 0.0;
+        H [k] [1] = 0.0;
+        continue;
+      }
 
-    // Y * conj(X)
-    double nr = yr * cr - yi * ci;
-    double ni = yr * ci + yi * cr;
+      // conj(X)
+      double cr = xr;
+      double ci = -xi;
 
-    H [k] [0] = nr / mag2;
-    H [k] [1] = ni / mag2;
+      // Y * conj(X)
+      double nr = yr * cr - yi * ci;
+      double ni = yr * ci + yi * cr;
+
+      // Raw inverse
+      double hr = nr / mag2;
+      double hi = ni / mag2;
+
+      // Optional safety clamp on |H|
+      double magH = std::sqrt (hr * hr + hi * hi);
+      if (magH > max_H_gain) {
+          double scale = max_H_gain / magH;
+          hr *= scale;
+          hi *= scale;
+      }
+
+      H [k] [0] = hr;
+      H [k] [1] = hi;
   }
 
   // Back to time domain
@@ -1181,38 +1267,38 @@ void c_deconvolver::normalize_and_trim_stereo (std::vector<float> &L,
 
 static int jack_process_cb (jack_nframes_t nframes, void *arg) {
   s_jackclient *j = (s_jackclient *) arg;
-
-  // Playback
+  
+  // playback
   if (j->play_go) {
-    jack_default_audio_sample_t *outL =
-      (jack_default_audio_sample_t *) jack_port_get_buffer (j->outL, nframes);
-    jack_default_audio_sample_t *outR =
-      (jack_default_audio_sample_t *) jack_port_get_buffer (j->outR, nframes);
+    jack_default_audio_sample_t *port_outL =
+      (jack_default_audio_sample_t *) jack_port_get_buffer (j->port_outL, nframes);
+    /*jack_default_audio_sample_t *port_outR =
+      (jack_default_audio_sample_t *) jack_port_get_buffer (j->port_outR, nframes);*/
 
     for (jack_nframes_t i = 0; i < nframes; ++i) {
       float v = 0.0f;
       if (j->index < j->sig_out.size ()) {
         v = j->sig_out [j->index++];
       }
-      outL [i] = v;
-      outR [i] = v; // same sweep on both channels
+      if (port_outL) port_outL [i] = v;
+      //if (port_outR) port_outR [i] = v; // same sweep on both channels
     }
   }
 
-  // Recording
-  if (j->rec_go && j->inL && j->rec_index < j->rec_total) {
-    jack_default_audio_sample_t *inL =
-      (jack_default_audio_sample_t *) jack_port_get_buffer (j->inL, nframes);
-    jack_default_audio_sample_t *inR = nullptr;
-    if (j->inR) {
-      inR = (jack_default_audio_sample_t *) jack_port_get_buffer (j->inR, nframes);
+  // recording
+  if (j->rec_go && j->port_inL && j->rec_index < j->rec_total) {
+    jack_default_audio_sample_t *port_inL =
+      (jack_default_audio_sample_t *) jack_port_get_buffer (j->port_inL, nframes);
+    jack_default_audio_sample_t *port_inR = nullptr;
+    if (j->port_inR) {
+      port_inR = (jack_default_audio_sample_t *) jack_port_get_buffer (j->port_inR, nframes);
     }
 
     for (jack_nframes_t i = 0; i < nframes && j->rec_index < j->rec_total; ++i) {
-      float vL = inL[i];
-      float vR = inR ? inR[i] : vL;
+      float vL = port_inL[i];
+      float vR = port_inR ? port_inR[i] : vL;
       float m  = 0.5f * (vL + vR); // simple mono mix
-      j->sig_in[j->rec_index++] = m;
+      j->sig_in_L[j->rec_index++] = m;
     }
 
     if (j->rec_index >= j->rec_total) {
@@ -1224,17 +1310,79 @@ static int jack_process_cb (jack_nframes_t nframes, void *arg) {
   return 0;
 }
 
-bool c_deconvolver::init_jack (std::string clientname,
-                               sig_channels chan_in,
-                               sig_channels chan_out)
-{
+static int jack_get_default_playback (jack_client_t *c,
+                                       int howmany,
+                                       std::vector<std::string> &v) {
+  debug ("start");
+  //v.clear ();
+  if (!c || howmany <= 0) return 0;
+
+  const char **ports = jack_get_ports (
+    c,
+    nullptr,
+    nullptr,
+    JackPortIsPhysical | JackPortIsInput   // speakers = physical inputs
+  );
+
+  if (!ports)
+    return 0;
+
+  int count = 0;
+
+  for (int i = 0; ports[i] && count < howmany; ++i) {
+    v.push_back (std::string(ports[i]));
+    ++count;
+  }
+
+  jack_free (ports);
+
+  debug ("end");
+  return count;
+}
+
+static int jack_get_default_capture (jack_client_t *c,
+                                      int howmany,
+                                      std::vector<std::string> &v) {
+  debug ("start");
+  //v.clear ();
+  if (!c || howmany <= 0) return 0;
+
+  const char **ports = jack_get_ports (
+    c,
+    nullptr,
+    nullptr,
+    JackPortIsPhysical | JackPortIsOutput   // microphones = physical outputs
+  );
+
+  if (!ports)
+    return 0;
+
+  int count = 0;
+
+  for (int i = 0; ports[i] && count < howmany; ++i) {
+    v.push_back (std::string(ports[i]));
+    ++count;
+  }
+
+  jack_free (ports);
+  
+  debug ("end");
+  return count;
+}
+
+bool c_deconvolver::jack_init (std::string clientname,
+                               int samplerate,
+                               //const char *jack_out_port,
+                               //const char *jack_in_port,
+                               bool stereo_out) {
+  debug ("start");
   if (jack_inited && jackclient.client) {
     // already have a client; nothing to do
     return true;
   }
-
+  
   jack_status_t status = JackFailure;
-
+  
   // Decide on a client name:
   const char *name = nullptr;
   if (!clientname.empty ()) {
@@ -1248,7 +1396,7 @@ bool c_deconvolver::init_jack (std::string clientname,
     name = "deconvolver";
   }
 
-  jackclient.client = jack_client_open(name, JackNullOption, &status);
+  jackclient.client = jack_client_open (name, JackNullOption, &status);
   if (!jackclient.client) {
     std::cerr << "Error: cannot connect to JACK (client name \""
               << name << "\")\n";
@@ -1257,99 +1405,49 @@ bool c_deconvolver::init_jack (std::string clientname,
   }
 
   // JACK is alive, get its sample rate
-  int jack_sr = (int) jack_get_sample_rate (jackclient.client);
+  jackclient.samplerate = (int) jack_get_sample_rate (jackclient.client);
 
   if (prefs_) {
-    if (!prefs_->quiet && prefs_->sweep_sr != jack_sr) {
+    if (!prefs_->quiet && prefs_->sweep_sr != jackclient.samplerate) {
         std::cerr << "Note: overriding sample rate (" << prefs_->sweep_sr
-                  << " Hz) with JACK sample rate " << jack_sr << " Hz.\n";
+                  << " Hz) with JACK sample rate " << jackclient.samplerate << " Hz.\n";
     }
-    prefs_->sweep_sr = jack_sr;
+    prefs_->sweep_sr = jackclient.samplerate;
   }
-
+  
   // Reset runtime state
   jackclient.play_go = false;
   jackclient.rec_go  = false;
   jackclient.index   = 0;
-  jackclient.sig_in.clear ();
+  jackclient.sig_in_L.clear ();
   jackclient.sig_out.clear ();
-  jackclient.inL = jackclient.inR = nullptr;
-  jackclient.outL = jackclient.outR = nullptr;
-
-  jack_inited = true;
-
-  // For now we ignore chan_in / chan_out; when you add recording
-  // you can use those to register in/out ports here instead of in jack_play/jack_rec.
-  (void) chan_in;
-  (void) chan_out;
-
-  return true;
-}
-
-bool c_deconvolver::jack_playrec_sweep (const std::vector<float> &sweep,
-                                        int samplerate,
-                                        const char *jack_out_port,
-                                        const char *jack_in_port,
-                                        std::vector<float> &captured)
-{
-  if (sweep.empty ()) {
-    std::cerr << "Sweep buffer is empty.\n";
-    return false;
-  }
-
-  // 1) Ensure JACK client
-  if (!jack_inited || !jackclient.client) {
-    if (!init_jack(std::string (), chn_stereo, chn_stereo)) {
-      return false;
-    }
-  }
-
-  // 2) Prepare state
-  jackclient.sig_out  = sweep;
-  jackclient.index    = 0;
-  jackclient.play_go  = false;
-
-  // capture same length + a bit of extra tail
-  const size_t extra_tail = (size_t) (0.5 * samplerate); // 0.5s
-  jackclient.rec_total = sweep.size () + extra_tail;
-  jackclient.sig_in.assign (jackclient.rec_total, 0.0f);
-  jackclient.rec_index = 0;
-  jackclient.rec_done  = false;
-  jackclient.rec_go    = false;
-
-  // 3) Register ports
-  jackclient.outL = jack_port_register (jackclient.client, "out_L",
+  jackclient.port_inL = jackclient.port_inR = nullptr;
+  //jackclient.port_outL = jackclient.port_outR = nullptr;
+  
+  // register jack ports
+  jackclient.port_outL = jack_port_register (jackclient.client, "out",
                             JACK_DEFAULT_AUDIO_TYPE,
                             JackPortIsOutput, 0);
-  jackclient.outR = jack_port_register (jackclient.client, "out_R",
+  /*jackclient.port_outR = jack_port_register (jackclient.client, "out_R",
                             JACK_DEFAULT_AUDIO_TYPE,
-                            JackPortIsOutput, 0);
-  jackclient.inL  = jack_port_register (jackclient.client, "in_L",
+                            JackPortIsOutput, 0);*/
+  jackclient.port_inL  = jack_port_register (jackclient.client, "in_L",
                             JACK_DEFAULT_AUDIO_TYPE,
                             JackPortIsInput, 0);
-  jackclient.inR  = jack_port_register (jackclient.client, "in_R",
+  jackclient.port_inR  = jack_port_register (jackclient.client, "in_R",
                             JACK_DEFAULT_AUDIO_TYPE,
                             JackPortIsInput, 0);
 
-  if (!jackclient.outL || !jackclient.outR || !jackclient.inL) {
+  if (!jackclient.port_outL || !jackclient.port_inL || !jackclient.port_inR) {
     std::cerr << "Error: cannot register JACK ports.\n";
-    jack_deactivate (jackclient.client);
+    //jack_deactivate (jackclient.client);
     jack_client_close (jackclient.client);
     jackclient.client  = nullptr;
     jack_inited        = false;
     return false;
   }
-
-  // 4) Set callback
+  
   jack_set_process_callback (jackclient.client, jack_process_cb, &jackclient);
-
-  /*jack_nframes_t jack_sr = jack_get_sample_rate (jackclient.client);
-  if (jack_sr != (jack_nframes_t)samplerate) {
-    std::cerr << "Warning: JACK sample rate (" << jack_sr
-              << ") != sweep sample rate (" << samplerate
-              << ")\nUsing JACK sample rate for playback/record.\n";
-  }
-  prefs_->sweep_sr = (int) jack_sr;*/
 
   // 5) Activate client
   if (jack_activate (jackclient.client) != 0) {
@@ -1359,57 +1457,94 @@ bool c_deconvolver::jack_playrec_sweep (const std::vector<float> &sweep,
     jack_inited       = false;
     return false;
   }
-
-  // 6) Connect ports
-
-  // Output connection: use jack_out_port if provided,
-  // otherwise auto-connect to physical playback
-  if (jack_out_port && jack_out_port[0] != '\0') {
-    int errL = jack_connect (jackclient.client,
-                             jack_port_name (jackclient.outL),
-                             jack_out_port);
-    int errR = jack_connect (jackclient.client,
-                             jack_port_name (jackclient.outR),
-                             jack_out_port);
-    if (errL != 0 || errR != 0) {
-      std::cerr << "Warning: failed to connect sweep to " << jack_out_port
-                << " (errL=" << errL << ", errR=" << errR << ")\n";
-    }
-  } else {
-    const char **ports = jack_get_ports (jackclient.client, nullptr, nullptr,
-                                         JackPortIsPhysical | JackPortIsInput);
-    if (ports) {
-      if (ports [0])
-        jack_connect (jackclient.client,
-                      jack_port_name (jackclient.outL), ports[0]);
-      if (ports [1])
-        jack_connect (jackclient.client,
-                      jack_port_name (jackclient.outR), ports[1]);
-      jack_free (ports);
-    }
-  }
-
-  // Input connection: connect in_L from jack_in_port
-  if (jack_in_port && jack_in_port [0] != '\0') {
+  
+  // autoconnect output where it makes sense:
+  // any port given: auto connect to it
+  // no port given:
+  //   playsweep: no -W? auto connect to system default
+  //   other: no autoconnect
+  if (prefs_->portname_dry.length () > 0) {
+    debug ("got portname_dry");
+    // connect to portname_dry
     int err = jack_connect (jackclient.client,
-                            jack_in_port,
-                            jack_port_name (jackclient.inL));
-    if (err != 0) {
-      std::cerr << "Warning: failed to connect input from "
-                << jack_in_port << " (err=" << err << ")\n";
-    }
+                            jack_port_name (jackclient.port_outL),
+                            prefs_->portname_dry.c_str ());
+    if (err) std::cerr << "warning: failed to connect to JACK input port " + 
+                          prefs_->portname_dry << std::endl;
+                            
   } else {
-    // optional: auto-connect from first physical capture
-    const char **ports = jack_get_ports (jackclient.client, nullptr, nullptr,
-                                         JackPortIsPhysical | JackPortIsOutput);
-    if (ports && ports [0]) {
-      jack_connect (jackclient.client,
-                    ports [0],
-                    jack_port_name (jackclient.inL));
-                    
+    if (prefs_->mode == deconv_mode::mode_playsweep && prefs_->sweepwait) {
+      // connect to system default
     }
-    if (ports) jack_free (ports);
   }
+  
+  // autoconnect input- where it makes sense:
+  // any port given: auto connect to it
+  // no port given: no autoconnect
+  std::cout << "output port L: " + prefs_->portname_wetL << std::endl;
+  std::cout << "output port R: " + prefs_->portname_wetR << std::endl;
+  if (prefs_->portname_wetL.length () > 0) {
+    debug ("got portname_wetL");
+    // connect to portname_wetL
+    int err = jack_connect (jackclient.client,
+                            prefs_->portname_wetL.c_str (),
+                            jack_port_name (jackclient.port_inL));
+    if (err) std::cerr << "warning: failed to connect to JACK output port " + 
+                          prefs_->portname_wetL << std::endl;
+                            
+  }
+  if (prefs_->portname_wetR.length () > 0) {
+    // connect to portname_wetR
+  }
+  
+  jack_inited = true;
+
+  // ...wuh duh fuuuh?
+  //(void) chan_in;
+  //(void) chan_out;
+  
+  debug ("end");
+  return true;
+}
+
+bool c_deconvolver::jack_shutdown () {
+  if (!jack_inited)
+    return false;
+  jack_deactivate (jackclient.client);
+  jack_client_close (jackclient.client);
+  jackclient.client = nullptr;
+  jack_inited       = false;
+  
+  return true;
+}
+
+bool c_deconvolver::jack_playrec (const std::vector<float> &sweep,
+                                        std::vector<float> &captured_l,
+                                        std::vector<float> &captured_r) {
+  if (sweep.empty ()) {
+    std::cerr << "Sweep buffer is empty.\n";
+    return false;
+  }
+
+  // 1) Ensure JACK client
+  if (!jack_inited || !jackclient.client) {
+    //if (!jack_init(std::string (), chn_stereo, chn_stereo)) {
+      return false;
+    //}
+  }
+
+  // 2) Prepare state
+  jackclient.sig_out  = sweep;
+  jackclient.index    = 0;
+  jackclient.play_go  = false;
+
+  // capture same length + a bit of extra tail
+  const size_t extra_tail = (size_t) (0.5 * jackclient.samplerate); // 0.5s
+  jackclient.rec_total = sweep.size () + extra_tail;
+  jackclient.sig_in_L.assign (jackclient.rec_total, 0.0f);
+  jackclient.rec_index = 0;
+  jackclient.rec_done  = false;
+  jackclient.rec_go    = false;
 
   std::cout << "Playing + recording sweep via JACK... " << std::flush;
   jackclient.play_go = true;
@@ -1423,129 +1558,39 @@ bool c_deconvolver::jack_playrec_sweep (const std::vector<float> &sweep,
 
   std::cout << "done.\n";
 
-  jack_deactivate (jackclient.client);
-  jack_client_close (jackclient.client);
-  jackclient.client = nullptr;
-  jack_inited       = false;
-
   // Copy captured mono buffer out (you could trim it here if desired)
-  captured = jackclient.sig_in;
+  captured_l = jackclient.sig_in_L;
 
   return true;
 }
 
-
-bool c_deconvolver::jack_rec (std::vector<float> &sig,
-                               int samplerate,
-                               const char *jack_port) {
-  return false;
-}
-
-bool c_deconvolver::jack_play (std::vector<float> &sig,
-                               int samplerate,
-                               const char *jack_port)
-{
-  // Ensure we have a JACK client
+bool c_deconvolver::jack_play (std::vector<float> &sig) {
   if (!jack_inited || !jackclient.client) {
-    if (!init_jack(std::string (), chn_none, chn_stereo)) {
-      return false;
-    }
+    return false;
   }
 
-  // Prepare playback state
   jackclient.sig_out = sig;
   jackclient.index   = 0;
-  jackclient.play_go = false;  // will flip to true just before we start
-
-  // Register output ports (stereo sweep)
-  jackclient.outL = jack_port_register (jackclient.client, "out_L",
-                                        JACK_DEFAULT_AUDIO_TYPE,
-                                        JackPortIsOutput, 0);
-  jackclient.outR = jack_port_register (jackclient.client, "out_R",
-                                        JACK_DEFAULT_AUDIO_TYPE,
-                                        JackPortIsOutput, 0);
-
-  if (!jackclient.outL || !jackclient.outR) {
-    std::cerr << "Error: cannot register JACK output ports.\n";
-    jack_client_close (jackclient.client);
-    jackclient.client = nullptr;
-    jack_inited = false;
-    return false;
-  }
-
-  // Process callback (currently playback-only; later you can add rec handling)
-  jack_set_process_callback (jackclient.client, jack_process_cb, &jackclient);
-
-  /*jack_nframes_t jack_sr = jack_get_sample_rate (jackclient.client);
-  if (jack_sr != (jack_nframes_t)samplerate) {
-    std::cerr << "Warning: JACK sample rate (" << jack_sr
-              << ") != sweep sample rate (" << samplerate
-              << ")\nUsing JACK sample rate for playback.\n";
-  }*/
-
-  if (jack_activate (jackclient.client) != 0) {
-    std::cerr << "Error: cannot activate JACK client.\n";
-    jack_client_close (jackclient.client);
-    jackclient.client = nullptr;
-    jack_inited = false;
-    return false;
-  }
-
-  // Connect outputs either to the requested JACK port or to
-  // physical playback ports if none given.
-  if (jack_port && jack_port [0] != '\0') {
-    int errL = jack_connect (jackclient.client,
-                             jack_port_name (jackclient.outL),
-                             jack_port);
-    // Only one port if requested, keep R free for now
-    int errR = 0; // or connect elsewhere later if you want
-
-    if (errL != 0) {
-      std::cerr << "Warning: failed to connect L to " << jack_port
-                << " (err=" << errL << ")\n";
-    }
-    if (errR != 0) {
-      std::cerr << "Warning: failed to connect R to " << jack_port
-                << " (err=" << errR << ")\n";
-    }
-  } else {
-    // Auto-connect to physical playback
-    const char **ports = jack_get_ports (jackclient.client, nullptr, nullptr,
-                                         JackPortIsPhysical | JackPortIsInput);
-    if (ports) {
-      if (ports[0]) {
-        jack_connect (jackclient.client,
-                      jack_port_name (jackclient.outL), ports[0]);
-      }
-      if (ports[1]) {
-        jack_connect (jackclient.client,
-                      jack_port_name (jackclient.outR), ports[1]);
-      }
-      jack_free (ports);
-    }
-  }
+  jackclient.play_go = false;
 
   std::cout << "Playing sweep via JACK... " << std::flush;
   jackclient.play_go = true;
 
-  // Crude blocking wait until the sweep has been fully sent
   while (jackclient.index < jackclient.sig_out.size ()) {
     usleep (10 * 1000); // 10 ms
   }
 
   std::cout << "done.\n";
 
-  jack_deactivate (jackclient.client);
-  jack_client_close (jackclient.client);
-  jackclient.client = nullptr;
-  jack_inited = false;
-
+  // let caller decide when to deactivate/close
   return true;
 }
 
-static void print_usage (const char *prog) {
+static void print_usage (const char *prog, bool full = false) {
+  if (full)
+    std::cerr << "\nDIRT - Delt's Impulse Response Tool, version " << DIRT_VERSION << "\n\n";
+  
   std::cerr <<
-    "DIRT - Delt's Impulse Response Tool, version " << DIRT_VERSION << "\n\n"
     "Usage:\n"
     "  " << prog << " [options] dry.wav wet.wav out.wav\n"
     "  " << prog << " [options] -d dry.wav -w wet.wav -o out.wav\n"
@@ -1573,7 +1618,8 @@ static void print_usage (const char *prog) {
     "  -W, --wait               Wait for input before playing sweep\n"
     "  -j, --jack-port PORT     Connect to this JACK port\n"
     "  -J, --jack-name          Connect to JACK with this client name\n"
-    "\n"
+    "\n";
+  if (full) std::cerr <<
     "Example usage:\n"
     "\n"
     "  # Generate a 30-second dry sweep with 1 second of silence at start\n"
@@ -1594,20 +1640,16 @@ static void print_usage (const char *prog) {
 // returns bit-field of paths that were provided by user, or -1 on error
 // bit 1: dry, bit 2: wet, bit 3: out
 int parse_args (int argc, char **argv, s_prefs &opt) {
+  debug ("start");
   const int ret_err = -1;
 
-  if (argc < 2) {
-    //print_usage (argv [0]);
-    return ret_err;
-  }
-  
   // First pass: parse flags 
   std::vector<const char *> positionals;
   for (int i = 1; i < argc; ++i) {
     std::string arg = argv [i];
 
     if (arg == "-h" || arg == "--help" || arg == "-V" || arg == "--version") {
-      print_usage (argv [0]);
+      print_usage (argv [0], true);
       exit (0);
     } else if (arg == "-d" || arg == "--dry") {
       if (++i >= argc) { std::cerr << "Missing value for " << arg << "\n"; return ret_err; }
@@ -1658,7 +1700,7 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
     } else if (arg == "-X" || arg == "--sweep-f1") {
       if (++i >= argc) { std::cerr << "Missing value for " << arg << "\n"; return ret_err; }
       opt.sweep_f1 = std::atof (argv [i]);
-    } else if (arg == "-y" || arg == "--sweep-f2") {
+    } else if (arg == "-Y" || arg == "--sweep-f2") {
       if (++i >= argc) { std::cerr << "Missing value for " << arg << "\n"; return ret_err; }
       opt.sweep_f2 = std::atof (argv [i]);
     } else if (arg == "-a" || arg == "--sweep-amplitude") {
@@ -1706,11 +1748,14 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
       positionals.push_back (argv [i]);
     }
   }
-
-  // If not provided by flags, use positionals:
+  
+  // if not provided by flags, use positionals:
   //   dry wet out [len]
   if (opt.dry_path.empty () && positionals.size () >= 1) {
-    opt.dry_path = positionals [0];
+    if (opt.mode == mode_makesweep)
+      opt.out_path = positionals [0];
+    else
+      opt.dry_path = positionals [0];
   }
   if (opt.wet_path.empty () && positionals.size () >= 2) {
     opt.wet_path = positionals [1];
@@ -1723,79 +1768,182 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
   }
   
   int bf = 0;
-  if (!opt.dry_path.empty ())           bf |= 1;
-  if (!opt.wet_path.empty ())           bf |= 2;
-  if (!opt.out_path.empty ())           bf |= 4;
+  if (!opt.dry_path.empty ())   bf |= 1;
+  if (!opt.wet_path.empty ())   bf |= 2;
+  if (!opt.out_path.empty ())   bf |= 4;
   
   // If user explicitly chose makesweep or playsweep, don't override mode.
-  if (opt.mode == deconv_mode::mode_makesweep ||
+  /*if (opt.mode == deconv_mode::mode_makesweep ||
       opt.mode == deconv_mode::mode_playsweep) {
-    // You can still return bf as “what paths were supplied”,
-    // but don't touch opt.mode here.
     return bf;
-  }
+  }*/
 
   switch (bf) {
-    /*case 1: // dry only - should we treat this as valid? probably not
-      opt.mode = deconv_mode::makesweep;
-    break;*/
+    case 0:
+      if (opt.mode == mode_deconvolve) {
+        print_usage (argv [0], true);
+        exit (1);
+      } else {
+        opt.dry_path = "jack"; // default
+        opt.dry_source = src_jack;
+        opt.jack_autoconnect_dry = true;
+      }
+    break;
+    
+    case 1: // only dry path given, accept it if it's a JACK port
+      if (looks_like_jack_port (opt.dry_path)) {
+        opt.mode = mode_playsweep;
+        opt.jack_autoconnect_dry = true;
+      } else if (opt.dry_path == "jack") {
+        opt.dry_path = "";
+        opt.mode = mode_playsweep;
+        opt.jack_autoconnect_to_default = true;
+        opt.jack_autoconnect_dry = true;
+      } else {
+        if (opt.mode == mode_deconvolve) {
+          std::cerr << "Only dry file specified\n";
+          return ret_err;
+        }
+      }
+    break;
+    
+    case 2: // wet
+      std::cerr << "Only wet file specified\n";
+      return ret_err;
+    break;
+    
+    case 3: // wet, dry
+      if (opt.mode == mode_deconvolve) {
+        std::cerr << "No output file specified\n";
+        return ret_err;
+      }
+    break;
+    
+    case 4: // out
+      if (opt.mode == mode_deconvolve) {
+        std::cerr << "Only output file specified, no sweeps to deconvolve\n";
+        return ret_err;
+      }
+    break;
+    
+    case 5: // dry, out
+      std::cerr << "No wet file specified\n\n";
+      return ret_err;
+    break;
     
     case 6: // wet, out
+      opt.mode = deconv_mode::mode_deconvolve;
+      opt.dry_source = src_generate;
+    break;
+    
     case 7: // dry, wet, out
       opt.mode = deconv_mode::mode_deconvolve;
+      opt.dry_source = src_file;
     break;
     
     default:
-      opt.mode = deconv_mode::mode_error;
       return ret_err;
     break;
   }
 
+  debug ("end");
   return bf;
 }
 
-static bool resolve_sources (s_prefs &opt) {
-  opt.early_jack_init = false;
+static bool resolve_sources (s_prefs &opt, int paths_bf) {
+  debug ("start");
+  // lambda for trimming whitespace from beginning/end of a string
+  auto trim = [](std::string &s) {
+    size_t a = s.find_first_not_of(" \t");
+    size_t b = s.find_last_not_of(" \t");
+    if (a == std::string::npos) { s.clear(); return; }
+    s = s.substr(a, b - a + 1);
+  };
 
-  // playsweep: we *do* care about JACK early init (for SR),
-  // but not about dry/wet.
-  if (opt.mode == deconv_mode::mode_playsweep) {
-    opt.early_jack_init = true;   // we know we need JACK out
-    return true;
+  // --- dry source ---
+  if (paths_bf & 1) {
+    if (opt.dry_path == "jack") {
+      opt.dry_source = src_jack;
+      // if only dry was specified, assume playsweep to default
+      if (!(paths_bf & 2)) {
+        opt.jack_autoconnect_dry        = true;
+        opt.jack_autoconnect_to_default = true;
+      }
+    } else if (looks_like_jack_port (opt.dry_path)) {
+      opt.dry_source          = src_jack;
+      opt.jack_autoconnect_dry = true;  // explicit jack port -> autoconnect
+      opt.portname_dry = opt.dry_path;
+    } else if (file_exists (opt.dry_path) || opt.mode != mode_deconvolve) {
+      opt.dry_source = src_file;
+    } else {
+      std::cerr << "Dry source \"" << opt.dry_path
+                << "\" is not an existing file or a JACK port\n";
+      return false;
+    }
   }
 
-  // makesweep: pure file, no JACK needed
-  if (opt.mode == deconv_mode::mode_makesweep) {
-    return true;
+// --- wet source ---
+  if (paths_bf & 2) {
+    if (opt.wet_path == "jack") {
+      opt.wet_source = src_jack;
+      // no default autoconnect here; user should patch or give explicit port
+
+    } else {
+      // check for stereo form "portL,portR"
+      auto comma = opt.wet_path.find(',');
+      if (comma != std::string::npos) {
+        std::string left  = opt.wet_path.substr(0, comma);
+        std::string right = opt.wet_path.substr(comma + 1);
+        trim(left);
+        trim(right);
+
+        if (left.empty() || right.empty()) {
+          std::cerr << "Wet JACK stereo ports must be \"L,R\" (got: \""
+                    << opt.wet_path << "\")\n";
+          return false;
+        }
+
+        if (looks_like_jack_port(left) && looks_like_jack_port(right)) {
+          opt.wet_source           = src_jack;
+          opt.jack_autoconnect_wet = true;
+          opt.portname_wetL        = left;
+          opt.portname_wetR        = right;
+        } else if (file_exists(opt.wet_path) || opt.mode != mode_deconvolve) {
+          // treat whole thing as file name if not a JACK pair
+          opt.wet_source = src_file;
+        } else {
+          std::cerr << "Wet source \"" << opt.wet_path
+                    << "\" is not an existing file or valid JACK ports\n";
+          return false;
+        }
+
+      } else if (looks_like_jack_port (opt.wet_path)) {
+        // mono JACK wet port
+        opt.wet_source           = src_jack;
+        opt.jack_autoconnect_wet = true;
+        opt.portname_wetL        = opt.wet_path;
+        opt.portname_wetR.clear();
+
+      } else if (file_exists (opt.wet_path) || opt.mode != mode_deconvolve) {
+        opt.wet_source = src_file;
+
+      } else {
+        std::cerr << "Wet source \"" << opt.wet_path
+                  << "\" is not an existing file or a JACK port\n";
+        return false;
+      }
+    }
   }
 
-  // --- deconvolution below ---
-  // DRY
-  if (opt.dry_path.empty ()) {
-    opt.dry_source = src_generate;
-  } else if (file_exists (opt.dry_path)) {
-    opt.dry_source = src_file;
-  } else if (looks_like_jack_port (opt.dry_path)) {
-    opt.dry_source     = src_jack;
-    opt.early_jack_init = true;
-  } else {
-    std::cerr << "Dry source '" << opt.dry_path
-              << "' is neither an existing file nor a JACK port.\n";
-    return false;
-  }
 
-  // WET
-  if (opt.wet_path.empty ()) {
-    std::cerr << "Wet source (-w) is required in deconvolution mode.\n";
-    return false;
-  } else if (file_exists (opt.wet_path)) {
-    opt.wet_source = src_file;
-  } else if (looks_like_jack_port (opt.wet_path)) {
-    opt.wet_source      = src_jack;
-    opt.early_jack_init = true;
-  } else {
-    std::cerr << "Wet source '" << opt.wet_path
-              << "' is neither an existing file nor a JACK port.\n";
+  // --- output file/port ---
+  if (paths_bf & 4) {
+    if (opt.out_path == "jack" || looks_like_jack_port (opt.out_path)) {
+      std::cerr << "Can't write IR directly to a JACK port\n\n";
+      return false;
+    }
+  } else if (opt.mode == mode_deconvolve) {
+    std::cerr << "No output file specified\n";
     return false;
   }
 
@@ -1803,79 +1951,72 @@ static bool resolve_sources (s_prefs &opt) {
 }
 
 int main (int argc, char **argv) {
+  debug ("start");
   s_prefs p;
-
-  int source_bf = parse_args (argc, argv, p);
-  if (source_bf == -1 || p.mode == deconv_mode::mode_error) {
+  
+  int paths_bf = parse_args (argc, argv, p);
+  if (paths_bf == -1 || p.mode == deconv_mode::mode_error) {
     print_usage (argv [0]);
+    debug ("return");
     return 1;
   }
 
-  if (!resolve_sources (p)) {
+  if (!resolve_sources (p, paths_bf)) {
+    print_usage (argv [0], false);
+    debug ("return");
     return 1;
   }
-
+  
+  // our main deconvolver object
   c_deconvolver dec(&p);
-  if (p.early_jack_init) {
+  
+  // using jack at all?
+  if (p.dry_source == src_jack || p.wet_source == src_jack) {
     char realjackname [256] = { 0 };
     snprintf (realjackname, 255, p.jack_name.c_str (), argv [0]);
-    dec.init_jack (std::string (realjackname),
+    dec.jack_init (std::string (realjackname),
                (p.wet_source == src_jack ? chn_mono : chn_none),
                (p.dry_source == src_jack || p.mode == deconv_mode::mode_playsweep ?
                 chn_mono : chn_none));
-
-  }
-
-  // --- MODE: makesweep ---
-  if (p.mode == deconv_mode::mode_makesweep) {
-    std::vector<float> sweep;
-    generate_log_sweep(p.sweep_seconds,
-                       p.preroll_seconds,
-                       p.marker_seconds,
-                       p.marker_gap_seconds,
-                       p.sweep_sr,
-                       p.sweep_amp_db,
-                       p.sweep_f1,
-                       p.sweep_f2,
-                       sweep);
-    if (!write_mono_wav(p.out_path.c_str (), sweep, p.sweep_sr)) {
-      return 1;
-    }
-    if (!p.quiet) {
-      std::cerr << "Wrote sweep: " << p.out_path
-                << " (" << sweep.size () << " samples @ "
-                << p.sweep_sr << " Hz)\n";
-    }
-    return 0;
-  }
-
-  // --- MODE: playsweep ---
-  if (p.mode == deconv_mode::mode_playsweep) {
-    std::vector<float> sweep;
-    generate_log_sweep (p.sweep_seconds,
-                        p.preroll_seconds,
-                        p.marker_seconds,
-                        p.marker_gap_seconds,
-                        p.sweep_sr,
-                        p.sweep_amp_db,
-                        p.sweep_f1,
-                        p.sweep_f2,
-                        sweep);
-
-    if (p.sweepwait) {
-      std::cout << "Press enter to play sinewave sweep... ";
-      std::string str;
-      std::getline (std::cin, str);
-    }
-
-    return dec.jack_play (sweep, p.sweep_sr, p.jack_portname.c_str ());
   }
   
-  // "live" / full-duplex mode: generate sweep, play it and record the 
-  // result at the same time
-  if (p.dry_source == src_jack && p.wet_source == src_jack) {
-
-      std::vector<float> sweep;
+  // avoid upper freq. aliasing: now that we have sample rate from either user
+  // or jack, make sure we don't sweep past 95% of nyquist frequency
+  float sweep_max = (p.sweep_sr / 2) * 0.95;
+  if (p.sweep_f2 > sweep_max) {
+    std::cout << "NOTE: requested upper frequency " << p.sweep_f2
+              << " Hz is above 95% of nyquist frequency (" << sweep_max << " Hz)\n\n";
+    p.sweep_f2 = sweep_max;
+  }
+  
+  std::vector<float> sweep;
+  
+  switch (p.mode) {
+    case deconv_mode::mode_makesweep:
+      generate_log_sweep(p.sweep_seconds,
+                         p.preroll_seconds,
+                         p.marker_seconds,
+                         p.marker_gap_seconds,
+                         p.sweep_sr,
+                         p.sweep_amp_db,
+                         p.sweep_f1,
+                         p.sweep_f2,
+                         sweep);
+      if (!write_mono_wav (p.out_path.c_str (), sweep, p.sweep_sr)) {
+        return 1;
+      }
+      if (!p.quiet) {
+        std::cerr << "Wrote sweep: " << p.out_path
+                  << " (" << sweep.size () << " samples @ "
+                  << p.sweep_sr << " Hz)\n";
+      }
+      
+      dec.jack_shutdown ();
+      debug ("return");
+      return 0;
+    break;
+    
+    case deconv_mode::mode_playsweep:
       generate_log_sweep (p.sweep_seconds,
                           p.preroll_seconds,
                           p.marker_seconds,
@@ -1886,51 +2027,86 @@ int main (int argc, char **argv) {
                           p.sweep_f2,
                           sweep);
 
-      std::vector<float> wet;
-      if (!dec.jack_playrec_sweep (sweep,
-                                   p.sweep_sr,
-                                   p.dry_path.c_str (),
-                                   p.wet_path.c_str (),
-                                   wet)) {
+      if (p.sweepwait) {
+        std::cout << "Press enter to play sinewave sweep... ";
+        std::string str;
+        std::getline (std::cin, str);
+      }
+
+      debug ("return");
+      return dec.jack_play (sweep);
+    break;
+    
+    default:
+      // "live" / full-duplex mode: generate sweep, play it and record the 
+      // result at the same time
+      if (p.dry_source == src_jack && p.wet_source == src_jack) {
+          generate_log_sweep (p.sweep_seconds,
+                              p.preroll_seconds,
+                              p.marker_seconds,
+                              p.marker_gap_seconds,
+                              p.sweep_sr,
+                              p.sweep_amp_db,
+                              p.sweep_f1,
+                              p.sweep_f2,
+                              sweep);
+
+          std::vector<float> wet_l;
+          std::vector<float> wet_r;
+          if (p.sweepwait) {
+            std::cout << "Press enter to play and record sinewave sweep... ";
+            std::string str;
+            std::getline (std::cin, str);
+          }
+          if (!dec.jack_playrec (sweep, wet_l, wet_r)) {
+              debug ("return");
+              return 1;
+          }
+        
+        // detect & compensate for offset in recorded sweep
+        if (!dec.set_dry_from_buffer (sweep, p.sweep_sr)) return 1;
+        // TODO: support generating stereo IR's
+        if (!dec.set_wet_from_buffer (wet_l, std::vector<float> (), p.sweep_sr)) return 1;
+
+        if (!dec.output_ir(p.out_path.c_str (), p.ir_length_samples)) return 1;
+        debug ("return");
+        return 0;
+      }
+      
+      if (p.dry_source == src_file) {
+        if (!dec.load_sweep_dry (p.dry_path.c_str ())) return 1;
+      } else if (p.dry_source == src_generate) {
+          std::vector<float> sweep;
+          generate_log_sweep (p.sweep_seconds,
+                              p.preroll_seconds,
+                              p.marker_seconds,
+                              p.marker_gap_seconds,
+                              p.sweep_sr,
+                              p.sweep_amp_db,
+                              p.sweep_f1,
+                              p.sweep_f2,
+                              sweep);
+          if (!dec.set_dry_from_buffer (sweep, p.sweep_sr)) return 1;
+      } else {
+          std::cerr << "Error: Dry JACK only supported when wet is JACK.\n";
+          debug ("return");
           return 1;
       }
-    
-    // detect & compensate for offset in recorded sweep
-    if (!dec.set_dry_from_buffer (sweep, p.sweep_sr)) return 1;
-    if (!dec.set_wet_from_buffer (wet, std::vector<float> (), p.sweep_sr)) return 1;
 
-    if (!dec.output_ir(p.out_path.c_str (), p.ir_length_samples)) return 1;
-    return 0;
+      if (p.wet_source == src_file) {
+          if (!dec.load_sweep_wet (p.wet_path.c_str ())) return 1;
+      } else {
+          std::cerr << "Error: Wet JACK only supported when dry is JACK.\n";
+          debug ("return");
+          return 1;
+      }
+      
+      if (!dec.output_ir (p.out_path.c_str (), p.ir_length_samples))
+        debug ("return");
+        return 1;
+    break;
   }
   
-  if (p.dry_source == src_file) {
-      if (!dec.load_sweep_dry (p.dry_path.c_str ())) return 1;
-  } else if (p.dry_source == src_generate) {
-      std::vector<float> sweep;
-      generate_log_sweep (p.sweep_seconds,
-                          p.preroll_seconds,
-                          p.marker_seconds,
-                          p.marker_gap_seconds,
-                          p.sweep_sr,
-                          p.sweep_amp_db,
-                          p.sweep_f1,
-                          p.sweep_f2,
-                          sweep);
-      if (!dec.set_dry_from_buffer (sweep, p.sweep_sr)) return 1;
-  } else {
-      std::cerr << "Error: Dry JACK only supported when wet is JACK.\n";
-      return 1;
-  }
-
-  if (p.wet_source == src_file) {
-      if (!dec.load_sweep_wet (p.wet_path.c_str ())) return 1;
-  } else {
-      std::cerr << "Error: Wet JACK only supported when dry is JACK.\n";
-      return 1;
-  }
-
-  if (!dec.output_ir (p.out_path.c_str (), p.ir_length_samples))
-    return 1;
-  
+  debug ("end");
   return 0;
 }

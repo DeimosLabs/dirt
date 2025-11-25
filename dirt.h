@@ -51,6 +51,8 @@
 #include <fftw3.h>
 #include <jack/jack.h>
 
+#define DEBUG
+
 #define MARKER_FREQ                    1000 // in Hz
 #define DEFAULT_SAMPLE_RATE            48000
 #define DEFAULT_JACK_NAME              "%s_ir_sweep" // %s becomes argv [0]
@@ -89,7 +91,12 @@ struct s_prefs {
 
   std::string dry_path; // file, JACK port, or empty (generate one)
   std::string wet_path; // file, or JACK port
-  std::string out_path; // file  TODO: decide if we should support JACK output here
+  std::string out_path; // file. TODO: decide if we should support JACK output here
+  // moved from our s_jackclient struct ...fugly :/
+  std::string portname_dry = "";
+  std::string portname_wetL = "";
+  std::string portname_wetR = "";
+  
 
   long ir_length_samples = 0;    // 0 = auto
 #ifdef THRESH_RELATIVE
@@ -97,19 +104,28 @@ struct s_prefs {
 #else
   bool thresh_relative = false;
 #endif
-  sig_source dry_source = sig_source::src_file;
-  sig_source wet_source = sig_source::src_file;
-  bool quiet = false;
-  bool verbose = false;
-  bool sweepwait = false;
+  sig_source dry_source             = sig_source::src_file;
+  sig_source wet_source             = sig_source::src_file;
+  bool jack_autoconnect_dry         = false;
+  bool jack_autoconnect_wet         = false;
+  bool jack_autoconnect_to_default  = false;
+  //bool using_jack                   = false;
+  bool quiet                        = false;
+#ifdef DEBUG
+  bool verbose                      = true;
+#else
+  bool verbose                      = false;
+#endif
+  bool sweepwait                    = false;
 
   double sweep_seconds      = DEFAULT_SWEEP_SEC;   // default value not really used
   double preroll_seconds    = DEFAULT_PREROLL_SEC;
   double marker_seconds     = DEFAULT_MARKER_SEC;  // alignment marker
   double marker_gap_seconds = DEFAULT_MARKGAP_SEC;
+  //double regularization_db  = -120.0; // "noise floor" - see calc_ir_raw ()
   int    sweep_sr           = DEFAULT_SAMPLE_RATE;
   float  sweep_f1           = 20.0f;
-  float  sweep_f2           = 20000.0f;
+  float  sweep_f2           = 22000.0f; // DONE: cap to just below nyquist freq
   float  sweep_amp_db       = DEFAULT_SWEEP_AMPLITUDE_DB;
   float  headroom_seconds   = 0.0f;
  
@@ -119,20 +135,25 @@ struct s_prefs {
   
   size_t cache_dry_marker_len = 0;
   size_t cache_dry_gap_len    = 0;
-  bool early_jack_init        = false;
 };
 
 struct s_jackclient {
   bool play_go = false;
   bool rec_go  = false;
-
+  
+  /*std::string portname_dry = "";
+  std::string portname_wetL = "";
+  std::string portname_wetR = "";*/
+  
+  int samplerate = 0;
   jack_client_t *client = NULL;
-  jack_port_t   *inL  = NULL;
-  jack_port_t   *inR  = NULL;
-  jack_port_t   *outL = NULL;
-  jack_port_t   *outR = NULL;
+  jack_port_t   *port_inL  = NULL;
+  jack_port_t   *port_inR  = NULL;
+  jack_port_t   *port_outL = NULL;
+  //jack_port_t   *port_outR = NULL; // not used for now
 
-  std::vector<float> sig_in;   // mono wet capture (mix of L/R)
+  std::vector<float> sig_in_L; // mono/left wet capture (mix of L/R)
+  std::vector<float> sig_in_R; //
   std::vector<float> sig_out;  // sweep to play
 
   size_t index     = 0;  // playback index
@@ -173,17 +194,19 @@ public:
                             const std::vector<float>& bufR,
                             int sr);
 
-  bool init_jack (const std::string clientname,
-                  sig_channels chan_in = sig_channels::chn_stereo,
-                  sig_channels chan_out = sig_channels::chn_stereo);
-  bool jack_play (std::vector<float> &buf, int samplerate, const char *portname);
-  bool jack_rec  (std::vector<float> &buf, int samplerate, const char *portname);
+  bool jack_init     (const std::string clientname,
+                      int samplerate, bool stereo);
+  bool jack_shutdown ();
+  bool jack_play     (std::vector<float> &buf);
+  bool jack_playrec  (const std::vector<float> &buf,
+                      std::vector<float> &in_l,
+                      std::vector<float> &in_r);
   
-  bool jack_playrec_sweep (const std::vector<float> &sweep,
+  /*bool jack_playrec_sweep (const std::vector<float> &sweep,
                            int samplerate,
                            const char *jack_out_port,
                            const char *jack_in_port,
-                           std::vector<float> &captured);
+                           std::vector<float> &captured);*/
 private:
   bool set_samplerate_if_needed (int sr);
   
