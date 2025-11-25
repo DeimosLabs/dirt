@@ -1886,7 +1886,11 @@ static bool resolve_sources (s_prefs &opt, int paths_bf) {
 
   // --- dry source ---
   if (paths_bf & 1) {
+#ifdef USE_JACK
     if (opt.dry_path == "jack") {
+#else
+    if (0) {
+#endif
       opt.dry_source = src_jack;
       // if only dry was specified, assume playsweep to default
       if (!(paths_bf & 2)) {
@@ -1901,14 +1905,22 @@ static bool resolve_sources (s_prefs &opt, int paths_bf) {
       opt.dry_source = src_file;
     } else {
       std::cerr << "Dry source \"" << opt.dry_path
+#ifdef USE_JACK
                 << "\" is not an existing file or a JACK port\n";
+#else
+                << "\" not found\n";
+#endif
       return false;
     }
   }
 
 // --- wet source ---
   if (paths_bf & 2) {
+#ifdef USE_JACK
     if (opt.wet_path == "jack") {
+#else
+    if (0) {
+#endif
       opt.wet_source = src_jack;
       // no default autoconnect here; user should patch or give explicit port
 
@@ -1937,7 +1949,11 @@ static bool resolve_sources (s_prefs &opt, int paths_bf) {
           opt.wet_source = src_file;
         } else {
           std::cerr << "Wet source \"" << opt.wet_path
+#ifdef USE_JACK
                     << "\" is not an existing file or valid JACK ports\n";
+#else
+                << "\" not found\n";
+#endif
           return false;
         }
 
@@ -1953,7 +1969,11 @@ static bool resolve_sources (s_prefs &opt, int paths_bf) {
 
       } else {
         std::cerr << "Wet source \"" << opt.wet_path
+#ifdef USE_JACK
                   << "\" is not an existing file or a JACK port\n";
+#else
+                << "\" not found\n";
+#endif
         return false;
       }
     }
