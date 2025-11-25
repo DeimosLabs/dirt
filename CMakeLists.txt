@@ -16,7 +16,7 @@ find_package(PkgConfig REQUIRED)
 
 pkg_check_modules(SNDFILE REQUIRED sndfile)
 pkg_check_modules(FFTW3   REQUIRED fftw3)
-pkg_check_modules(JACK    QUIET   jack)
+pkg_check_modules(JACK             jack)
 
 # Define the executable target first
 add_executable(dirt
