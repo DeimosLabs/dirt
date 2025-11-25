@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG CMakeFiles/dirt.dir/dirt.cpp.o -o dirt  -lsndfile -lfftw3 -ljack 

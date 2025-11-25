@@ -1,0 +1,7 @@
+/usr/src/dirt/test/CMakeFiles/dirt.dir
+/usr/src/dirt/test/CMakeFiles/edit_cache.dir
+/usr/src/dirt/test/CMakeFiles/rebuild_cache.dir
+/usr/src/dirt/test/CMakeFiles/list_install_components.dir
+/usr/src/dirt/test/CMakeFiles/install.dir
+/usr/src/dirt/test/CMakeFiles/install/local.dir
+/usr/src/dirt/test/CMakeFiles/install/strip.dir
