@@ -30,6 +30,8 @@
 #define CMDLINE_DEBUG
 #include "cmdline/cmdline.h"
 #define debug(...) cmdline_debug(stderr,ANSI_RED,__FILE__,__LINE__,__FUNC__,__VA_ARGS__)
+#else
+#define debug(...)
 #endif
 
 // our random number generator
@@ -96,10 +98,12 @@ static bool file_exists (const std::string &path) {
 
 // for now just check if given name contains a ":"
 static bool looks_like_jack_port (const std::string &s) {
+#ifdef USE_JACK
   if ((s.find(':') != std::string::npos) &&
      (s [0] >= 'A' && s [0] <= 'z'))
     return true;
-  
+#endif
+
   return false;
 }
 
@@ -1265,6 +1269,7 @@ void c_deconvolver::normalize_and_trim_stereo (std::vector<float> &L,
   }
 }
 
+#ifdef USE_JACK
 static int jack_process_cb (jack_nframes_t nframes, void *arg) {
   s_jackclient *j = (s_jackclient *) arg;
   
@@ -1585,6 +1590,7 @@ bool c_deconvolver::jack_play (std::vector<float> &sig) {
   // let caller decide when to deactivate/close
   return true;
 }
+#endif
 
 static void print_usage (const char *prog, bool full = false) {
   if (full)
@@ -1608,7 +1614,9 @@ static void print_usage (const char *prog, bool full = false) {
     "                           (negative, default " << DEFAULT_SILENCE_THRESH_DB << " dB)\n"
     "Sweep generator options:\n"
     "  -s, --makesweep SEC      Generate sweep WAV instead of deconvolving\n"
+#ifdef USE_JACK
     "  -S, --playsweep SEC      Play sweep via JACK instead of deconvolving\n"
+#endif
     "  -R, --sweep-sr SR        Sweep samplerate (default 48000)\n"
     "  -a, --sweep-amplitude dB Sweep amplitude (default -1dB)\n" // DONE
     "  -X, --sweep-f1 F         Sweep start frequency (default 20)\n"
@@ -1616,8 +1624,10 @@ static void print_usage (const char *prog, bool full = false) {
     "  -p, --preroll SEC        Prepend leading silence of SEC seconds\n"
     "  -m, --marker SEC         Prepend alignment marker of SEC seconds\n"
     "  -W, --wait               Wait for input before playing sweep\n"
+#ifdef USE_JACK
     "  -j, --jack-port PORT     Connect to this JACK port\n"
     "  -J, --jack-name          Connect to JACK with this client name\n"
+#endif
     "\n";
   if (full) std::cerr <<
     "Example usage:\n"
@@ -1642,13 +1652,17 @@ static void print_usage (const char *prog, bool full = false) {
 int parse_args (int argc, char **argv, s_prefs &opt) {
   debug ("start");
   const int ret_err = -1;
-
+  int i;
+  bool doubledash = false;
+  
   // First pass: parse flags 
   std::vector<const char *> positionals;
-  for (int i = 1; i < argc; ++i) {
+  for (i = 1; i < argc; ++i) {
     std::string arg = argv [i];
-
-    if (arg == "-h" || arg == "--help" || arg == "-V" || arg == "--version") {
+    
+    if (arg == "--") {
+      doubledash = true;
+    } else if (arg == "-h" || arg == "--help" || arg == "-V" || arg == "--version") {
       print_usage (argv [0], true);
       exit (0);
     } else if (arg == "-d" || arg == "--dry") {
@@ -1690,10 +1704,12 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
       if (++i >= argc) { std::cerr << "Missing value for " << arg << "\n"; return ret_err; }
       opt.mode = deconv_mode::mode_makesweep;
       opt.sweep_seconds = std::atof (argv [i]);
+#ifdef USE_JACK
     } else if (arg == "-S" || arg == "--playsweep") {
       if (++i >= argc) { std::cerr << "Missing value for " << arg << "\n"; return ret_err; }
       opt.mode = deconv_mode::mode_playsweep;
       opt.sweep_seconds = std::atof (argv [i]);
+#endif
     } else if (arg == "-R" || arg == "--sweep-sr") {
       if (++i >= argc) { std::cerr << "Missing value for " << arg << "\n"; return ret_err; }
       opt.sweep_sr = std::atoi (argv [i]);
@@ -1734,7 +1750,9 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
             std::cerr << "Marker length cannot be negative.\n";
             return ret_err;
         }
-    } else if (arg == "-J" || arg == "--jack-name") {
+    } 
+#ifdef USE_JACK
+    else if (arg == "-J" || arg == "--jack-name") {
       if (++i >= argc) { std::cerr << "Missing value for " << arg << "\n"; return ret_err; }
       opt.jack_name = argv [i];
     } else if (arg == "-j" || arg == "--jack-port") {
@@ -1743,9 +1761,15 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
     } else if (!arg.empty () && arg [0] == '-') {
       std::cerr << "Unknown option: " << arg << "\n";
       return ret_err;
-    } else {
-      // positional
-      positionals.push_back (argv [i]);
+    } 
+#endif
+    else {
+      if (argv [i] && argv [i] [0] == '-' && !doubledash) {
+        std::cerr << "Unknown option \"" << argv [i] << "\"\n";
+      } else {
+        // positional
+        positionals.push_back (argv [i]);
+      }
     }
   }
   
@@ -1971,6 +1995,7 @@ int main (int argc, char **argv) {
   c_deconvolver dec(&p);
   
   // using jack at all?
+#ifdef USE_JACK
   if (p.dry_source == src_jack || p.wet_source == src_jack) {
     char realjackname [256] = { 0 };
     snprintf (realjackname, 255, p.jack_name.c_str (), argv [0]);
@@ -1979,6 +2004,7 @@ int main (int argc, char **argv) {
                (p.dry_source == src_jack || p.mode == deconv_mode::mode_playsweep ?
                 chn_mono : chn_none));
   }
+#endif
   
   // avoid upper freq. aliasing: now that we have sample rate from either user
   // or jack, make sure we don't sweep past 95% of nyquist frequency
@@ -2011,11 +2037,11 @@ int main (int argc, char **argv) {
                   << p.sweep_sr << " Hz)\n";
       }
       
-      dec.jack_shutdown ();
       debug ("return");
       return 0;
     break;
     
+#ifdef USE_JACK
     case deconv_mode::mode_playsweep:
       generate_log_sweep (p.sweep_seconds,
                           p.preroll_seconds,
@@ -2033,6 +2059,7 @@ int main (int argc, char **argv) {
         std::getline (std::cin, str);
       }
 
+      dec.jack_shutdown ();
       debug ("return");
       return dec.jack_play (sweep);
     break;
@@ -2105,6 +2132,11 @@ int main (int argc, char **argv) {
         debug ("return");
         return 1;
     break;
+#else
+    default:
+      return 1;
+    break;
+#endif
   }
   
   debug ("end");

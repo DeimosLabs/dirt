@@ -47,11 +47,14 @@
 #include <sys/time.h>
 #include <sys/stat.h>
 
+//#define DEBUG
+//#define USE_JACK // TODO: complete this
+
 #include <sndfile.h>
 #include <fftw3.h>
+#ifdef USE_JACK
 #include <jack/jack.h>
-
-#define DEBUG
+#endif
 
 #define MARKER_FREQ                    1000 // in Hz
 #define DEFAULT_SAMPLE_RATE            48000
@@ -137,6 +140,7 @@ struct s_prefs {
   size_t cache_dry_gap_len    = 0;
 };
 
+#ifdef USE_JACK
 struct s_jackclient {
   bool play_go = false;
   bool rec_go  = false;
@@ -162,6 +166,7 @@ struct s_jackclient {
 
   bool rec_done = false;
 };
+#endif
 
 class c_deconvolver {
 public:
@@ -193,7 +198,7 @@ public:
   bool set_wet_from_buffer (const std::vector<float>& bufL,
                             const std::vector<float>& bufR,
                             int sr);
-
+#ifdef USE_JACK
   bool jack_init     (const std::string clientname,
                       int samplerate, bool stereo);
   bool jack_shutdown ();
@@ -201,16 +206,19 @@ public:
   bool jack_playrec  (const std::vector<float> &buf,
                       std::vector<float> &in_l,
                       std::vector<float> &in_r);
-  
+
   /*bool jack_playrec_sweep (const std::vector<float> &sweep,
                            int samplerate,
                            const char *jack_out_port,
                            const char *jack_in_port,
                            std::vector<float> &captured);*/
+#endif
 private:
   bool set_samplerate_if_needed (int sr);
-  
+
+#ifdef USE_JACK
   s_jackclient jackclient;
+#endif
   int samplerate_ = 0;
   std::vector<float> dry_;
   std::vector<float> wet_L_;
