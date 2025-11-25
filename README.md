@@ -7,6 +7,10 @@ A simple, open-source sinewave sweep generator, recorder, and deconvolver. In it
 Compiles and installs with cmake.
 Required libraries: libsndfile, libfftw3, (for JACK support) libjack
 
+To disable JACK support, use:
+```
+cmake -DDONT_USE_JACK=on wherver/is/src/dirt 
+```
 Usage examples:
 ```
 dirt --makesweep sweep_dry.wav
