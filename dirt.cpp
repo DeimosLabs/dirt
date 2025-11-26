@@ -128,6 +128,85 @@ static size_t find_first_nonsilent (const std::vector<float> &buf,
   return buf.size();
 }
 
+#include <vector>
+#include <cstring>
+#include <fftw3.h>
+
+void lowpass_ir (std::vector<float> &irf, double samplerate, double cutoff)
+{
+  debug ("start");
+
+  const size_t N = irf.size ();
+  if (N == 0) {
+    debug ("empty IR, skipping");
+    return;
+  }
+
+  // make a double copy (correctly sized!)
+  std::vector<double> ir (N);
+  for (size_t i = 0; i < N; ++i) {
+      ir [i] = irf [i];
+  }
+
+  // allocate FFT buffers
+  fftw_complex *freq = (fftw_complex *) fftw_malloc (sizeof (fftw_complex) * (N / 2 + 1));
+  double *time = (double *) fftw_malloc (sizeof (double) * N);
+
+  if (!freq || !time) {
+      debug ("fftw_malloc failed");
+      if (freq) fftw_free (freq);
+      if (time) fftw_free (time);
+      return;
+  }
+
+  std::memcpy (time, ir.data(), N * sizeof(double));
+
+  // make sure N fits in int (fftw API)
+  int N_int = static_cast<int>(N);
+
+  fftw_plan fwd = fftw_plan_dft_r2c_1d(N_int, time, freq, FFTW_ESTIMATE);
+  fftw_plan inv = fftw_plan_dft_c2r_1d(N_int, freq, time, FFTW_ESTIMATE);
+
+  if (!fwd || !inv) {
+      debug ("fftw_plan creation failed");
+      if (fwd) fftw_destroy_plan(fwd);
+      if (inv) fftw_destroy_plan(inv);
+      fftw_free(freq);
+      fftw_free(time);
+      return;
+  }
+
+  fftw_execute(fwd);
+
+  const double bin_hz = samplerate / static_cast<double>(N);
+  int bin_cutoff = static_cast<int>(cutoff / bin_hz);
+  int max_bin = N_int / 2;
+
+  // clamp cutoff bin to valid range
+  if (bin_cutoff < 0) bin_cutoff = 0;
+  if (bin_cutoff > max_bin + 1) bin_cutoff = max_bin + 1;
+
+  for (int i = bin_cutoff; i <= max_bin; ++i) {
+      freq[i][0] = 0.0;
+      freq[i][1] = 0.0;
+  }
+
+  fftw_execute(inv);
+
+  // scale back (FFTW's inverse is unnormalized)
+  const double invN = 1.0 / static_cast<double>(N);
+  for (size_t i = 0; i < N; ++i) {
+      irf[i] = static_cast<float>(time[i] * invN);
+  }
+
+  fftw_destroy_plan(fwd);
+  fftw_destroy_plan(inv);
+  fftw_free(freq);
+  fftw_free(time);
+
+  debug ("end");
+}
+
 static size_t detect_sweep_start_with_marker (const std::vector<float> &buf,
                                               int samplerate,
                                               float silence_thresh,
@@ -165,7 +244,7 @@ static size_t detect_sweep_start_with_marker (const std::vector<float> &buf,
   // 2) analyze a short window after i0 to see if it's our marker square wave
   const double max_marker_window_sec = (marker_seconds_hint > 0.0)
                                        ? marker_seconds_hint
-                                       : 0.2; // 200 ms default window
+                                       : 5;
   const size_t max_window_samples =
       std::min (buf.size() - i0,
                (size_t) (max_marker_window_sec * samplerate));
@@ -376,8 +455,9 @@ size_t detect_wet_sweep_start (const std::vector<float> &wet,
                                const s_prefs &prefs) {
   debug ("start");
   
-  size_t first = find_first_nonsilent (wet, prefs.silence_thresh);
+  size_t first = find_first_nonsilent (wet, db_to_linear (DEFAULT_SWEEP_AMPLITUDE_DB));
 
+//#if 0
   if (prefs.cache_dry_marker_len || prefs.cache_dry_gap_len) {
     size_t start = first
                  + prefs.cache_dry_marker_len
@@ -393,6 +473,7 @@ size_t detect_wet_sweep_start (const std::vector<float> &wet,
     debug ("return");
     return start;
   }
+//#endif
 
   // fallback: no cached values (e.g. no marker detected in dry)
   size_t start = detect_sweep_start_with_marker (
@@ -411,10 +492,6 @@ size_t detect_wet_sweep_start (const std::vector<float> &wet,
   debug ("end");
   return start;
 }
-
-#include <sndfile.h>
-#include <vector>
-#include <iostream>
 
 bool read_wav (const char *filename,
                 std::vector<float> &left,
@@ -546,6 +623,28 @@ static bool write_stereo_wav (const char *path,
   }
   debug ("end");
   return true;
+}
+
+bool dump_double_wav(const std::string& path,
+                     const std::vector<double>& buf,
+                     int samplerate,
+                     size_t length) {
+    SF_INFO info;
+    memset(&info, 0, sizeof(info));
+    info.channels = 1;
+    info.samplerate = samplerate;
+    info.format = SF_FORMAT_WAV | SF_FORMAT_PCM_24;
+
+    SNDFILE* snd = sf_open(path.c_str(), SFM_WRITE, &info);
+    if (!snd) {
+        fprintf(stderr, "Error writing %s: %s\n", path.c_str(), sf_strerror(NULL));
+        return false;
+    }
+
+    sf_count_t written = sf_writef_double(snd, buf.data(), length);
+    sf_close(snd);
+
+    return (written == (sf_count_t)length);
 }
 
 // new: marker_gap_seconds, preroll_seconds
@@ -880,11 +979,18 @@ bool c_deconvolver::set_wet_from_buffer (const std::vector<float>& bufL,
   return true;
 }
 
-// ok THIS WORKS DON'T TOUCH IT!!!
 bool c_deconvolver::output_ir (const char *out_filename, long ir_length_samples) {
   debug ("start");
   std::vector<float> irL;
   std::vector<float> irR;
+  
+  if (prefs_->dry_source == src_jack && prefs_->wet_source == src_jack) {
+    dry_offset_ = 0;
+    wet_offset_ = 0;
+  }
+  
+  std::cerr << "\nDry offset: " << dry_offset_
+            << "\nWet offset: " << wet_offset_ << "\n\n";
 
   // --- deconvolve left ---
   if (!calc_ir_raw (wet_L_, dry_, irL, ir_length_samples)) {
@@ -900,6 +1006,13 @@ bool c_deconvolver::output_ir (const char *out_filename, long ir_length_samples)
       return false;
     }
   }
+  
+  // get rid of junk above hearing threshold, say 80% of nyquist freq
+  //float cutoff = (prefs_->sweep_sr / 2) * 0.8;
+  // ...or just a fixed frequency
+  float cutoff = 18000;
+  if (irL.size () > 0) lowpass_ir (irL, prefs_->sweep_sr, cutoff);
+  if (irR.size () > 0) lowpass_ir (irR, prefs_->sweep_sr, cutoff);
   
   // TODO: figure out why this even works for L/R delay
   //align_stereo_independent (irL, irR, 0);
@@ -948,6 +1061,7 @@ bool c_deconvolver::output_ir (const char *out_filename, long ir_length_samples)
   return true;
 }
 
+// ok THIS WORKS DON'T TOUCH IT!!!
 bool c_deconvolver::calc_ir_raw (const std::vector<float> &wet,
                                  const std::vector<float> &dry,
                                  std::vector<float>       &ir_raw,
@@ -1004,6 +1118,18 @@ bool c_deconvolver::calc_ir_raw (const std::vector<float> &wet,
   for (size_t i = 0; i < usable_wet; ++i) {
     if (i >= N) break;
     yTime [i] = wet [wet_offset + i];
+  }
+
+  if (prefs_->dump_debug) {
+    std::string prefix = prefs_->dump_prefix;
+
+    std::string dryname = prefix + "-dry.wav";
+    std::string wetname = prefix + "-wet.wav";
+
+    debug ("Dumping debug buffers: %s, %s", dryname.c_str (), wetname.c_str ());
+
+    dump_double_wav (dryname, xTime, prefs_->sweep_sr, usable_dry);
+    dump_double_wav (wetname, yTime, prefs_->sweep_sr, usable_wet);
   }
 
   // Frequency-domain buffers
@@ -1174,16 +1300,23 @@ bool c_deconvolver::set_samplerate_if_needed (int sr) {
   return (samplerate_ == sr);
 }
 
+// thr_end, thr_start: -1 don't trim, 0 use default
 void c_deconvolver::normalize_and_trim_stereo (std::vector<float> &L,
                                                std::vector<float> &R,
-                                               bool trim_end,
-                                               bool trim_start) {
+                                               float thr_start,
+                                               float thr_end,
+                                               float fade_end) {
   const size_t tail_pad       = 32;
   //const float  silence_thresh = 1e-5f;  // relative to peak (~ -100 dB)
   const bool hasR = !R.empty ();
+  
+  if (thr_start == 0)
+    thr_start = db_to_linear (DEFAULT_SILENCE_THRESH_DB);
+  if (thr_end == 0)
+    thr_end = db_to_linear (DEFAULT_SILENCE_THRESH_DB);
 
   // avoid edge case where we could wipe the whole buffer
-  if (L.empty() && !hasR) return;
+  if (L.empty () && !hasR) return;
   
   // 1) Find global peak across both channels
   float peak = 0.0f;
@@ -1199,7 +1332,7 @@ void c_deconvolver::normalize_and_trim_stereo (std::vector<float> &L,
     return;
   }
 
-  const float norm = 0.99f / peak;
+  const float norm = prefs_->normalize_amp / peak;
 
   // 2) Apply same gain to both channels
   for (float &v : L) v *= norm;
@@ -1207,10 +1340,18 @@ void c_deconvolver::normalize_and_trim_stereo (std::vector<float> &L,
     for (float &v : R) v *= norm;
   }
   
-  size_t len = 0;
+  size_t len = std::max (L.size (), R.size ());
+  size_t endfade_len = (size_t) (len * fade_end);
+
+  for (size_t i = endfade_len; i < len; ++i) {
+      float t = float (i - endfade_len) / float (len - endfade_len - 1);
+      float g = 1.0f - t;  // lerp from 1 to 0
+      if (i < L.size ()) L [i] *= g;
+      if (i < R.size ()) R [i] *= g;
+  }
   
   // 3) Remove common leading silence: trim by *earliest* non-silent sample
-  if (trim_start) {
+  if (thr_start >= 0.0) {
     len = L.size ();
     if (hasR) len = std::min (L.size (), R.size ());
 
@@ -1218,7 +1359,7 @@ void c_deconvolver::normalize_and_trim_stereo (std::vector<float> &L,
     for (size_t i = 0; i < len; ++i) {
       float aL = std::fabs (L [i]);
       float aR = hasR ? std::fabs (R [i]) : 0.0f;
-      if (std::max (aL, aR) > prefs_->silence_thresh) {
+      if (std::max (aL, aR) > thr_start) {
         firstNonSilent = i;
         break;
       }
@@ -1238,7 +1379,7 @@ void c_deconvolver::normalize_and_trim_stereo (std::vector<float> &L,
   }
 
   // 4) Compute trim position at the tail based on max (|L|, |R|)
-  if (trim_end) {
+  if (thr_end >= 0.0) {
     len = L.size ();
     if (hasR) len = std::min (L.size (), R.size ());
 
@@ -1246,7 +1387,7 @@ void c_deconvolver::normalize_and_trim_stereo (std::vector<float> &L,
     for (ssize_t i = (ssize_t) len - 1; i >= 0; --i) {
       float aL = std::fabs (L [(size_t) i]);
       float aR = hasR ? std::fabs (R [(size_t) i]) : 0.0f;
-      if (std::max (aL, aR) > prefs_->silence_thresh) {
+      if (std::max (aL, aR) > thr_end) {
         lastNonSilent = i;
         break;
       }
@@ -1619,6 +1760,7 @@ static void print_usage (const char *prog, bool full = false) {
     "  -n, --len N              IR length in samples (default 0 = auto)\n"
     "  -q, --quiet              Less verbose output\n"
     "  -v, --verbose            More verbose output\n"
+    "  -D, --dump PREFIX        Dump wav files of sweeps used by deconvolver\n"
     "  -t, --thresh dB          Threshold in dB for silence detection\n"
     "                           (negative, default " << DEFAULT_SILENCE_THRESH_DB << " dB)\n"
     "Sweep generator options:\n"
@@ -1707,6 +1849,9 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
       opt.quiet = true;
     } else if (arg == "-v" || arg == "--verbose") {
       opt.verbose = true;
+    } else if (arg == "-D" || arg == "--dump") {
+      opt.dump_debug = true;
+      opt.dump_prefix = "dirt-dump";
     } else if (arg == "-W" || arg == "--wait") {
       opt.sweepwait = true;
     } else if (arg == "-s" || arg == "--makesweep") {
@@ -1999,6 +2144,12 @@ static bool resolve_sources (s_prefs &opt, int paths_bf) {
   } else if (opt.mode == mode_deconvolve) {
     std::cerr << "No output file specified\n";
     return false;
+  }
+  
+  if (opt.dry_source == src_jack && opt.wet_source == src_jack) {
+    opt.preroll_seconds = 0.05;
+    opt.marker_seconds = 0;
+    opt.marker_gap_seconds = 0;
   }
   
   debug ("end");

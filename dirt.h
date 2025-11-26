@@ -53,15 +53,20 @@
 #include <jack/jack.h>
 #endif
 
-#define MARKER_FREQ                    1000 // in Hz
-#define DEFAULT_SAMPLE_RATE            48000
-#define DEFAULT_JACK_NAME              "%s_ir_sweep" // %s becomes argv [0]
-#define DEFAULT_SILENCE_THRESH_DB      -80.0
-#define DEFAULT_SWEEP_SEC              30
-#define DEFAULT_SWEEP_AMPLITUDE_DB     -1
-#define DEFAULT_MARKER_SEC             0.1
-#define DEFAULT_PREROLL_SEC            1.0
-#define DEFAULT_MARKGAP_SEC            1.0
+#define MARKER_FREQ                     1000 // in Hz
+#define DEFAULT_SAMPLE_RATE             48000
+#define DEFAULT_JACK_NAME               "%s_ir_sweep" // %s becomes argv [0]
+#define DEFAULT_SILENCE_THRESH_DB       -66.0
+#define DEFAULT_SWEEP_SILENCE_THRESH_DB -24.0
+#define DEFAULT_SWEEP_SEC               30
+#define DEFAULT_SWEEP_AMPLITUDE_DB      -1
+#define DEFAULT_MARKER_SEC              0.1
+#define DEFAULT_PREROLL_SEC             1.0
+#define DEFAULT_MARKGAP_SEC             1.0
+#define DEFAULT_NORMALIZE_AMP           0.9
+/*#define DEFAULT_MARKER_SEC              0.0
+#define DEFAULT_PREROLL_SEC             0.0
+#define DEFAULT_MARKGAP_SEC             0.0*/
 
 //#define THRESH_RELATIVE // relative to peak, comment out for absolute
 //#define DISABLE_LEADING_SILENCE_DETECTION // for debugging
@@ -116,6 +121,8 @@ struct s_prefs {
 #else
   bool verbose                      = false;
 #endif
+  bool dump_debug                   = false;
+  std::string dump_prefix           = "dirt-debug";
   bool sweepwait                    = false;
 
   double sweep_seconds      = DEFAULT_SWEEP_SEC;   // default value not really used
@@ -125,11 +132,12 @@ struct s_prefs {
   //double regularization_db  = -120.0; // "noise floor" - see calc_ir_raw ()
   int    sweep_sr           = DEFAULT_SAMPLE_RATE;
   float  sweep_f1           = 20.0f;
-  float  sweep_f2           = 22000.0f; // DONE: cap to just below nyquist freq
+  float  sweep_f2           = 24000.0f; // DONE: cap to just below nyquist freq
   float  sweep_amp_db       = DEFAULT_SWEEP_AMPLITUDE_DB;
   float  headroom_seconds   = 0.0f;
+  float  normalize_amp      = DEFAULT_NORMALIZE_AMP; // TODO: command opt line for this
  
-  float silence_thresh  = -1;
+  float silence_thresh  = 0.0f;
   std::string jack_name = DEFAULT_JACK_NAME;
   std::string jack_portname;
   
@@ -187,9 +195,10 @@ public:
                      long ir_length_samples);
                    
   void normalize_and_trim_stereo (std::vector<float> &L,
-                                   std::vector<float> &R,
-                                   bool trim_end = true,
-                                   bool trim_start = false);
+                                  std::vector<float> &R,
+                                  float thr_start = 0.0,
+                                  float thr_end = 0.0,
+                                  float fade_end = 0.05); // last 5% of IR pre-trim
 
   bool set_dry_from_buffer (const std::vector<float>& buf, int sr);
   bool set_wet_from_buffer (const std::vector<float>& bufL,
