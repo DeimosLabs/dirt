@@ -20,10 +20,6 @@
  * Takes two sinewave sweeps, one generated (dry) and the other (wet) recorded
  * through a cab, reverb, etc. and outputs an impulse response.
  *
- * compile:
- * g++ -O3 -std=c++17 dirt.cpp -o dirt -lsndfile -lfftw3 -ljack
- * (or just use cmake)
- *
  * usage examples:
  *
  * dirt --makesweep sweep_dry.wav
@@ -47,8 +43,9 @@
 #include <sys/time.h>
 #include <sys/stat.h>
 
+// these are set by cmake
 //#define DEBUG
-//#define USE_JACK // TODO: complete this
+//#define USE_JACK
 
 #include <sndfile.h>
 #include <fftw3.h>

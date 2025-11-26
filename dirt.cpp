@@ -567,11 +567,11 @@ static void generate_log_sweep (double seconds,
   out.resize (NPRE + NM + NGAP + N);
 
   std::cerr << "Generating sweep:   " << seconds << ((seconds == 1) ?
-                                         " second\n" : " seconds\n") <<
-               "  Frequency range:  " << f1 << "Hz to " << f2 << " Hz" <<
-               "  Preroll:          " << NPRE << 
-             "\n  Marker:           " << NM << 
-             "\n  Gap after marker: " << NGAP << "\n\n";
+                                         " second\n" : " seconds\n")
+            << "  Frequency range:  " << f1 << "Hz to " << f2 << " Hz\n"
+            << "  Preroll:          " << NPRE << " samples\n"
+            << "  Marker:           " << NM << " samples\n"
+            << "  Gap after marker: " << NGAP << " samples\n\n";
 
   // 0) preroll silence
   for (n = 0; n < NPRE; ++n) {
@@ -1478,12 +1478,21 @@ bool c_deconvolver::jack_init (std::string clientname,
                           prefs_->portname_dry << std::endl;
                             
   } else {
-    if (prefs_->mode == deconv_mode::mode_playsweep && prefs_->sweepwait) {
+    if (prefs_->mode == deconv_mode::mode_playsweep && !prefs_->sweepwait) {
       // connect to system default
+      std::vector<std::string> strv;
+      int n = jack_get_default_playback (jackclient.client, 1, strv);
+      if (n == 1) {
+        int err = jack_connect (jackclient.client,
+                                jack_port_name (jackclient.port_outL),
+                                strv [0].c_str ());
+         if (err) std::cerr << "warning: failed to connect to JACK output port" +
+                               strv [0] << std::endl;
+      }
     }
   }
   
-  // autoconnect input- where it makes sense:
+  // autoconnect input where it makes sense:
   // any port given: auto connect to it
   // no port given: no autoconnect
   std::cout << "output port L: " + prefs_->portname_wetL << std::endl;
@@ -1877,10 +1886,10 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
 static bool resolve_sources (s_prefs &opt, int paths_bf) {
   debug ("start");
   // lambda for trimming whitespace from beginning/end of a string
-  auto trim = [](std::string &s) {
-    size_t a = s.find_first_not_of(" \t");
-    size_t b = s.find_last_not_of(" \t");
-    if (a == std::string::npos) { s.clear(); return; }
+  auto trim = [] (std::string &s) {
+    size_t a = s.find_first_not_of (" \t");
+    size_t b = s.find_last_not_of (" \t");
+    if (a == std::string::npos) { s.clear (); return; }
     s = s.substr(a, b - a + 1);
   };
 
@@ -1926,25 +1935,25 @@ static bool resolve_sources (s_prefs &opt, int paths_bf) {
 
     } else {
       // check for stereo form "portL,portR"
-      auto comma = opt.wet_path.find(',');
+      auto comma = opt.wet_path.find (',');
       if (comma != std::string::npos) {
-        std::string left  = opt.wet_path.substr(0, comma);
-        std::string right = opt.wet_path.substr(comma + 1);
+        std::string left  = opt.wet_path.substr (0, comma);
+        std::string right = opt.wet_path.substr (comma + 1);
         trim(left);
         trim(right);
 
-        if (left.empty() || right.empty()) {
+        if (left.empty() || right.empty ()) {
           std::cerr << "Wet JACK stereo ports must be \"L,R\" (got: \""
                     << opt.wet_path << "\")\n";
           return false;
         }
 
-        if (looks_like_jack_port(left) && looks_like_jack_port(right)) {
+        if (looks_like_jack_port(left) && looks_like_jack_port (right)) {
           opt.wet_source           = src_jack;
           opt.jack_autoconnect_wet = true;
           opt.portname_wetL        = left;
           opt.portname_wetR        = right;
-        } else if (file_exists(opt.wet_path) || opt.mode != mode_deconvolve) {
+        } else if (file_exists (opt.wet_path) || opt.mode != mode_deconvolve) {
           // treat whole thing as file name if not a JACK pair
           opt.wet_source = src_file;
         } else {
@@ -1962,7 +1971,7 @@ static bool resolve_sources (s_prefs &opt, int paths_bf) {
         opt.wet_source           = src_jack;
         opt.jack_autoconnect_wet = true;
         opt.portname_wetL        = opt.wet_path;
-        opt.portname_wetR.clear();
+        opt.portname_wetR.clear ();
 
       } else if (file_exists (opt.wet_path) || opt.mode != mode_deconvolve) {
         opt.wet_source = src_file;
@@ -1978,19 +1987,21 @@ static bool resolve_sources (s_prefs &opt, int paths_bf) {
       }
     }
   }
-
-
+  
   // --- output file/port ---
   if (paths_bf & 4) {
     if (opt.out_path == "jack" || looks_like_jack_port (opt.out_path)) {
-      std::cerr << "Can't write IR directly to a JACK port\n\n";
-      return false;
+      if (opt.mode == mode_deconvolve) {
+        std::cerr << "Can't write IR directly to a JACK port\n\n";
+        return false;
+      }
     }
   } else if (opt.mode == mode_deconvolve) {
     std::cerr << "No output file specified\n";
     return false;
   }
-
+  
+  debug ("end");
   return true;
 }
 
