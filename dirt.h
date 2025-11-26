@@ -55,8 +55,10 @@
 
 #define MARKER_FREQ                     1000 // in Hz
 #define DEFAULT_SAMPLE_RATE             48000
+#define DEFAULT_F1                      20
+#define DEFAULT_F2                      22000
 #define DEFAULT_JACK_NAME               "%s_ir_sweep" // %s becomes argv [0]
-#define DEFAULT_SILENCE_THRESH_DB       -66.0
+#define DEFAULT_SILENCE_THRESH_DB       -60.0
 #define DEFAULT_SWEEP_SILENCE_THRESH_DB -24.0
 #define DEFAULT_SWEEP_SEC               30
 #define DEFAULT_SWEEP_AMPLITUDE_DB      -1
@@ -131,8 +133,8 @@ struct s_prefs {
   double marker_gap_seconds = DEFAULT_MARKGAP_SEC;
   //double regularization_db  = -120.0; // "noise floor" - see calc_ir_raw ()
   int    sweep_sr           = DEFAULT_SAMPLE_RATE;
-  float  sweep_f1           = 20.0f;
-  float  sweep_f2           = 24000.0f; // DONE: cap to just below nyquist freq
+  float  sweep_f1           = DEFAULT_F1;
+  float  sweep_f2           = DEFAULT_F2; // DONE: cap to just below nyquist freq
   float  sweep_amp_db       = DEFAULT_SWEEP_AMPLITUDE_DB;
   float  headroom_seconds   = 0.0f;
   float  normalize_amp      = DEFAULT_NORMALIZE_AMP; // TODO: command opt line for this
