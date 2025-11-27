@@ -786,7 +786,8 @@ static void generate_log_sweep (double seconds,
 
   out.resize (NPRE + NM + NGAP + N);
 
-  std::cerr << "Generating sweep:   " << seconds << ((seconds == 1) ?
+  std::cerr << "Generating sweep, " << samplerate << " Hz sample rate:\n"
+            << "  Length:           " << seconds << ((seconds == 1) ?
                                          " second\n" : " seconds\n")
             << "  Frequency range:  " << f1 << "Hz to " << f2 << " Hz\n"
             << "  Preroll:          " << NPRE << " samples\n"
@@ -2524,7 +2525,6 @@ int main (int argc, char **argv) {
       (p.wet_source == src_jack);
       
   if (will_generate_sweep) {
-    std::cout << "Sweep samplerate (requested): " << p.sweep_sr << "\n";
     float sweep_max = (p.sweep_sr / 2.0f) * 0.95f;
     if (p.sweep_f2 > sweep_max) {
       std::cout << "NOTE: requested upper frequency " << p.sweep_f2
