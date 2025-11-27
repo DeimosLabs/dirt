@@ -2039,14 +2039,27 @@ static void print_usage (const char *prog, bool full = false) {
   std::ostream &out = full ? std::cout : std::cerr;
   
   if (full) {
-    out << "\nDIRT - Delt's Impulse Response Tool, version " << DIRT_VERSION << "\n\n";
+    out << "\nDIRT - Delt's Impulse Response Tool, version " << DIRT_VERSION <<
+#ifdef USE_JACK
+    //"\nJACK support: enabled\n"
+    "\n"
+#else
+    "\nJACK support: disabled\n"
+#endif
+    //"\nhttps://deimos.ca/dirt\n"
+    //"Latest version available at: https://github.com/DeimosLabs/dirt\n"
+    "\n";
   }
   
   out <<
-    "Usage:\n"
+    (full ? "Usage:\n" :
+            "Usage: (see --help for full list of options)\n") <<
     "  " << prog << " [options] dry_sweep.wav wet_sweep.wav out_ir.wav\n"
     "  " << prog << " [options] -d dry_sweep.wav -w wet_sweep.wav -o out_ir.wav\n"
     "  " << prog << " [options] --makesweep dry_sweep.wav\n"
+#ifdef USE_JACK
+    "  " << prog << " [options] --playsweep\n"
+#endif
     "\n" <<
     (full ? "Deconvolver" : "Some deconvolver") << "/general options: [default]\n" <<
     "  -h, --help               Show " << (full ? "this" : "full")
@@ -2054,8 +2067,9 @@ static void print_usage (const char *prog, bool full = false) {
     "  -V, --version            Same as --help\n"
     "  -d, --dry FILE           Dry sweep WAV file\n"
     "  -w, --wet FILE           Recorded (wet) sweep WAV file\n"
-    "  -o, --out FILE           Output IR WAV file\n"
-    "  -n, --len N              IR length in samples [0 = auto]\n"
+    "  -o, --out FILE           Output IR WAV file\n" <<
+    (full ? 
+    "  -n, --len N              IR length in samples [0 = auto]\n" : "") <<
     "  -A, --align METHOD       Choose alignment method" << (full ? ": [none]\n"
     "                             none: assume already aligned sweeps\n"
     "                             marker: try to detect marker/gap in both sweeps\n"
@@ -2118,10 +2132,10 @@ static void print_usage (const char *prog, bool full = false) {
 #ifdef USE_JACK
     "\n"
     "  # Play a sweep through an instance of Carla and record it at the same\n"
-    "  # time, then extract IR directly to \"ir.wav\":\n"
-    "  " << prog << " -d Carla:audio-in1 -w Carla:audio-out1 -o ir.wav\n"
+    "  # time, then extract IR directly to \"carla_ir.wav\":\n"
+    "  " << prog << " -d Carla:audio-in1 -w Carla:audio-out1 -o carla_ir.wav\n"
 #endif
-    "\n"
+    //"\n"
     ;
 }
 
@@ -2371,7 +2385,7 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
   switch (bf) {
     case 0:
       // deconvolve mode but no paths at all -> show full usage
-      print_usage(argv[0], true);
+      print_usage(argv[0], false);
       exit(1);
       break;
 
