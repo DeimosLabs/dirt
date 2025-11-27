@@ -1140,14 +1140,14 @@ bool c_deconvolver::output_ir (const char *out_filename, long ir_length_samples)
   /*if (!irL.empty() || !irR.empty()) {
     align_stereo_joint_no_chop (irL, irR, 0); // move reference peak to index 0
   }*/
-  // --- normalize and trim (stereo-aware) ---
-  normalize_and_trim_stereo (irL, irR, prefs_->zeropeak);
-  //normalize_and_trim_stereo (irL, irR,
-  //                           +1.0f,                 // thr_start_db > 0 → skip
-  //                           +1.0f,
-  //                           //prefs_->ir_silence_db, // keep tail trim
-  //                           0.05f);
-  
+  //normalize_and_trim_stereo (irL, irR, prefs_->zeropeak);
+  normalize_and_trim_stereo (irL,
+                             irR,
+                             prefs_->zeropeak,
+                             prefs_->ir_start_silence_db, // start trim
+                             prefs_->ir_silence_db,       // tail trim (from -T)
+                             0.05f);                      // 5% fade
+                           
   // Decide mono vs stereo based on whether right has any energy left
   bool have_right_energy = false;
   const float thr = db_to_linear (-90);
@@ -2001,11 +2001,13 @@ static void print_usage (const char *prog, bool full = false) {
   
   std::cerr <<
     "Usage:\n"
-    "  " << prog << " [options] dry.wav wet.wav out.wav\n"
-    "  " << prog << " [options] -d dry.wav -w wet.wav -o out.wav\n"
+    "  " << prog << " [options] dry_sweep.wav wet_sweep.wav out_ir.wav\n"
+    "  " << prog << " [options] -d dry_sweep.wav -w wet_sweep.wav -o out_ir.wav\n"
+    "  " << prog << " [options] --makesweep dry_sweep.wav\n"
     "\n"
     "Deconvolver/general options:\n"
-    "  -h, --help               Show this help/usage text and version\n"
+    "  -h, --help               Show " << (full ? "this" : "full")
+                             << " help/usage text and version\n"
     "  -V, --version            Same as --help\n"
     "  -d, --dry FILE           Dry sweep WAV file\n"
     "  -w, --wet FILE           Recorded (wet) sweep WAV file\n"
@@ -2015,9 +2017,11 @@ static void print_usage (const char *prog, bool full = false) {
     "  -v, --verbose            More verbose output\n"
     "  -D, --dump PREFIX        Dump wav files of sweeps used by deconvolver\n"
     "  -t, --thresh dB          Threshold in dB for sweep silence detection\n"
-    "  -T, --ir-thresh dB       Threshold in dB for IR silence detection\n"
     "                           (negative, default "
                              << DEFAULT_SWEEP_SILENCE_THRESH_DB << " dB)\n"
+    "  -T, --ir-thresh dB       Threshold in dB for IR silence detection\n"
+    "                           (negative, default "
+                             << DEFAULT_IR_SILENCE_THRESH_DB << " dB)\n"
     "  -z, --zero-peak          Try to align peak to zero"
                              << (DEFAULT_ZEROPEAK ? " (default)\n" : "\n") <<
     "  -Z, --no-zero-peak       Don't try to align peak to zero"
@@ -2031,8 +2035,8 @@ static void print_usage (const char *prog, bool full = false) {
     "  -R, --sweep-sr SR        Sweep samplerate (default 48000)\n"
     "  -L, --sweep-seconds SEC  Sweep length in seconds (default 30)\n"
     "  -a, --sweep-amplitude dB Sweep amplitude (default -1dB)\n" // DONE
-    "  -X, --sweep-f1 F         Sweep start frequency (default 20)\n"
-    "  -Y, --sweep-f2 F         Sweep end frequency (default 20000)\n"
+    "  -X, --sweep-f1 F         Sweep start frequency (default " << DEFAULT_F1 << ")\n"
+    "  -Y, --sweep-f2 F         Sweep end frequency (default " << DEFAULT_F2 << ")\n"
     "  -O, --offset N           Offset (delay) wet sweep by N samples (default 10)\n"
     "  -p, --preroll SEC        Prepend leading silence of SEC seconds\n"
     "  -m, --marker SEC         Prepend alignment marker of SEC seconds\n"

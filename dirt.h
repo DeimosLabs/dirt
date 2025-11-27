@@ -62,7 +62,7 @@
 #define DEFAULT_F1                      20
 #define DEFAULT_F2                      22000
 #define DEFAULT_JACK_NAME               "%s_ir_sweep" // %s becomes argv [0]
-#define DEFAULT_IR_SILENCE_THRESH_DB    -60.0
+#define DEFAULT_IR_SILENCE_THRESH_DB    -72.0
 #define DEFAULT_SWEEP_SILENCE_THRESH_DB -60.0
 #define DEFAULT_SWEEP_SEC               30
 #define DEFAULT_SWEEP_AMPLITUDE_DB      -1
