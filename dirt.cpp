@@ -2110,7 +2110,7 @@ static void print_usage (const char *prog, bool full = false) {
     "  -O, --offset N           Offset (delay) wet sweep by N samples [10]\n"
     "  -p, --preroll SEC        Prepend leading silence of SEC seconds\n"
     "  -m, --marker SEC         Prepend alignment marker of SEC seconds\n"
-    "  -g, --marker SEC         Prepend gap of SEC seconds after marker\n"
+    "  -g, --gap SEC            Add gap of SEC seconds after marker\n"
     "  -W, --wait               Wait for input before playing sweep\n"
 #ifdef USE_JACK
     //"  -j, --jack-port PORT     Connect to this JACK port\n"
@@ -2285,7 +2285,17 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
         }
         opt.preroll_seconds = std::atof (argv [i]);
         if (opt.preroll_seconds < 0.0) {
-            std::cerr << "Marker length cannot be negative.\n";
+            std::cerr << "Preroll length cannot be negative.\n";
+            return ret_err;
+        }
+    } else if (arg == "-g" || arg == "--gap") {
+        if (++i >= argc) {
+            std::cerr << "Missing value for " << arg << "\n";
+            return ret_err;
+        }
+        opt.marker_gap_seconds = std::atof (argv [i]);
+        if (opt.preroll_seconds < 0.0) {
+            std::cerr << "Post-marker gap length cannot be negative.\n";
             return ret_err;
         }
     } 
