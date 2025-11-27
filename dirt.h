@@ -36,6 +36,7 @@
 #include <iostream>
 #include <vector>
 #include <string>
+#include <cstring>
 #include <cmath>
 #include <algorithm>
 #include <cstdlib>
@@ -54,21 +55,25 @@
 #endif
 
 #define MARKER_FREQ                     1000 // in Hz
+#define LOWPASS_F                       24000 // gets clamped to nyquist freq
+//#define HIGHPASS_F                      40
 #define DEFAULT_SAMPLE_RATE             48000
 #define DEFAULT_F1                      20
 #define DEFAULT_F2                      22000
 #define DEFAULT_JACK_NAME               "%s_ir_sweep" // %s becomes argv [0]
-#define DEFAULT_SILENCE_THRESH_DB       -60.0
-#define DEFAULT_SWEEP_SILENCE_THRESH_DB -24.0
+#define DEFAULT_IR_SILENCE_THRESH_DB    -60.0
+#define DEFAULT_SWEEP_SILENCE_THRESH_DB -60.0
 #define DEFAULT_SWEEP_SEC               30
 #define DEFAULT_SWEEP_AMPLITUDE_DB      -1
-#define DEFAULT_MARKER_SEC              0.1
-#define DEFAULT_PREROLL_SEC             1.0
-#define DEFAULT_MARKGAP_SEC             1.0
+#define DEFAULT_SWEEP_OFFSET_SMP        32
 #define DEFAULT_NORMALIZE_AMP           0.9
-/*#define DEFAULT_MARKER_SEC              0.0
-#define DEFAULT_PREROLL_SEC             0.0
-#define DEFAULT_MARKGAP_SEC             0.0*/
+/*#define DEFAULT_MARKER_SEC              1.0
+#define DEFAULT_PREROLL_SEC             1.0
+#define DEFAULT_MARKGAP_SEC             1.0*/
+#define DEFAULT_MARKER_SEC              0
+#define DEFAULT_PREROLL_SEC             0
+#define DEFAULT_MARKGAP_SEC             0
+#define DEFAULT_ZEROPEAK                true // try to zero-align peak?
 
 //#define THRESH_RELATIVE // relative to peak, comment out for absolute
 //#define DISABLE_LEADING_SILENCE_DETECTION // for debugging
@@ -93,6 +98,13 @@ enum sig_channels {
   chn_stereo
 };
 
+enum align_method {
+  align_marker,
+  align_marker_dry,
+  align_silence,
+  align_none,
+};
+
 struct s_prefs {
   deconv_mode mode = deconv_mode::mode_deconvolve;
 
@@ -111,6 +123,7 @@ struct s_prefs {
 #else
   bool thresh_relative = false;
 #endif
+  bool zeropeak = DEFAULT_ZEROPEAK;
   sig_source dry_source             = sig_source::src_file;
   sig_source wet_source             = sig_source::src_file;
   bool jack_autoconnect_dry         = false;
@@ -126,20 +139,24 @@ struct s_prefs {
   bool dump_debug                   = false;
   std::string dump_prefix           = "dirt-debug";
   bool sweepwait                    = false;
+  align_method align                = align_none;
 
   double sweep_seconds      = DEFAULT_SWEEP_SEC;   // default value not really used
   double preroll_seconds    = DEFAULT_PREROLL_SEC;
   double marker_seconds     = DEFAULT_MARKER_SEC;  // alignment marker
   double marker_gap_seconds = DEFAULT_MARKGAP_SEC;
   //double regularization_db  = -120.0; // "noise floor" - see calc_ir_raw ()
+  size_t sweep_offset_smp   = DEFAULT_SWEEP_OFFSET_SMP;
   int    sweep_sr           = DEFAULT_SAMPLE_RATE;
   float  sweep_f1           = DEFAULT_F1;
   float  sweep_f2           = DEFAULT_F2; // DONE: cap to just below nyquist freq
   float  sweep_amp_db       = DEFAULT_SWEEP_AMPLITUDE_DB;
+  float  sweep_silence_db   = DEFAULT_SWEEP_SILENCE_THRESH_DB;
+  float  ir_silence_db      = DEFAULT_IR_SILENCE_THRESH_DB;
+  float  ir_start_silence_db   = DEFAULT_IR_SILENCE_THRESH_DB;
   float  headroom_seconds   = 0.0f;
-  float  normalize_amp      = DEFAULT_NORMALIZE_AMP; // TODO: command opt line for this
- 
-  float silence_thresh  = 0.0f;
+  float  normalize_amp      = DEFAULT_NORMALIZE_AMP; // TODO: command opt line for this 
+  
   std::string jack_name = DEFAULT_JACK_NAME;
   std::string jack_portname;
   
@@ -198,8 +215,9 @@ public:
                    
   void normalize_and_trim_stereo (std::vector<float> &L,
                                   std::vector<float> &R,
-                                  float thr_start = 0.0,
-                                  float thr_end = 0.0,
+                                  bool zeropeak = false,
+                                  float thr_start = DEFAULT_IR_SILENCE_THRESH_DB,
+                                  float thr_end = DEFAULT_IR_SILENCE_THRESH_DB,
                                   float fade_end = 0.05); // last 5% of IR pre-trim
 
   bool set_dry_from_buffer (const std::vector<float>& buf, int sr);
