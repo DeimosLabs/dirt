@@ -542,76 +542,111 @@ static size_t detect_sweep_start_with_marker (const std::vector<float> &buf,
   return sweep_start;
 }
 
-size_t detect_dry_sweep_start (const std::vector<float> &dry,
-                               int samplerate,
-                               s_prefs &prefs,
-                               bool ignore_marker = false) {
-  debug ("start");
+static size_t detect_sweep_start (const std::vector<float> &buf,
+                                  int samplerate,
+                                  s_prefs &prefs,
+                                  bool ignore_marker = false) {
+    debug("start");
   
-  size_t marker_len = 0;
-  size_t gap_len    = 0;
-  size_t start;
+    size_t marker_len = 0;
+    size_t gap_len    = 0;
+    size_t start      = 0;
   
-  align_method align = (ignore_marker && prefs.align == align_marker_dry) ?
-                       align_marker : prefs.align;
+    align_method align =
+        (ignore_marker && prefs.align == align_marker_dry)
+            ? align_marker   // for wet: treat it like plain marker align
+            : prefs.align;
   
-  switch (align) {
-    case align_marker:
-      start = detect_sweep_start_with_marker (
-                                  dry,
-                                  samplerate,
-                                  prefs.sweep_silence_db,
-                                  prefs.sweep_amp_db,
-                                  MARKER_FREQ,
-                                  0,
-                                  0,
-                                  prefs.verbose,
-                                  &marker_len,
-                                  &gap_len);
+    switch (align) {
+      case align_marker:
+        start = detect_sweep_start_with_marker (
+                    buf,
+                    samplerate,
+                    prefs.sweep_silence_db,
+                    prefs.sweep_amp_db,
+                    MARKER_FREQ,
+                    0,                 // no assumed durations
+                    0,
+                    prefs.verbose,
+                    &marker_len,
+                    &gap_len);
+        break;
 
-    break;
-    
-    case align_marker_dry:
-      start = detect_sweep_start_with_marker (
-                                  dry,
-                                  samplerate,
-                                  prefs.sweep_silence_db,
-                                  prefs.sweep_amp_db,
-                                  MARKER_FREQ,
-                                  prefs.marker_seconds,
-                                  prefs.marker_gap_seconds,
-                                  prefs.verbose,
-                                  &marker_len,
-                                  &gap_len);
+      case align_marker_dry:
+        // only called for DRY, because for wet we’ll handle this separately
+        start = detect_sweep_start_with_marker (
+                    buf,
+                    samplerate,
+                    prefs.sweep_silence_db,
+                    prefs.sweep_amp_db,
+                    MARKER_FREQ,
+                    prefs.marker_seconds,
+                    prefs.marker_gap_seconds,
+                    prefs.verbose,
+                    &marker_len,
+                    &gap_len);
 
-      prefs.cache_dry_marker_len = marker_len;
-      prefs.cache_dry_gap_len    = gap_len;
-    break;
-    
-    case align_silence:
-      start = find_first_nonsilent (dry, prefs.sweep_silence_db);
-    break;
-    
-    case align_none:
-      start = 0;
-    break;
-  }
+        prefs.cache_dry_marker_len = marker_len;
+        prefs.cache_dry_gap_len    = gap_len;
+        break;
+  
+      case align_silence:
+        start = find_first_nonsilent (buf, prefs.sweep_silence_db);
+        break;
+  
+      case align_none:
+        start = 0;
+        break;
+    }
 
-  if (prefs.verbose) {
-      std::cerr << "dry: start=" << start
+    if (prefs.verbose) {
+      std::cerr << "start="      << start
                 << " marker_len=" << marker_len
                 << " gap_len="    << gap_len << "\n";
-  }
+    }
   
-  debug ("end");
-  return start;
+    debug("end");
+    return start;
 }
 
-// use preroll/marker/gap positions found in dry, then find next nonsilent
-size_t detect_wet_sweep_start (const std::vector<float> &wet,
-                               int samplerate,
-                               s_prefs &prefs) {
-  return detect_dry_sweep_start (wet, samplerate, prefs, true);
+// DRY: use full logic (marker, silence, caching…)
+static size_t detect_dry_sweep_start (const std::vector<float> &dry,
+                                      int samplerate,
+                                      s_prefs &prefs) {
+    return detect_sweep_start (dry, samplerate, prefs, /*ignore_marker=*/false);
+}
+
+// WET: if align_marker_dry, reuse cached dry preroll;
+// otherwise just use normal logic on wet
+static size_t detect_wet_sweep_start (const std::vector<float> &wet,
+                                      int samplerate,
+                                      s_prefs &prefs) {
+    debug("detect_wet_sweep_start: start");
+
+    size_t start = 0;
+
+    if (prefs.align == align_marker_dry) {
+        // 1) where does wet actually start?
+        size_t wet_first = find_first_nonsilent (wet, prefs.sweep_silence_db);
+
+        // 2) skip the same marker+gap duration we found in dry
+        start = wet_first
+              + prefs.cache_dry_marker_len
+              + prefs.cache_dry_gap_len;
+
+        if (prefs.verbose) {
+            std::cerr << "wet: first_nonsilent=" << wet_first
+                      << " using cached marker_len=" << prefs.cache_dry_marker_len
+                      << " gap_len=" << prefs.cache_dry_gap_len
+                      << " -> start=" << start << "\n";
+        }
+    } else {
+        // plain marker / silence / none logic on wet buffer
+        start = detect_sweep_start (wet, samplerate, prefs, /*ignore_marker=*/false);
+    }
+
+    debug("detect_wet_sweep_start: end");
+    return start;
 }
 
 bool read_wav (const char *filename,
@@ -786,7 +821,7 @@ static void generate_log_sweep (double seconds,
 
   out.resize (NPRE + NM + NGAP + N);
 
-  std::cerr << "Generating sweep, " << samplerate << " Hz sample rate:\n"
+  std::cerr << "Generating sweep, "   << samplerate << " Hz sample rate:\n"
             << "  Length:           " << seconds << ((seconds == 1) ?
                                          " second\n" : " seconds\n")
             << "  Frequency range:  " << f1 << "Hz to " << f2 << " Hz\n"
@@ -2018,14 +2053,16 @@ static void print_usage (const char *prog, bool full = false) {
     "  -w, --wet FILE           Recorded (wet) sweep WAV file\n"
     "  -o, --out FILE           Output IR WAV file\n"
     "  -n, --len N              IR length in samples (default 0 = auto)\n"
+    "  -A, --align METHOD       Choose alignment method:\n"
+    "                             silence, marker, dry, none (default none)\n"
     "  -q, --quiet              Less verbose output\n"
     "  -v, --verbose            More verbose output\n"
     "  -D, --dump PREFIX        Dump wav files of sweeps used by deconvolver\n"
     "  -t, --thresh dB          Threshold in dB for sweep silence detection\n"
-    "                           (negative, default "
+    "                             (negative, default "
                              << DEFAULT_SWEEP_SILENCE_THRESH_DB << " dB)\n"
     "  -T, --ir-thresh dB       Threshold in dB for IR silence detection\n"
-    "                           (negative, default "
+    "                             (negative, default "
                              << DEFAULT_IR_SILENCE_THRESH_DB << " dB)\n"
     "  -z, --zero-peak          Try to align peak to zero"
                              << (DEFAULT_ZEROPEAK ? " (default)\n" : "\n") <<
@@ -2103,6 +2140,26 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
       opt.ir_length_samples = std::strtol (argv [i], nullptr, 10);
       if (opt.ir_length_samples < 0) {
         std::cerr << "Invalid IR length: " << argv [i] << "\n";
+        return ret_err;
+      }
+    } else if (arg == "-A" || arg == "--align") {
+      if (++i >= argc) { std::cerr << "Missing value for " << arg << "\n"; return ret_err; }
+      std::string method = argv [i];
+      struct { align_method num; std::string name; } methods [] = {
+        { align_marker,       "marker" },
+        { align_marker_dry,   "dry" },
+        { align_silence,      "silence" },
+        { align_none,         "none" }
+      };
+      bool valid = false;
+      for (int j = 0; j < align_method_max; j++)
+        if (argv [i] == methods [j].name) {
+          valid = true;
+          opt.align = methods [j].num;
+          break;
+        }
+      if (!valid) {
+        std::cerr << "Invalid alignment method \"" << argv [i] << "\"\n";
         return ret_err;
       }
     } else if (arg == "-t" || arg == "--thresh") {

@@ -104,6 +104,7 @@ enum align_method {
   align_marker_dry,
   align_silence,
   align_none,
+  align_method_max
 };
 
 struct s_prefs {
