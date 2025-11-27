@@ -68,12 +68,9 @@
 #define DEFAULT_SWEEP_AMPLITUDE_DB      -1
 #define DEFAULT_SWEEP_OFFSET_SMP        64
 #define DEFAULT_NORMALIZE_AMP           0.9
-/*#define DEFAULT_MARKER_SEC              1.0
 #define DEFAULT_PREROLL_SEC             1.0
-#define DEFAULT_MARKGAP_SEC             1.0*/
-#define DEFAULT_MARKER_SEC              0
-#define DEFAULT_PREROLL_SEC             0
-#define DEFAULT_MARKGAP_SEC             0
+#define DEFAULT_MARKER_SEC              1.0
+#define DEFAULT_MARKGAP_SEC             1.0
 #define DEFAULT_ZEROPEAK                true // try to zero-align peak?
 
 //#define THRESH_RELATIVE // relative to peak, comment out for absolute
@@ -161,7 +158,7 @@ struct s_prefs {
   float  normalize_amp      = DEFAULT_NORMALIZE_AMP; // TODO: command opt line for this 
   
   std::string jack_name = DEFAULT_JACK_NAME;
-  std::string jack_portname;
+  //std::string jack_portname;
   
   size_t cache_dry_marker_len = 0;
   size_t cache_dry_gap_len    = 0;

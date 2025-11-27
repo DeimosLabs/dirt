@@ -2036,59 +2036,76 @@ bool c_deconvolver::jack_play (std::vector<float> &sig) {
 #endif
 
 static void print_usage (const char *prog, bool full = false) {
-  if (full)
-    std::cerr << "\nDIRT - Delt's Impulse Response Tool, version " << DIRT_VERSION << "\n\n";
+  std::ostream &out = full ? std::cout : std::cerr;
   
-  std::cerr <<
+  if (full) {
+    out << "\nDIRT - Delt's Impulse Response Tool, version " << DIRT_VERSION << "\n\n";
+  }
+  
+  out <<
     "Usage:\n"
     "  " << prog << " [options] dry_sweep.wav wet_sweep.wav out_ir.wav\n"
     "  " << prog << " [options] -d dry_sweep.wav -w wet_sweep.wav -o out_ir.wav\n"
     "  " << prog << " [options] --makesweep dry_sweep.wav\n"
-    "\n"
-    "Deconvolver/general options:\n"
+    "\n" <<
+    (full ? "Deconvolver" : "Some deconvolver") << "/general options: [default]\n" <<
     "  -h, --help               Show " << (full ? "this" : "full")
                              << " help/usage text and version\n"
     "  -V, --version            Same as --help\n"
     "  -d, --dry FILE           Dry sweep WAV file\n"
     "  -w, --wet FILE           Recorded (wet) sweep WAV file\n"
     "  -o, --out FILE           Output IR WAV file\n"
-    "  -n, --len N              IR length in samples (default 0 = auto)\n"
-    "  -A, --align METHOD       Choose alignment method:\n"
-    "                             silence, marker, dry, none (default none)\n"
+    "  -n, --len N              IR length in samples [0 = auto]\n"
+    "  -A, --align METHOD       Choose alignment method" << (full ? ": [none]\n"
+    "                             none: assume already aligned sweeps\n"
+    "                             marker: try to detect marker/gap in both sweeps\n"
+    "                             dry: detect marker/gap in dry, reuse in wet\n"
+    "                             silence: use first nonsilent sample, see -t\n"
+                                : " (see --help)\n");
+//    "                             silence, marker, dry, none (default none)\n"
+  if (full) out <<
+    "  -t, --thresh dB          Threshold in dB for sweep silence detection\n"
+    "                             (negative) ["
+                             << DEFAULT_SWEEP_SILENCE_THRESH_DB << "]\n"
+    "  -T, --ir-thresh dB       Threshold in dB for IR silence detection\n"
+    "                             (negative) ["
+                             << DEFAULT_IR_SILENCE_THRESH_DB << "]\n"
+    "  -z, --zero-peak          Try to align peak to zero"
+                             << (DEFAULT_ZEROPEAK ? " [default]\n" : "\n") <<
+    "  -Z, --no-zero-peak       Don't try to align peak to zero"
+                             << (!DEFAULT_ZEROPEAK ? " [default]\n" : "\n") <<
+    "\n";
+    out <<
     "  -q, --quiet              Less verbose output\n"
     "  -v, --verbose            More verbose output\n"
+    << (full ? 
     "  -D, --dump PREFIX        Dump wav files of sweeps used by deconvolver\n"
-    "  -t, --thresh dB          Threshold in dB for sweep silence detection\n"
-    "                             (negative, default "
-                             << DEFAULT_SWEEP_SILENCE_THRESH_DB << " dB)\n"
-    "  -T, --ir-thresh dB       Threshold in dB for IR silence detection\n"
-    "                             (negative, default "
-                             << DEFAULT_IR_SILENCE_THRESH_DB << " dB)\n"
-    "  -z, --zero-peak          Try to align peak to zero"
-                             << (DEFAULT_ZEROPEAK ? " (default)\n" : "\n") <<
-    "  -Z, --no-zero-peak       Don't try to align peak to zero"
-                             << (!DEFAULT_ZEROPEAK ? " (default)\n" : "\n") <<
-    "\n"
-    "Sweep generator options:\n"
+    : "") <<
+    "\n" <<
+    (full ? "Sweep generator" : "Some sweep generator") << " options: [default]\n" <<
     "  -s, --makesweep          Generate sweep WAV instead of deconvolving\n"
 #ifdef USE_JACK
     "  -S, --playsweep          Play sweep via JACK instead of deconvolving\n"
 #endif
-    "  -R, --sweep-sr SR        Sweep samplerate (default 48000)\n"
-    "  -L, --sweep-seconds SEC  Sweep length in seconds (default 30)\n"
-    "  -a, --sweep-amplitude dB Sweep amplitude (default -1dB)\n" // DONE
-    "  -X, --sweep-f1 F         Sweep start frequency (default " << DEFAULT_F1 << ")\n"
-    "  -Y, --sweep-f2 F         Sweep end frequency (default " << DEFAULT_F2 << ")\n"
-    "  -O, --offset N           Offset (delay) wet sweep by N samples (default 10)\n"
+    "  -R, --sweep-sr SR        Sweep samplerate [48000]\n"
+    "  -L, --sweep-seconds SEC  Sweep length in seconds [30]\n"
+    "  -a, --sweep-amplitude dB Sweep amplitude in dB [-1]\n" // DONE
+    "  -X, --sweep-f1 F         Sweep start frequency [" << DEFAULT_F1 << "]\n"
+    "  -Y, --sweep-f2 F         Sweep end frequency [" << DEFAULT_F2 << "]\n";
+  if (full) out <<
+    "  -O, --offset N           Offset (delay) wet sweep by N samples [10]\n"
     "  -p, --preroll SEC        Prepend leading silence of SEC seconds\n"
     "  -m, --marker SEC         Prepend alignment marker of SEC seconds\n"
+    "  -g, --marker SEC         Prepend gap of SEC seconds after marker\n"
     "  -W, --wait               Wait for input before playing sweep\n"
 #ifdef USE_JACK
-    "  -j, --jack-port PORT     Connect to this JACK port\n"
-    "  -J, --jack-name          Connect to JACK with this client name\n"
+    //"  -j, --jack-port PORT     Connect to this JACK port\n"
+    "  -J, --jack-name          JACK client name for playback/recording sweeps\n"
 #endif
-    "\n";
-  if (full) std::cerr <<
+    "\n"; else out <<
+    "\nFor more info, try: " << prog << " --help\n"
+    ;
+  if (full) out <<
     "Example usage:\n"
     "\n"
     "  # Generate a 30-second dry sweep with 1 second of silence at start\n"
@@ -2189,8 +2206,9 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
     } else if (arg == "-v" || arg == "--verbose") {
       opt.verbose = true;
     } else if (arg == "-D" || arg == "--dump") {
+      if (++i >= argc) { std::cerr << "Missing value for " << arg << "\n"; return ret_err; }
       opt.dump_debug = true;
-      opt.dump_prefix = "dirt-dump";
+      opt.dump_prefix = argv[i];
     } else if (arg == "-W" || arg == "--wait") {
       opt.sweepwait = true;
     } else if (arg == "-s" || arg == "--makesweep") {
@@ -2261,10 +2279,10 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
     else if (arg == "-J" || arg == "--jack-name") {
       if (++i >= argc) { std::cerr << "Missing value for " << arg << "\n"; return ret_err; }
       opt.jack_name = argv[i];
-    } else if (arg == "-j" || arg == "--jack-port") {
+    } /*else if (arg == "-j" || arg == "--jack-port") {
       if (++i >= argc) { std::cerr << "Missing value for " << arg << "\n"; return ret_err; }
       opt.jack_portname = argv[i];
-    }
+    }*/
 #endif
     else if (!arg.empty() && arg[0] == '-' && !doubledash) {
       std::cerr << "Unknown option \"" << argv[i] << "\"\n";
