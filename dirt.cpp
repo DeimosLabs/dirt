@@ -128,7 +128,7 @@ static size_t find_first_nonsilent (const std::vector<float> &buf,
   for (size_t i = 0; i < buf.size (); i++) {
     if (std::fabs (buf [i]) > silence_thresh) return i;
   }
-  return buf.size();
+  return buf.size ();
 }
 
 static size_t find_last_nonsilent (const std::vector<float> &buf,
@@ -264,7 +264,7 @@ void highpass_ir (std::vector<float> &irf, double samplerate, double cutoff)
         freq [i] [1] = 0.0;
     }
 #else
-    // hann-ish fade band around the cutoff
+    // hann-ish fade band around the cutoff, TODO: fix this
 
     // fade_width is in *bins*, computed from ~15% of cutoff in Hz
     int fade_width = int ( (0.15 * cutoff) / bin_hz );   // ~15% of cutoff
@@ -282,8 +282,8 @@ void highpass_ir (std::vector<float> &irf, double samplerate, double cutoff)
             // keep as-is
             continue;
         } else if (i < bin_cutoff) {
-            // smooth fade from 1 → 0 over [bin_fade, bin_cutoff]
-            double t = double (i - bin_fade) / double(bin_cutoff - bin_fade);
+            // smooth fade from 1 -> 0 over [bin_fade, bin_cutoff]
+            double t = double (i - bin_fade) / double (bin_cutoff - bin_fade);
             double w = 0.5 * (1.0 + std::cos (M_PI * t));  // t=0 => 1, t=1 => 0
             freq [i] [0] *= w;
             freq [i] [1] *= w;
@@ -1402,8 +1402,14 @@ bool c_deconvolver::calc_ir_raw (const std::vector<float> &wet,
   if (usable_dry < irLen) irLen = usable_dry;
   if (usable_wet < irLen) irLen = usable_wet;
 
+  // Hard cap based on MAX_IR_LEN (seconds), unless user asked for shorter
+  size_t max_ir_samples = (size_t) std::llround (MAX_IR_LEN * prefs_->sweep_sr);
+  if (max_ir_samples > 0 && irLen > max_ir_samples) {
+      irLen = max_ir_samples;
+  }
+
   if (ir_length_samples > 0 && (size_t) ir_length_samples < irLen) {
-    irLen = (size_t) ir_length_samples;
+      irLen = (size_t) ir_length_samples;   // user length wins if smaller
   }
 
   if (irLen == 0) {
@@ -1447,6 +1453,7 @@ bool c_deconvolver::calc_ir_raw (const std::vector<float> &wet,
   return true;
 }
 
+// returns index of |largest| sample
 bool c_deconvolver::set_samplerate_if_needed (int sr) {
   if (samplerate_ == 0) {
     samplerate_ = sr;
@@ -1475,6 +1482,8 @@ void c_deconvolver::normalize_and_trim_stereo (std::vector<float> &L,
                                                float thr_start_db, // > 0 -> don't trim start
                                                float thr_end_db,   // > 0 -> don't trim end
                                                float fade_end_percent) {
+  debug ("start, zeropeak=%s, thr_start=%f, thr_end=%f, fade_end_percent=%f",
+        zeropeak ? "true" : "false", thr_start_db, thr_end_db, fade_end_percent);
   const size_t tail_pad       = 32;
   //const float  silence_thresh = 1e-5f;  // relative to peak (~ -100 dB)
   const bool hasR = !R.empty ();
@@ -1497,6 +1506,7 @@ void c_deconvolver::normalize_and_trim_stereo (std::vector<float> &L,
     // all silence (or numerical dust) -> nothing to normalize
     L.assign (1, 0.0f);
     if (hasR) R.assign (1, 0.0f);
+    debug ("return (all silence)");
     return;
   }
   
@@ -1542,47 +1552,82 @@ void c_deconvolver::normalize_and_trim_stereo (std::vector<float> &L,
     }
     first_nonsilent = std::max (first_nonsilent, prefs_->sweep_offset_smp);
   } else {
-    // New behavior: use peak, but only trim "silent" stuff before it.
-    size_t peakL = find_peak(L);
-    size_t peakR = hasR ? find_peak(R) : peakL;
-    size_t peak_idx = std::min(peakL, peakR);
+    // New behavior: place the peak at sweep_offset_smp
+    // by trimming to the first "non-silent" sample at or
+    // after (peak_idx - sweep_offset_smp).
 
-    float rel_lin = db_to_linear(thr_start_db); // thr_start_db is negative
-    float thresh  = peak * rel_lin;             // absolute amplitude threshold
+    // global peak index (after normalization)
+    size_t peakL   = find_peak (L);
+    size_t peakR   = hasR ? find_peak (R) : peakL;
+    size_t peak_idx = std::min (peakL, peakR);
 
-    // We never want to trim *past* the peak, so only look before it.
-    size_t max_shift = peak_idx;
-    size_t cut = 0;
+    // absolute threshold relative to (already normalized) peak
+    float rel_lin = db_to_linear (thr_start_db);  // thr_start_db < 0
+    float thresh  = peak * rel_lin;
 
-    // Optionally keep at least sweep_offset_smp samples before the peak
-    if (prefs_ && prefs_->sweep_offset_smp > 0 && max_shift > prefs_->sweep_offset_smp) {
-        max_shift -= prefs_->sweep_offset_smp;
+    // where we *want* the peak to end up, after shifting
+    size_t desired_peak_pos =
+        (prefs_ && prefs_->sweep_offset_smp > 0)
+        ? (size_t) prefs_->sweep_offset_smp
+        : 0;
+
+    // start scanning for "first non-silent" sample
+    // at or after (peak_idx - desired_peak_pos)
+    size_t len = L.size ();
+    if (hasR) len = std::min (L.size (), R.size ());
+
+    size_t search_begin = 0;
+    if (peak_idx > desired_peak_pos)
+      search_begin = peak_idx - desired_peak_pos;
+    if (search_begin > len) search_begin = len;
+
+    size_t cut   = 0;
+    bool   found = false;
+
+    // 1) preferred path: find first sample >= thresh
+    //    in [search_begin .. peak_idx]
+    for (size_t i = search_begin; i <= peak_idx && i < len; ++i) {
+      float aL = (i < L.size ())               ? std::fabs (L[i]) : 0.0f;
+      float aR = (hasR && i < R.size ()) ? std::fabs (R[i]) : 0.0f;
+      float a  = std::max (aL, aR);
+
+      if (a >= thresh) {
+        cut   = i;     // we'll drop [0 .. i-1]
+        found = true;
+        break;
+      }
     }
 
-    for (size_t i = 0; i < max_shift; ++i) {
-        float aL = (i < L.size()) ? std::fabs(L[i]) : 0.0f;
-        float aR = (hasR && i < R.size()) ? std::fabs(R[i]) : 0.0f;
-        float a  = std::max(aL, aR);
+    // 2) fallback: if *everything* before peak_idx is below threshold
+    //    in that window (or we somehow didn't find anything), behave
+    //    like the old "trim leading silence up to the last below-thresh".
+    if (!found) {
+      size_t last_below = 0;
+      for (size_t i = 0; i < peak_idx && i < len; ++i) {
+        float aL = (i < L.size ())               ? std::fabs (L[i]) : 0.0f;
+        float aR = (hasR && i < R.size ()) ? std::fabs (R[i]) : 0.0f;
+        float a  = std::max (aL, aR);
 
         if (a < thresh) {
-            cut = i + 1;   // safe to drop up to here
+          last_below = i + 1;
         } else {
-            break;         // hit real content
+          break;
         }
+      }
+      cut = last_below;
     }
 
     first_nonsilent = cut;
 
-    debug("zero peak: peak_idx=%zu, cut=%zu, sweep_offset=%zu, thr_start_db=%f",
-          peak_idx, cut,
-          prefs_ ? (size_t)prefs_->sweep_offset_smp : 0,
-          thr_start_db);
+    debug ("zero peak: peak_idx=%zu, cut=%zu, desired_peak_pos=%zu, thr_start_db=%f",
+           peak_idx, cut, desired_peak_pos, thr_start_db);
   }
 
   if (first_nonsilent == len) {
     // everything below threshold even after norm -> just keep 1 sample of silence
     L.assign(1, 0.0f);
     if (hasR) R.assign(1, 0.0f);
+    debug ("return (all silence after norm");
     return;
   }
   
@@ -1959,7 +2004,7 @@ static void print_usage (const char *prog, bool full = false) {
     "  " << prog << " [options] dry.wav wet.wav out.wav\n"
     "  " << prog << " [options] -d dry.wav -w wet.wav -o out.wav\n"
     "\n"
-    "Deconvolver options:\n"
+    "Deconvolver/general options:\n"
     "  -h, --help               Show this help/usage text and version\n"
     "  -V, --version            Same as --help\n"
     "  -d, --dry FILE           Dry sweep WAV file\n"
@@ -1973,6 +2018,11 @@ static void print_usage (const char *prog, bool full = false) {
     "  -T, --ir-thresh dB       Threshold in dB for IR silence detection\n"
     "                           (negative, default "
                              << DEFAULT_SWEEP_SILENCE_THRESH_DB << " dB)\n"
+    "  -z, --zero-peak          Try to align peak to zero"
+                             << (DEFAULT_ZEROPEAK ? " (default)\n" : "\n") <<
+    "  -Z, --no-zero-peak       Don't try to align peak to zero"
+                             << (!DEFAULT_ZEROPEAK ? " (default)\n" : "\n") <<
+    "\n"
     "Sweep generator options:\n"
     "  -s, --makesweep          Generate sweep WAV instead of deconvolving\n"
 #ifdef USE_JACK
@@ -1984,8 +2034,6 @@ static void print_usage (const char *prog, bool full = false) {
     "  -X, --sweep-f1 F         Sweep start frequency (default 20)\n"
     "  -Y, --sweep-f2 F         Sweep end frequency (default 20000)\n"
     "  -O, --offset N           Offset (delay) wet sweep by N samples (default 10)\n"
-    "  -Z, --zero-peak          Try to align peak to zero (default "
-                             << std::boolalpha << DEFAULT_ZEROPEAK << ")\n";
     "  -p, --preroll SEC        Prepend leading silence of SEC seconds\n"
     "  -m, --marker SEC         Prepend alignment marker of SEC seconds\n"
     "  -W, --wait               Wait for input before playing sweep\n"
@@ -2102,8 +2150,10 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
     } else if (arg == "-O" || arg == "--offset") {
       if (++i >= argc) { std::cerr << "Missing value for " << arg << "\n"; return ret_err; }
       opt.sweep_offset_smp = std::atof (argv [i]);
-    } else if (arg == "-Z" || arg == "--zero-peak") {
-      opt.zeropeak = !opt.zeropeak;
+    } else if (arg == "-z" || arg == "--zero-peak") {
+      opt.zeropeak = true;//!opt.zeropeak;
+    } else if (arg == "-Z" || arg == "--no-zero-peak") {
+      opt.zeropeak = false;//!opt.zeropeak;
     } else if (arg == "-a" || arg == "--sweep-amplitude") {
       if (++i >= argc) { std::cerr << "Missing value for " << arg << "\n"; return ret_err; }
       opt.sweep_amp_db = std::atof (argv [i]);

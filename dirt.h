@@ -56,8 +56,8 @@
 
 #define MARKER_FREQ                     1000 // in Hz
 #define MAX_IR_LEN                      10.0
-//#define LOWPASS_F                       24000 // gets clamped to nyquist freq
-//#define HIGHPASS_F                      40
+#define LOWPASS_F                       24000 // gets clamped to nyquist freq
+//#define HIGHPASS_F                      40 TODO: fix highpass
 #define DEFAULT_SAMPLE_RATE             48000
 #define DEFAULT_F1                      20
 #define DEFAULT_F2                      22000
@@ -66,7 +66,7 @@
 #define DEFAULT_SWEEP_SILENCE_THRESH_DB -60.0
 #define DEFAULT_SWEEP_SEC               30
 #define DEFAULT_SWEEP_AMPLITUDE_DB      -1
-#define DEFAULT_SWEEP_OFFSET_SMP        32
+#define DEFAULT_SWEEP_OFFSET_SMP        64
 #define DEFAULT_NORMALIZE_AMP           0.9
 /*#define DEFAULT_MARKER_SEC              1.0
 #define DEFAULT_PREROLL_SEC             1.0
@@ -216,7 +216,7 @@ public:
                    
   void normalize_and_trim_stereo (std::vector<float> &L,
                                   std::vector<float> &R,
-                                  bool zeropeak = false,
+                                  bool zeropeak = DEFAULT_ZEROPEAK,
                                   float thr_start = DEFAULT_IR_SILENCE_THRESH_DB,
                                   float thr_end = DEFAULT_IR_SILENCE_THRESH_DB,
                                   float fade_end = 0.05); // last 5% of IR pre-trim
