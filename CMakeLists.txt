@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 
 project(dirt
-    VERSION 0.1
+    VERSION 0.1.1
     DESCRIPTION "DIRT (Delt's Impulse Response Tool) - a simple but effective deconvolver and IR extractor"
     LANGUAGES CXX)
 
