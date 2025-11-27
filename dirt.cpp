@@ -2529,54 +2529,54 @@ int main (int argc, char **argv) {
 
   // --makesweep: available even if compiled without JACK
   if (p.mode == deconv_mode::mode_makesweep) {
-      generate_log_sweep(p.sweep_seconds,
-                         p.preroll_seconds,
-                         p.marker_seconds,
-                         p.marker_gap_seconds,
-                         p.sweep_sr,
-                         p.sweep_amp_db,
-                         p.sweep_f1,
-                         p.sweep_f2,
-                         sweep);
-      if (!write_mono_wav(p.out_path.c_str(), sweep, p.sweep_sr)) {
-          return 1;
-      }
-      if (!p.quiet) {
-          std::cerr << "Wrote sweep: " << p.out_path
-                    << " (" << sweep.size() << " samples @ "
-                    << p.sweep_sr << " Hz)\n";
-      }
-      debug("return");
-      return 0;
+    generate_log_sweep(p.sweep_seconds,
+                       p.preroll_seconds,
+                       p.marker_seconds,
+                       p.marker_gap_seconds,
+                       p.sweep_sr,
+                       p.sweep_amp_db,
+                       p.sweep_f1,
+                       p.sweep_f2,
+                       sweep);
+    if (!write_mono_wav(p.out_path.c_str(), sweep, p.sweep_sr)) {
+      return 1;
+    }
+    if (!p.quiet) {
+        std::cerr << "Wrote sweep: " << p.out_path
+                  << " (" << sweep.size() << " samples @ "
+                  << p.sweep_sr << " Hz)\n";
+    }
+    debug("return");
+    return 0;
   }
 
 #ifdef USE_JACK
   // playsweep: only when JACK is enabled
   if (p.mode == deconv_mode::mode_playsweep) {
-      generate_log_sweep(p.sweep_seconds,
-                         p.preroll_seconds,
-                         p.marker_seconds,
-                         p.marker_gap_seconds,
-                         p.sweep_sr,
-                         p.sweep_amp_db,
-                         p.sweep_f1,
-                         p.sweep_f2,
-                         sweep);
+    generate_log_sweep(p.sweep_seconds,
+                       p.preroll_seconds,
+                       p.marker_seconds,
+                       p.marker_gap_seconds,
+                       p.sweep_sr,
+                       p.sweep_amp_db,
+                       p.sweep_f1,
+                       p.sweep_f2,
+                       sweep);
 
-      if (p.sweepwait) {
-          std::cout << "Press enter to play sinewave sweep... ";
-          std::string str;
-          std::getline(std::cin, str);
-      }
+    if (p.sweepwait) {
+      std::cout << "Press enter to play sinewave sweep... ";
+      std::string str;
+      std::getline(std::cin, str);
+    }
 
-      dec.jack_shutdown();
-      debug("return");
-      return dec.jack_play(sweep);
+    int retval = dec.jack_play(sweep);
+    dec.jack_shutdown();
+    
+    debug("return");
+    return retval;
   }
-//#endif
 
   // normal deconvolution path (with or without JACK)
-//#ifdef USE_JACK
   // Special "live" JACK→IR mode: dry=JACK, wet=JACK
   if (p.dry_source == src_jack && p.wet_source == src_jack) {
       generate_log_sweep(p.sweep_seconds,
@@ -2593,14 +2593,14 @@ int main (int argc, char **argv) {
       std::vector<float> wet_r;
 
       if (p.sweepwait) {
-          std::cout << "Press enter to play and record sinewave sweep... ";
-          std::string str;
-          std::getline(std::cin, str);
+        std::cout << "Press enter to play and record sinewave sweep... ";
+        std::string str;
+        std::getline(std::cin, str);
       }
 
       if (!dec.jack_playrec(sweep, wet_l, wet_r)) {
-          debug("return");
-          return 1;
+        debug("return");
+        return 1;
       }
 
       if (!dec.set_dry_from_buffer(sweep, p.sweep_sr)) return 1;
@@ -2630,34 +2630,32 @@ int main (int argc, char **argv) {
       if (!dec.set_dry_from_buffer(sweep_local, p.sweep_sr)) return 1;
   } else {
 #ifdef USE_JACK
-      std::cerr << "Error: Dry JACK only supported when wet is JACK.\n";
+    std::cerr << "Error: Dry JACK only supported when wet is JACK.\n";
 #else
-      std::cerr << "Error: Dry JACK not supported (built without JACK).\n";
+    std::cerr << "Error: Dry JACK not supported (built without JACK).\n";
 #endif
-      debug("return");
-      return 1;
+    debug("return");
+    return 1;
   }
 
   if (p.wet_source == src_file) {
       if (!dec.load_sweep_wet(p.wet_path.c_str())) return 1;
   } else {
 #ifdef USE_JACK
-      std::cerr << "Error: Wet JACK only supported when dry is JACK.\n";
+    std::cerr << "Error: Wet JACK only supported when dry is JACK.\n";
 #else
-      std::cerr << "Error: Wet JACK not supported (built without JACK).\n";
+    std::cerr << "Error: Wet JACK not supported (built without JACK).\n";
 #endif
-      debug("return");
-      return 1;
+    debug("return");
+    return 1;
   }
 
   if (!dec.output_ir(p.out_path.c_str(), p.ir_length_samples)) {
-      debug("return");
-      return 1;
+    debug("return");
+    return 1;
   }
 
-  debug("end");
-  return 0;
-  
   debug ("end");
   return 0;
 }
+
