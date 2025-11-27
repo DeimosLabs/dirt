@@ -2141,7 +2141,7 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
       opt.mode = deconv_mode::mode_playsweep;
       //opt.sweep_seconds = std::atof (argv [i]);
 #endif
-    } else if (arg == "-L" || arg == "--sweep-length") {
+    } else if (arg == "-L" || arg == "--sweep-seconds") {
       if (++i >= argc) { std::cerr << "Missing value for " << arg << "\n"; return ret_err; }
       opt.sweep_seconds = std::atoi (argv [i]);
     } else if (arg == "-R" || arg == "--sweep-sr") {
@@ -2195,123 +2195,164 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
 #ifdef USE_JACK
     else if (arg == "-J" || arg == "--jack-name") {
       if (++i >= argc) { std::cerr << "Missing value for " << arg << "\n"; return ret_err; }
-      opt.jack_name = argv [i];
+      opt.jack_name = argv[i];
     } else if (arg == "-j" || arg == "--jack-port") {
       if (++i >= argc) { std::cerr << "Missing value for " << arg << "\n"; return ret_err; }
-      opt.jack_portname = argv [i];
-    } else if (!arg.empty () && arg [0] == '-') {
-      std::cerr << "Unknown option: " << arg << "\n";
-      return ret_err;
-    } 
+      opt.jack_portname = argv[i];
+    }
 #endif
-    else {
-      if (argv [i] && argv [i] [0] == '-' && !doubledash) {
-        std::cerr << "Unknown option \"" << argv [i] << "\"\n";
-      } else {
-        // positional
-        positionals.push_back (argv [i]);
-      }
+    else if (!arg.empty() && arg[0] == '-' && !doubledash) {
+      std::cerr << "Unknown option \"" << argv[i] << "\"\n";
+      return ret_err;
+    } else {
+      // positional
+      positionals.push_back(argv[i]);
     }
   }
   
   // if not provided by flags, use positionals:
   //   dry wet out [len]
-  if (opt.dry_path.empty () && positionals.size () >= 1) {
-    if (opt.mode == mode_makesweep)
-      opt.out_path = positionals [0];
-    else
-      opt.dry_path = positionals [0];
+  // ...except if mode is makesweep and we have only 1 positional param
+  // Map positionals depending on mode
+  //   - makesweep: use first positional as out.wav (if -o not given)
+  //   - others (deconvolve): dry wet out [len]
+  if (opt.mode == deconv_mode::mode_makesweep) {
+      // makesweep: we only need an output path
+      // allow either:
+      //   dirt -s -o sweep.wav
+      //   dirt -s sweep.wav
+      if (opt.out_path.empty() && !positionals.empty()) {
+          opt.out_path = positionals[0];
+      }
+      // don't interpret positionals as dry/wet in makesweep mode
+  } else {
+      // deconvolution / normal modes:
+      //   dry wet out [len]
+      if (opt.dry_path.empty() && positionals.size() >= 1) {
+          opt.dry_path = positionals[0];
+      }
+      if (opt.wet_path.empty() && positionals.size() >= 2) {
+          opt.wet_path = positionals[1];
+      }
+      if (opt.out_path.empty() && positionals.size() >= 3) {
+          opt.out_path = positionals[2];
+      }
+      if (opt.ir_length_samples == 0 && positionals.size() >= 4) {
+          opt.ir_length_samples = std::strtol(positionals[3], nullptr, 10);
+      }
   }
-  if (opt.wet_path.empty () && positionals.size () >= 2) {
-    opt.wet_path = positionals [1];
-  }
-  if (opt.out_path.empty () && positionals.size () >= 3) {
-    opt.out_path = positionals [2];
-  }
-  if (opt.ir_length_samples == 0 && positionals.size () >= 4) {
-    opt.ir_length_samples = std::strtol (positionals [3], nullptr, 10);
-  }
-  
+
   int bf = 0;
-  if (!opt.dry_path.empty ())   bf |= 1;
-  if (!opt.wet_path.empty ())   bf |= 2;
-  if (!opt.out_path.empty ())   bf |= 4;
-  
-  // If user explicitly chose makesweep or playsweep, don't override mode.
-  /*if (opt.mode == deconv_mode::mode_makesweep ||
-      opt.mode == deconv_mode::mode_playsweep) {
-    return bf;
-  }*/
+  if (!opt.dry_path.empty()) bf |= 1;
+  if (!opt.wet_path.empty()) bf |= 2;
+  if (!opt.out_path.empty()) bf |= 4;
+
+  // --- Non-deconvolution modes: handle simply and bail out early ---
+  if (opt.mode == deconv_mode::mode_makesweep) {
+      if (opt.out_path.empty()) {
+          std::cerr << "No output file specified for makesweep mode\n";
+          return ret_err;
+      }
+      // nothing else to validate here
+      debug("end");
+      return bf;
+  }
+
+#ifdef USE_JACK
+  if (opt.mode == deconv_mode::mode_playsweep) {
+      // playsweep: need a dry destination (JACK port or "jack")
+      if (opt.dry_path.empty()) {
+          // default to "jack" and autoconnect to default ports
+          opt.dry_path = "jack";
+          opt.dry_source = src_jack;
+          opt.jack_autoconnect_dry = true;
+          bf |= 1;
+      }
+      debug("end");
+      return bf;
+  }
+#else
+  if (opt.mode == deconv_mode::mode_playsweep) {
+      std::cerr << "Error: playsweep mode requested but DIRT was built without JACK support.\n";
+      return ret_err;
+  }
+#endif
+
+  // --- Deconvolution mode: original bitfield logic ---
+  if (opt.mode != deconv_mode::mode_deconvolve) {
+      // Shouldn't happen, but just in case
+      debug("end");
+      return bf;
+  }
 
   switch (bf) {
     case 0:
-      if (opt.mode == mode_deconvolve) {
-        print_usage (argv [0], true);
-        exit (1);
-      } else {
-        opt.dry_path = "jack"; // default
-        opt.dry_source = src_jack;
-        opt.jack_autoconnect_dry = true;
-      }
-    break;
-    
-    case 1: // only dry path given, accept it if it's a JACK port
-      if (looks_like_jack_port (opt.dry_path)) {
+      // deconvolve mode but no paths at all -> show full usage
+      print_usage(argv[0], true);
+      exit(1);
+      break;
+
+    case 1: // only dry path given
+      if (looks_like_jack_port(opt.dry_path)) {
+#ifdef USE_JACK
         opt.mode = mode_playsweep;
         opt.jack_autoconnect_dry = true;
+#else
+        std::cerr << "Dry JACK port given but JACK support is not compiled in.\n";
+        return ret_err;
+#endif
       } else if (opt.dry_path == "jack") {
-        opt.dry_path = "";
+#ifdef USE_JACK
+        opt.dry_path.clear();
         opt.mode = mode_playsweep;
         opt.jack_autoconnect_to_default = true;
         opt.jack_autoconnect_dry = true;
+#else
+        std::cerr << "\"jack\" specified but JACK support is not compiled in.\n";
+        return ret_err;
+#endif
       } else {
-        if (opt.mode == mode_deconvolve) {
-          std::cerr << "Only dry file specified\n";
-          return ret_err;
-        }
+        std::cerr << "Only dry file specified\n";
+        return ret_err;
       }
-    break;
-    
+      break;
+
     case 2: // wet
       std::cerr << "Only wet file specified\n";
       return ret_err;
-    break;
-    
+      break;
+
     case 3: // wet, dry
-      if (opt.mode == mode_deconvolve) {
-        std::cerr << "No output file specified\n";
-        return ret_err;
-      }
-    break;
-    
+      std::cerr << "No output file specified\n";
+      return ret_err;
+      break;
+
     case 4: // out
-      if (opt.mode == mode_deconvolve) {
-        std::cerr << "Only output file specified, no sweeps to deconvolve\n";
-        return ret_err;
-      }
-    break;
-    
+      std::cerr << "Only output file specified, no sweeps to deconvolve\n";
+      return ret_err;
+      break;
+
     case 5: // dry, out
       std::cerr << "No wet file specified\n\n";
       return ret_err;
-    break;
-    
+      break;
+
     case 6: // wet, out
       opt.mode = deconv_mode::mode_deconvolve;
       opt.dry_source = src_generate;
-    break;
-    
+      break;
+
     case 7: // dry, wet, out
       opt.mode = deconv_mode::mode_deconvolve;
       opt.dry_source = src_file;
-    break;
-    
+      break;
+
     default:
       return ret_err;
-    break;
+      break;
   }
 
-  debug ("end");
+  debug("end");
   return bf;
 }
 
@@ -2485,9 +2526,9 @@ int main (int argc, char **argv) {
   }
   
   std::vector<float> sweep;
-  
-  switch (p.mode) {
-    case deconv_mode::mode_makesweep:
+
+  // --makesweep: available even if compiled without JACK
+  if (p.mode == deconv_mode::mode_makesweep) {
       generate_log_sweep(p.sweep_seconds,
                          p.preroll_seconds,
                          p.marker_seconds,
@@ -2497,117 +2538,125 @@ int main (int argc, char **argv) {
                          p.sweep_f1,
                          p.sweep_f2,
                          sweep);
-      if (!write_mono_wav (p.out_path.c_str (), sweep, p.sweep_sr)) {
-        return 1;
+      if (!write_mono_wav(p.out_path.c_str(), sweep, p.sweep_sr)) {
+          return 1;
       }
       if (!p.quiet) {
-        std::cerr << "Wrote sweep: " << p.out_path
-                  << " (" << sweep.size () << " samples @ "
-                  << p.sweep_sr << " Hz)\n";
+          std::cerr << "Wrote sweep: " << p.out_path
+                    << " (" << sweep.size() << " samples @ "
+                    << p.sweep_sr << " Hz)\n";
       }
-      
-      debug ("return");
+      debug("return");
       return 0;
-    break;
-    
+  }
+
 #ifdef USE_JACK
-    case deconv_mode::mode_playsweep:
-      generate_log_sweep (p.sweep_seconds,
-                          p.preroll_seconds,
-                          p.marker_seconds,
-                          p.marker_gap_seconds,
-                          p.sweep_sr,
-                          p.sweep_amp_db,
-                          p.sweep_f1,
-                          p.sweep_f2,
-                          sweep);
+  // playsweep: only when JACK is enabled
+  if (p.mode == deconv_mode::mode_playsweep) {
+      generate_log_sweep(p.sweep_seconds,
+                         p.preroll_seconds,
+                         p.marker_seconds,
+                         p.marker_gap_seconds,
+                         p.sweep_sr,
+                         p.sweep_amp_db,
+                         p.sweep_f1,
+                         p.sweep_f2,
+                         sweep);
 
       if (p.sweepwait) {
-        std::cout << "Press enter to play sinewave sweep... ";
-        std::string str;
-        std::getline (std::cin, str);
+          std::cout << "Press enter to play sinewave sweep... ";
+          std::string str;
+          std::getline(std::cin, str);
       }
 
-      dec.jack_shutdown ();
-      debug ("return");
-      return dec.jack_play (sweep);
-    break;
-    
-    default:
-      // "live" / full-duplex mode: generate sweep, play it and record the 
-      // result at the same time
-      if (p.dry_source == src_jack && p.wet_source == src_jack) {
-          generate_log_sweep (p.sweep_seconds,
-                              p.preroll_seconds,
-                              p.marker_seconds,
-                              p.marker_gap_seconds,
-                              p.sweep_sr,
-                              p.sweep_amp_db,
-                              p.sweep_f1,
-                              p.sweep_f2,
-                              sweep);
-
-          std::vector<float> wet_l;
-          std::vector<float> wet_r;
-          if (p.sweepwait) {
-            std::cout << "Press enter to play and record sinewave sweep... ";
-            std::string str;
-            std::getline (std::cin, str);
-          }
-          if (!dec.jack_playrec (sweep, wet_l, wet_r)) {
-              debug ("return");
-              return 1;
-          }
-        
-        // detect & compensate for offset in recorded sweep
-        if (!dec.set_dry_from_buffer (sweep, p.sweep_sr)) return 1;
-        // TODO: support generating stereo IR's
-        if (!dec.set_wet_from_buffer (wet_l, std::vector<float> (), p.sweep_sr)) return 1;
-
-        if (!dec.output_ir(p.out_path.c_str (), p.ir_length_samples)) return 1;
-        debug ("return");
-        return 0;
-      }
-      
-      if (p.dry_source == src_file) {
-        if (!dec.load_sweep_dry (p.dry_path.c_str ())) return 1;
-      } else if (p.dry_source == src_generate) {
-          std::vector<float> sweep;
-          generate_log_sweep (p.sweep_seconds,
-                              p.preroll_seconds,
-                              p.marker_seconds,
-                              p.marker_gap_seconds,
-                              p.sweep_sr,
-                              p.sweep_amp_db,
-                              p.sweep_f1,
-                              p.sweep_f2,
-                              sweep);
-          if (!dec.set_dry_from_buffer (sweep, p.sweep_sr)) return 1;
-      } else {
-          std::cerr << "Error: Dry JACK only supported when wet is JACK.\n";
-          debug ("return");
-          return 1;
-      }
-
-      if (p.wet_source == src_file) {
-          if (!dec.load_sweep_wet (p.wet_path.c_str ())) return 1;
-      } else {
-          std::cerr << "Error: Wet JACK only supported when dry is JACK.\n";
-          debug ("return");
-          return 1;
-      }
-      
-      if (!dec.output_ir (p.out_path.c_str (), p.ir_length_samples)) {
-        debug ("return");
-        return 1;
-      }
-    break;
-#else
-    default:
-      return 1;
-    break;
-#endif
+      dec.jack_shutdown();
+      debug("return");
+      return dec.jack_play(sweep);
   }
+//#endif
+
+  // normal deconvolution path (with or without JACK)
+//#ifdef USE_JACK
+  // Special "live" JACK→IR mode: dry=JACK, wet=JACK
+  if (p.dry_source == src_jack && p.wet_source == src_jack) {
+      generate_log_sweep(p.sweep_seconds,
+                         p.preroll_seconds,
+                         p.marker_seconds,
+                         p.marker_gap_seconds,
+                         p.sweep_sr,
+                         p.sweep_amp_db,
+                         p.sweep_f1,
+                         p.sweep_f2,
+                         sweep);
+
+      std::vector<float> wet_l;
+      std::vector<float> wet_r;
+
+      if (p.sweepwait) {
+          std::cout << "Press enter to play and record sinewave sweep... ";
+          std::string str;
+          std::getline(std::cin, str);
+      }
+
+      if (!dec.jack_playrec(sweep, wet_l, wet_r)) {
+          debug("return");
+          return 1;
+      }
+
+      if (!dec.set_dry_from_buffer(sweep, p.sweep_sr)) return 1;
+      if (!dec.set_wet_from_buffer(wet_l, std::vector<float>(), p.sweep_sr)) return 1;
+
+      if (!dec.output_ir(p.out_path.c_str(), p.ir_length_samples)) return 1;
+      debug("return");
+      return 0;
+  }
+#endif
+
+  // file / generated dry + file wet deconvolution
+
+  if (p.dry_source == src_file) {
+      if (!dec.load_sweep_dry(p.dry_path.c_str())) return 1;
+  } else if (p.dry_source == src_generate) {
+      std::vector<float> sweep_local;
+      generate_log_sweep(p.sweep_seconds,
+                         p.preroll_seconds,
+                         p.marker_seconds,
+                         p.marker_gap_seconds,
+                         p.sweep_sr,
+                         p.sweep_amp_db,
+                         p.sweep_f1,
+                         p.sweep_f2,
+                         sweep_local);
+      if (!dec.set_dry_from_buffer(sweep_local, p.sweep_sr)) return 1;
+  } else {
+#ifdef USE_JACK
+      std::cerr << "Error: Dry JACK only supported when wet is JACK.\n";
+#else
+      std::cerr << "Error: Dry JACK not supported (built without JACK).\n";
+#endif
+      debug("return");
+      return 1;
+  }
+
+  if (p.wet_source == src_file) {
+      if (!dec.load_sweep_wet(p.wet_path.c_str())) return 1;
+  } else {
+#ifdef USE_JACK
+      std::cerr << "Error: Wet JACK only supported when dry is JACK.\n";
+#else
+      std::cerr << "Error: Wet JACK not supported (built without JACK).\n";
+#endif
+      debug("return");
+      return 1;
+  }
+
+  if (!dec.output_ir(p.out_path.c_str(), p.ir_length_samples)) {
+      debug("return");
+      return 1;
+  }
+
+  debug("end");
+  return 0;
   
   debug ("end");
   return 0;
