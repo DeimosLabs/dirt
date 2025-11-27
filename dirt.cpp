@@ -1,6 +1,6 @@
 
 /* DIRT - Delt's Impulse Response Tool
- * Version 0.1.1
+ * Version 0.1
  *
  * -----------------------------------------------------------------------------
  * This program is free software: you can redistribute it and/or modify
@@ -2056,11 +2056,13 @@ static void print_usage (const char *prog, bool full = false) {
     "  # Deconvolve a wet/recorded sweep against a dry one, and output an\n"
     "  # impulse response: (tries to detect preroll and marker from dry file)\n"
     "  " << prog << " -d drysweep.wav -w wetsweep.wav -o ir.wav\n"
+#ifdef USE_JACK
     "\n"
     "  # Play a sweep through an instance of Carla and record it at the same\n"
     "  # time, then extract IR directly to \"ir.wav\":\n"
-    "  " << prog << " -d Carla:audio-in1 -w Carla:audio-out1 -o ir.wav"
-    "\n\n"
+    "  " << prog << " -d Carla:audio-in1 -w Carla:audio-out1 -o ir.wav\n"
+#endif
+    "\n"
     ;
 }
 
