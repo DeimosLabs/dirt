@@ -1462,6 +1462,10 @@ bool c_deconvolver::set_samplerate_if_needed (int sr) {
   return (samplerate_ == sr);
 }
 
+int c_deconvolver::samplerate () {
+  return samplerate_; //prefs_->sweep_sr;
+}
+
 static size_t find_peak (std::vector<float> &buf) {
   int i = 0, len = buf.size (), peakpos = 0;
   float peak = 0;
@@ -2135,11 +2139,13 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
       //if (++i >= argc) { std::cerr << "Missing value for " << arg << "\n"; return ret_err; }
       opt.mode = deconv_mode::mode_makesweep;
       //opt.sweep_seconds = std::atof (argv [i]);
-#ifdef USE_JACK
     } else if (arg == "-S" || arg == "--playsweep") {
+#ifdef USE_JACK
       //if (++i >= argc) { std::cerr << "Missing value for " << arg << "\n"; return ret_err; }
       opt.mode = deconv_mode::mode_playsweep;
       //opt.sweep_seconds = std::atof (argv [i]);
+#else
+       std::cerr << "Error: this version of " << argv [0] << " was built without JACK support.";
 #endif
     } else if (arg == "-L" || arg == "--sweep-seconds") {
       if (++i >= argc) { std::cerr << "Missing value for " << arg << "\n"; return ret_err; }
@@ -2147,6 +2153,7 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
     } else if (arg == "-R" || arg == "--sweep-sr") {
       if (++i >= argc) { std::cerr << "Missing value for " << arg << "\n"; return ret_err; }
       opt.sweep_sr = std::atoi (argv [i]);
+      opt.sweep_sr_given = true;
     } else if (arg == "-X" || arg == "--sweep-f1") {
       if (++i >= argc) { std::cerr << "Missing value for " << arg << "\n"; return ret_err; }
       opt.sweep_f1 = std::atof (argv [i]);
@@ -2293,24 +2300,14 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
       break;
 
     case 1: // only dry path given
-      if (looks_like_jack_port(opt.dry_path)) {
-#ifdef USE_JACK
+      if (looks_like_jack_port (opt.dry_path)) {
         opt.mode = mode_playsweep;
         opt.jack_autoconnect_dry = true;
-#else
-        std::cerr << "Dry JACK port given but JACK support is not compiled in.\n";
-        return ret_err;
-#endif
       } else if (opt.dry_path == "jack") {
-#ifdef USE_JACK
         opt.dry_path.clear();
         opt.mode = mode_playsweep;
         opt.jack_autoconnect_to_default = true;
         opt.jack_autoconnect_dry = true;
-#else
-        std::cerr << "\"jack\" specified but JACK support is not compiled in.\n";
-        return ret_err;
-#endif
       } else {
         std::cerr << "Only dry file specified\n";
         return ret_err;
@@ -2518,11 +2515,27 @@ int main (int argc, char **argv) {
   
   // avoid upper freq. aliasing: now that we have sample rate from either user
   // or jack, make sure we don't sweep past 95% of nyquist frequency
-  float sweep_max = (p.sweep_sr / 2) * 0.95;
-  if (p.sweep_f2 > sweep_max) {
-    std::cout << "NOTE: requested upper frequency " << p.sweep_f2
-              << " Hz is above 95% of nyquist frequency (" << sweep_max << " Hz)\n\n";
-    p.sweep_f2 = sweep_max;
+  // only relevant when we are going to *generate* a sweep
+  bool will_generate_sweep =
+      (p.mode == deconv_mode::mode_makesweep)  ||
+      (p.mode == deconv_mode::mode_playsweep)  ||
+      (p.dry_source == src_generate)           ||
+      (p.dry_source == src_jack)               ||  // live JACK playrec
+      (p.wet_source == src_jack);
+      
+  if (will_generate_sweep) {
+    std::cout << "Sweep samplerate (requested): " << p.sweep_sr << "\n";
+    float sweep_max = (p.sweep_sr / 2.0f) * 0.95f;
+    if (p.sweep_f2 > sweep_max) {
+      std::cout << "NOTE: requested upper frequency " << p.sweep_f2
+                << " Hz is above 95% of nyquist frequency (" << sweep_max << " Hz)\n";
+#if 0
+      std::cout << "Capping to " << sweep_max << std::endl;
+      p.sweep_f2 = sweep_max;
+#endif
+    }
+  } else if (p.sweep_sr_given && p.sweep_sr != 0) {
+    std::cerr << "Warning: ignoring supplied sample rate " << p.sweep_sr << std::endl;
   }
   
   std::vector<float> sweep;
@@ -2615,7 +2628,7 @@ int main (int argc, char **argv) {
   // file / generated dry + file wet deconvolution
 
   if (p.dry_source == src_file) {
-      if (!dec.load_sweep_dry(p.dry_path.c_str())) return 1;
+      if (!dec.load_sweep_dry (p.dry_path.c_str())) return 1;
   } else if (p.dry_source == src_generate) {
       std::vector<float> sweep_local;
       generate_log_sweep(p.sweep_seconds,
@@ -2627,7 +2640,7 @@ int main (int argc, char **argv) {
                          p.sweep_f1,
                          p.sweep_f2,
                          sweep_local);
-      if (!dec.set_dry_from_buffer(sweep_local, p.sweep_sr)) return 1;
+      if (!dec.set_dry_from_buffer (sweep_local, p.sweep_sr)) return 1;
   } else {
 #ifdef USE_JACK
     std::cerr << "Error: Dry JACK only supported when wet is JACK.\n";
@@ -2639,7 +2652,7 @@ int main (int argc, char **argv) {
   }
 
   if (p.wet_source == src_file) {
-      if (!dec.load_sweep_wet(p.wet_path.c_str())) return 1;
+      if (!dec.load_sweep_wet (p.wet_path.c_str())) return 1;
   } else {
 #ifdef USE_JACK
     std::cerr << "Error: Wet JACK only supported when dry is JACK.\n";
@@ -2649,8 +2662,9 @@ int main (int argc, char **argv) {
     debug("return");
     return 1;
   }
-
-  if (!dec.output_ir(p.out_path.c_str(), p.ir_length_samples)) {
+  
+  std::cout << "Detected sample rate: " << dec.samplerate () << std::endl;
+  if (!dec.output_ir (p.out_path.c_str (), p.ir_length_samples)) {
     debug("return");
     return 1;
   }

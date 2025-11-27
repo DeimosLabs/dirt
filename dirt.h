@@ -149,6 +149,7 @@ struct s_prefs {
   //double regularization_db  = -120.0; // "noise floor" - see calc_ir_raw ()
   size_t sweep_offset_smp   = DEFAULT_SWEEP_OFFSET_SMP;
   int    sweep_sr           = DEFAULT_SAMPLE_RATE;
+  bool   sweep_sr_given     = false; // used for warning user<->file sample rate mismatch
   float  sweep_f1           = DEFAULT_F1;
   float  sweep_f2           = DEFAULT_F2; // DONE: cap to just below nyquist freq
   float  sweep_amp_db       = DEFAULT_SWEEP_AMPLITUDE_DB;
@@ -204,6 +205,7 @@ public:
   bool load_sweep_dry (const char *in_filename);
   bool load_sweep_wet (const char *in_filename);
   bool output_ir (const char *out_filename, long ir_length_samples = 0);
+  int samplerate ();
   
   /*static bool calc_ir_raw (const std::vector<float> &wet,
                           const std::vector<float>  &dry,
