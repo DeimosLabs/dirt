@@ -1086,7 +1086,7 @@ bool c_deconvolver::set_wet_from_buffer (const std::vector<float>& bufL,
 }
 
 bool c_deconvolver::output_ir (const char *out_filename, long ir_length_samples) {
-  debug ("start");
+  debug ("start, ir_length_samples=%ld", ir_length_samples);
   std::vector<float> irL;
   std::vector<float> irR;
   
@@ -1147,6 +1147,7 @@ bool c_deconvolver::output_ir (const char *out_filename, long ir_length_samples)
   //                           +1.0f,
   //                           //prefs_->ir_silence_db, // keep tail trim
   //                           0.05f);
+  
   // Decide mono vs stereo based on whether right has any energy left
   bool have_right_energy = false;
   const float thr = db_to_linear (-90);
@@ -1190,6 +1191,7 @@ bool c_deconvolver::calc_ir_raw (const std::vector<float> &wet,
                                  const std::vector<float> &dry,
                                  std::vector<float>       &ir_raw,
                                  long                     ir_length_samples) {
+  debug ("start, ir_length_samples=%ld", ir_length_samples);
   if (wet.empty () || dry.empty ()) {
     std::cerr << "Error: wet or dry buffer is empty.\n";
     return false;
@@ -1266,6 +1268,10 @@ bool c_deconvolver::calc_ir_raw (const std::vector<float> &wet,
     if (i >= N) break;
     yTime [i] = wet [wet_offset + i];
   }
+  
+  ir_length_samples = std::max ((size_t) ir_length_samples,
+                                (size_t) (MAX_IR_LEN * prefs_->sweep_sr));
+  
 
   if (prefs_->dump_debug) {
     std::string prefix = prefs_->dump_prefix;
@@ -1437,6 +1443,7 @@ bool c_deconvolver::calc_ir_raw (const std::vector<float> &wet,
   fftw_free (Y);
   fftw_free (H);
 
+  debug ("end");
   return true;
 }
 
@@ -1536,43 +1543,39 @@ void c_deconvolver::normalize_and_trim_stereo (std::vector<float> &L,
     first_nonsilent = std::max (first_nonsilent, prefs_->sweep_offset_smp);
   } else {
     // New behavior: use peak, but only trim "silent" stuff before it.
-    // find global peak index
-    size_t peakL = find_peak (L);
-    size_t peakR = hasR ? find_peak (R) : peakL;
-    size_t peak_idx = std::min (peakL, peakR);
+    size_t peakL = find_peak(L);
+    size_t peakR = hasR ? find_peak(R) : peakL;
+    size_t peak_idx = std::min(peakL, peakR);
 
-    // compute absolute threshold relative to normalized peak
-    // thr_start_db is negative, e.g. -60 => ~0.001
-    float rel_lin = db_to_linear (thr_start_db);
-    float thresh  = peak * rel_lin;   // 'peak' is already global peak after norm
+    float rel_lin = db_to_linear(thr_start_db); // thr_start_db is negative
+    float thresh  = peak * rel_lin;             // absolute amplitude threshold
 
-    // c) limit how far we can trim:
+    // We never want to trim *past* the peak, so only look before it.
     size_t max_shift = peak_idx;
-    /*if (prefs_ && prefs_->sweep_offset_smp > 0) {
-      max_shift = std::min (max_shift, (size_t) prefs_->sweep_offset_smp);
-    }*/
+    size_t cut = 0;
 
-    // d) walk from (max_shift - sweep_offset) .. max_shift, keep
-    //    trimming while samples are below thresh
-    //size_t cut = 0;
-    size_t cut = std::max ((size_t) 0, max_shift - (prefs_ ? prefs_->sweep_offset_smp : 0));
+    // Optionally keep at least sweep_offset_smp samples before the peak
+    if (prefs_ && prefs_->sweep_offset_smp > 0 && max_shift > prefs_->sweep_offset_smp) {
+        max_shift -= prefs_->sweep_offset_smp;
+    }
+
     for (size_t i = 0; i < max_shift; ++i) {
-      float aL = (i < L.size ()) ? std::fabs (L [i]) : 0.0f;
-      float aR = (hasR && i < R.size()) ? std::fabs (R [i]) : 0.0f;
-      float a  = std::max(aL, aR);
+        float aL = (i < L.size()) ? std::fabs(L[i]) : 0.0f;
+        float aR = (hasR && i < R.size()) ? std::fabs(R[i]) : 0.0f;
+        float a  = std::max(aL, aR);
 
-      if (a < thresh) {
-        cut = i + 1;   // still safe to drop
-      } else {
-        break;         // hit real content, stop here
-      }
+        if (a < thresh) {
+            cut = i + 1;   // safe to drop up to here
+        } else {
+            break;         // hit real content
+        }
     }
 
     first_nonsilent = cut;
 
-    debug("zero peak: peak_idx=%zu, cut=%zu, sweep_offset=%d, thr_start_db=%f",
+    debug("zero peak: peak_idx=%zu, cut=%zu, sweep_offset=%zu, thr_start_db=%f",
           peak_idx, cut,
-          prefs_ ? prefs_->sweep_offset_smp : 0,
+          prefs_ ? (size_t)prefs_->sweep_offset_smp : 0,
           thr_start_db);
   }
 
@@ -2099,6 +2102,8 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
     } else if (arg == "-O" || arg == "--offset") {
       if (++i >= argc) { std::cerr << "Missing value for " << arg << "\n"; return ret_err; }
       opt.sweep_offset_smp = std::atof (argv [i]);
+    } else if (arg == "-Z" || arg == "--zero-peak") {
+      opt.zeropeak = !opt.zeropeak;
     } else if (arg == "-a" || arg == "--sweep-amplitude") {
       if (++i >= argc) { std::cerr << "Missing value for " << arg << "\n"; return ret_err; }
       opt.sweep_amp_db = std::atof (argv [i]);

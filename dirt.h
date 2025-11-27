@@ -54,9 +54,10 @@
 #include <jack/jack.h>
 #endif
 
-#define MARKER_FREQ                     1000 // in Hz
+#define MARKER_FREQ                     1000  // in Hz
 #define LOWPASS_F                       24000 // gets clamped to nyquist freq
-//#define HIGHPASS_F                      40
+#define MAX_IR_LEN                      10.0  // in seconds
+#define HIGHPASS_F                      40
 #define DEFAULT_SAMPLE_RATE             48000
 #define DEFAULT_F1                      20
 #define DEFAULT_F2                      22000
