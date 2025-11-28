@@ -2124,17 +2124,14 @@ static void print_usage (const char *prog, bool full = false) {
   if (full) out <<
     "Example usage:\n"
     "\n"
-    "  # Generate a 30-second dry sweep with 1 second of silence at start\n"
-    "  # and an alignment marker of 0.1 second:\n"
+    "  # Generate a 30-second dry sweep with 1sec. preroll and 0.1sec. marker:\n"
     "  " << prog << " --makesweep -L 30 --preroll 1 --marker 0.1 -o drysweep.wav\n"
     "\n"
-    "  # Deconvolve a wet/recorded sweep against a dry one, and output an\n"
-    "  # impulse response: (tries to detect preroll and marker from dry file)\n"
+    "  # Deconvolve a wet/recorded sweep against a dry one, and output IR\n"
     "  " << prog << " -d drysweep.wav -w wetsweep.wav -o ir.wav\n"
 #ifdef USE_JACK
     "\n"
-    "  # Play a sweep through Carla and record the result at the same time,\n"
-    "  # then extract IR directly to \"carla_ir.wav\":\n"
+    "  # Loopback (play & record) a sweep through Carla, extract resulting IR:\n"
     "  " << prog << " -d Carla:audio-in1 -w Carla:audio-out1 -o carla_ir.wav\n"
 #endif
     //"\n"
