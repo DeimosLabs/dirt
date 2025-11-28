@@ -337,8 +337,8 @@ static size_t detect_sweep_start_with_marker (const std::vector<float> &buf,
                                               float silence_thresh_db,
                                               float sweep_amp_db,
                                               double marker_freq,          // MARKER_FREQ
-                                              double marker_seconds_hint,  // 0 = unknown / autodetect
-                                              double gap_seconds_hint,     // 0 = unknown / autodetect
+                                              double marker_seconds_hint,  // 0 = unknown/auto
+                                              double gap_seconds_hint,     // 0 = unknown/auto
                                               bool verbose,
                                               size_t *out_marker_len = NULL,
                                               size_t *out_gap_len = NULL) {
@@ -373,7 +373,7 @@ static size_t detect_sweep_start_with_marker (const std::vector<float> &buf,
                                        ? marker_seconds_hint
                                        : 5;
   const size_t max_window_samples =
-      std::min (buf.size() - i0,
+      std::min (buf.size () - i0,
                (size_t) (max_marker_window_sec * samplerate));
 
   if (max_window_samples < 8) {
@@ -2131,8 +2131,8 @@ static void print_usage (const char *prog, bool full = false) {
     "  " << prog << " -d drysweep.wav -w wetsweep.wav -o ir.wav\n"
 #ifdef USE_JACK
     "\n"
-    "  # Play a sweep through an instance of Carla and record it at the same\n"
-    "  # time, then extract IR directly to \"carla_ir.wav\":\n"
+    "  # Play a sweep through Carla and record the result at the same time,\n"
+    "  # then extract IR directly to \"carla_ir.wav\":\n"
     "  " << prog << " -d Carla:audio-in1 -w Carla:audio-out1 -o carla_ir.wav\n"
 #endif
     //"\n"

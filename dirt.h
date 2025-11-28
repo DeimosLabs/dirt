@@ -69,7 +69,7 @@
 #define DEFAULT_SWEEP_OFFSET_SMP        64
 #define DEFAULT_NORMALIZE_AMP           0.9
 #define DEFAULT_PREROLL_SEC             1.0
-#define DEFAULT_MARKER_SEC              1.0
+#define DEFAULT_MARKER_SEC              0.1
 #define DEFAULT_MARKGAP_SEC             1.0
 #define DEFAULT_ZEROPEAK                true // try to zero-align peak?
 
