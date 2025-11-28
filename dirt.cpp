@@ -24,6 +24,7 @@
  */
 
 #include "dirt.h"
+#include "timestamp.h"
 
 #ifdef DEBUG
 #define CMDLINE_IMPLEMENTATION // This should only be in ONE implementation file!!
@@ -2039,7 +2040,8 @@ static void print_usage (const char *prog, bool full = false) {
   std::ostream &out = full ? std::cout : std::cerr;
   
   if (full) {
-    out << "\nDIRT - Delt's Impulse Response Tool, version " << DIRT_VERSION <<
+    out << "\nDIRT - Delt's Impulse Response Tool, version " << DIRT_VERSION 
+        << " build " << BUILD_TIMESTAMP <<
 #ifdef USE_JACK
     //"\nJACK support: enabled\n"
     "\n"
