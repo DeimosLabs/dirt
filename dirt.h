@@ -30,8 +30,9 @@
  *
  */
  
-#ifndef __DECONVOLVER_H
-#define __DECONVOLVER_H
+#ifndef    __DECONVOLVER_H
+#define    __DECONVOLVER_H
+#define __IN_DECONVOLVER_H
 
 #include <iostream>
 #include <vector>
@@ -43,6 +44,7 @@
 #include <unistd.h>
 #include <sys/time.h>
 #include <sys/stat.h>
+#include <sys/select.h>
 
 // these are set by cmake
 //#define DEBUG
@@ -56,7 +58,7 @@
 
 #define MARKER_FREQ                     1000 // in Hz
 #define MAX_IR_LEN                      10.0
-#define LOWPASS_F                       24000 // gets clamped to nyquist freq
+#define LOWPASS_F                       22000 // gets clamped to nyquist freq
 //#define HIGHPASS_F                      40 TODO: fix highpass
 #define DEFAULT_SAMPLE_RATE             48000
 #define DEFAULT_F1                      20
@@ -138,7 +140,7 @@ struct s_prefs {
   bool dump_debug                   = false;
   std::string dump_prefix           = "dirt-debug";
   bool sweepwait                    = false;
-  align_method align                = align_none;
+  align_method align                = align_marker_dry;
 
   double sweep_seconds      = DEFAULT_SWEEP_SEC;   // default value not really used
   double preroll_seconds    = DEFAULT_PREROLL_SEC;
@@ -168,11 +170,13 @@ struct s_prefs {
 struct s_jackclient {
   bool play_go = false;
   bool rec_go  = false;
+  bool monitor_only = false;
   
   /*std::string portname_dry = "";
   std::string portname_wetL = "";
   std::string portname_wetR = "";*/
   
+  bool is_stereo = false;
   int samplerate = 0;
   jack_client_t *client = NULL;
   jack_port_t   *port_inL  = NULL;
@@ -183,12 +187,22 @@ struct s_jackclient {
   std::vector<float> sig_in_L; // mono/left wet capture (mix of L/R)
   std::vector<float> sig_in_R; //
   std::vector<float> sig_out;  // sweep to play
+  
+  // for our little ascii-art meter
+  float peak_plus_l  = 0;
+  float peak_plus_r  = 0;
+  float peak_minus_l = 0;
+  float peak_minus_r = 0;
+  bool clip_l        = false;
+  bool clip_r        = false;
+  bool peak_ack      = false;
 
   size_t index     = 0;  // playback index
   size_t rec_index = 0;  // record index
   size_t rec_total = 0;  // how many samples to capture
 
   bool rec_done = false;
+  //bool play_done = false;
 };
 #endif
 
@@ -259,4 +273,5 @@ private:
   s_prefs default_prefs_;
 };
 
+#undef __IN_DECONVOLVER_H
 #endif // __DECONVOLVER_H
