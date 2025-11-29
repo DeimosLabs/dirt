@@ -21,7 +21,9 @@ pkg_check_modules(JACK             jack)
 
 # Define the executable target first
 add_executable(dirt
-    dirt.cpp
+    src/dirt.cpp
+    src/deconvolv.cpp
+    src/jack.cpp
 )
 
 set(TIMESTAMP_FILE ${CMAKE_CURRENT_BINARY_DIR}/timestamp.h)
