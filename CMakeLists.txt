@@ -27,7 +27,6 @@ add_executable(dirt
 )
 
 set(TIMESTAMP_FILE ${CMAKE_CURRENT_BINARY_DIR}/timestamp.h)
-
 target_include_directories(dirt PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 
 add_custom_command(
