@@ -146,6 +146,11 @@ static inline double db_to_linear (double db) {
   return std::pow (10.0f, db / 20.0f);
 }
 
+static inline double linear_to_db (double v) {
+  if (v <= 1e-12f) return -120.0f;
+  return 20.0f * std::log10 (v);
+}
+
 static size_t find_first_nonsilent (const std::vector<float> &buf,
                                    float silence_thresh_db) {
   float silence_thresh = db_to_linear (silence_thresh_db);
@@ -844,6 +849,11 @@ static void generate_log_sweep (double seconds,
   const size_t NM     = (size_t) (start_marker_seconds * samplerate);
   const size_t NGAP   = (size_t) (marker_gap_seconds * samplerate);
   size_t n = 0;
+  
+  if (samplerate <= 0) {
+    std::cout << "can't have a sample rate of zero!\n";
+    return;
+  }
 
   out.resize (NPRE + NM + NGAP + N);
 
@@ -894,7 +904,7 @@ static void generate_log_sweep (double seconds,
   }
 }
 
-static size_t find_peak (const std::vector<float> &buf) {
+/*static size_t find_peak (const std::vector<float> &buf) {
   size_t idx = 0;
   float maxv = 0.0f;
   for (size_t i = 0; i < buf.size (); ++i) {
@@ -905,6 +915,20 @@ static size_t find_peak (const std::vector<float> &buf) {
     }
   }
   return idx;
+}*/
+
+static size_t find_peak (const std::vector<float> &buf) {
+  int i = 0, len = buf.size (), peakpos = 0;
+  float peak = 0;
+  for (i = 0; i < len; i++) {
+    float abs = fabs (buf [i]);
+    if (abs > peak) {
+      peakpos = i;
+      peak = abs;
+    }
+  }
+  
+  return peakpos;
 }
 
 static void shift_ir_left (std::vector<float> &buf, size_t shift) {
@@ -980,8 +1004,13 @@ static void align_stereo_joint_no_chop (std::vector<float> &L,
 
 // c_deconvolver member functions
 
-c_deconvolver::c_deconvolver (struct s_prefs *prefs) {
+c_deconvolver::c_deconvolver (struct s_prefs *prefs, std::string name) {
   set_prefs (prefs);
+  set_name (name);
+}
+
+void c_deconvolver::set_name (std::string name) {
+  audio_clientname = name;
 }
 
 void c_deconvolver::set_prefs (struct s_prefs *prefs) {
@@ -989,6 +1018,24 @@ void c_deconvolver::set_prefs (struct s_prefs *prefs) {
     prefs_ = prefs;
   else
     prefs_ = &default_prefs_;
+}
+
+bool c_deconvolver::init_audio (std::string name, int _samplerate, bool stereo) {
+#ifdef USE_JACK
+  audio = new c_jackclient (this);
+  if (audio && audio->init (name, _samplerate, stereo))
+    return true;
+#endif
+  return false;
+}
+
+bool c_deconvolver::end_audio () {
+  if (audio) delete audio;
+  return true; // for now
+}
+
+bool c_deconvolver::audio_ready () {
+  return audio && audio->ready ();
 }
 
 bool c_deconvolver::load_sweep_dry (const char *in_filename) {
@@ -1194,20 +1241,22 @@ bool c_deconvolver::output_ir (const char *out_filename, long ir_length_samples)
   float cutoff = (prefs_->sweep_sr / 2) * 0.9;
   // ...or just a fixed frequency
   //float cutoff = 18000;
-  if (irL.size () > 0) {
+  float lp_cut = std::min((float)LOWPASS_F, cutoff);
+
+  if (irL.size() > 0) {
 #ifdef HIGHPASS_F
-    highpass_ir (irL, prefs_->sweep_sr, HIGHPASS_F);
+    highpass_ir(irL, prefs_->sweep_sr, HIGHPASS_F);
 #endif
 #ifdef LOWPASS_F
-    lowpass_ir (irL, prefs_->sweep_sr, std::min ((float) LOWPASS_F, cutoff));
+    lowpass_ir(irL, prefs_->sweep_sr, lp_cut);
 #endif
   }
-  if (irR.size () > 0) {
+  if (irR.size() > 0) {
 #ifdef HIGHPASS_F
-    highpass_ir (irR, prefs_->sweep_sr, std::min ((float) LOWPASS_F, cutoff));
+    highpass_ir(irR, prefs_->sweep_sr, HIGHPASS_F);
 #endif
 #ifdef LOWPASS_F
-    lowpass_ir (irR, prefs_->sweep_sr, cutoff);
+    lowpass_ir(irR, prefs_->sweep_sr, lp_cut);
 #endif
   }
   
@@ -1346,9 +1395,9 @@ bool c_deconvolver::calc_ir_raw (const std::vector<float> &wet,
     yTime [i] = wet [wet_offset + i];
   }
   
-  ir_length_samples = std::max ((size_t) ir_length_samples,
-                                (size_t) (MAX_IR_LEN * prefs_->sweep_sr));
-  
+  // nope, we're overwriting user's -n / --length parameter
+  //ir_length_samples = std::max ((size_t) ir_length_samples,
+  //                              (size_t) (MAX_IR_LEN * prefs_->sweep_sr));
 
   if (prefs_->dump_debug) {
     std::string prefix = prefs_->dump_prefix;
@@ -1425,42 +1474,42 @@ bool c_deconvolver::calc_ir_raw (const std::vector<float> &wet,
   //const double max_H_gain = 1e6;
 
   for (size_t k = 0; k < nFreq; ++k) {
-      double xr = X [k] [0];
-      double xi = X [k] [1];
-      double yr = Y [k] [0];
-      double yi = Y [k] [1];
+    double xr = X [k] [0];
+    double xi = X [k] [1];
+    double yr = Y [k] [0];
+    double yi = Y [k] [1];
 
-      double mag2 = xr * xr + xi * xi;
+    double mag2 = xr * xr + xi * xi;
 
-      // effectively zero energy here -> don't try to invert it.
-      if (mag2 < tiny) {
-        H [k] [0] = 0.0;
-        H [k] [1] = 0.0;
-        continue;
-      }
+    // effectively zero energy here -> don't try to invert it.
+    if (mag2 < tiny) {
+      H [k] [0] = 0.0;
+      H [k] [1] = 0.0;
+      continue;
+    }
 
-      // conj(X)
-      double cr = xr;
-      double ci = -xi;
+    // conj(X)
+    double cr = xr;
+    double ci = -xi;
 
-      // Y * conj(X)
-      double nr = yr * cr - yi * ci;
-      double ni = yr * ci + yi * cr;
+    // Y * conj(X)
+    double nr = yr * cr - yi * ci;
+    double ni = yr * ci + yi * cr;
 
-      // Raw inverse
-      double hr = nr / mag2 + eps;
-      double hi = ni / mag2 + eps;
+    // Raw inverse
+    double hr = nr / (mag2 + eps);
+    double hi = ni / (mag2 + eps);
 
-      // Optional safety clamp on |H|
-      double magH = std::sqrt (hr * hr + hi * hi);
-      if (magH > max_H_gain) {
-          double scale = max_H_gain / magH;
-          hr *= scale;
-          hi *= scale;
-      }
+    // Optional safety clamp on |H|
+    double magH = std::sqrt (hr * hr + hi * hi);
+    if (magH > max_H_gain) {
+        double scale = max_H_gain / magH;
+        hr *= scale;
+        hi *= scale;
+    }
 
-      H [k] [0] = hr;
-      H [k] [1] = hi;
+    H [k] [0] = hr;
+    H [k] [1] = hi;
   }
 
   // Back to time domain
@@ -1534,6 +1583,7 @@ bool c_deconvolver::calc_ir_raw (const std::vector<float> &wet,
 bool c_deconvolver::set_samplerate_if_needed (int sr) {
   if (samplerate_ == 0) {
     samplerate_ = sr;
+    if (prefs_) prefs_->sweep_sr = sr;
     return true;
   }
   return (samplerate_ == sr);
@@ -1541,20 +1591,6 @@ bool c_deconvolver::set_samplerate_if_needed (int sr) {
 
 int c_deconvolver::samplerate () {
   return samplerate_; //prefs_->sweep_sr;
-}
-
-static size_t find_peak (std::vector<float> &buf) {
-  int i = 0, len = buf.size (), peakpos = 0;
-  float peak = 0;
-  for (i = 0; i < len; i++) {
-    float abs = fabs (buf [i]);
-    if (abs > peak) {
-      peakpos = i;
-      peak = abs;
-    }
-  }
-  
-  return peakpos;
 }
 
 void c_deconvolver::normalize_and_trim_stereo (std::vector<float> &L,
@@ -1569,8 +1605,8 @@ void c_deconvolver::normalize_and_trim_stereo (std::vector<float> &L,
   //const float  silence_thresh = 1e-5f;  // relative to peak (~ -100 dB)
   const bool hasR = !R.empty ();
   
-  float thr_start = db_to_linear (thr_start_db);
-  float thr_end = db_to_linear (thr_end_db);
+  //float thr_start = db_to_linear (thr_start_db);
+  //float thr_end = db_to_linear (thr_end_db);
 
   // avoid edge case where we could wipe the whole buffer
   if (L.empty () && !hasR) return;
@@ -1605,37 +1641,38 @@ void c_deconvolver::normalize_and_trim_stereo (std::vector<float> &L,
   
   // fade end
   //bool fade_pow2 = true;
-  for (size_t i = fade_end; i < len; ++i) {
-    float t = float (i - fade_end) / float (len - fade_end - 1);
-    float g = 1.0f - t;
-    //if (fade_pow2)
-        g *= g;
-    
-    if (i < L.size ()) L [i] *= g;
-    if (i < R.size ()) R [i] *= g;
-  }
+  if (fade_end > 0)
+    for (size_t i = fade_end; i < len; ++i) {
+      float t = float (i - fade_end) / float (len - fade_end - 1);
+      float g = 1.0f - t;
+      //if (fade_pow2)
+          g *= g;
+      
+      if (i < L.size ()) L [i] *= g;
+      if (i < R.size ()) R [i] *= g;
+    }
   
   
   // 3) Remove common leading silence
-  size_t firstl, firstr, first_nonsilent;
+  /*size_t*/int64_t firstl, firstr, first_nonsilent;
   len = L.size();
   if (hasR) len = std::min(L.size(), R.size());
 
   if (!zeropeak) {
-    // Old/current behavior
+    // old behavior -> set first_nonsilent at ~= start
     if (thr_start_db > 0.0f) {
       debug("thr_start_db=%f, skipping start trim", thr_start_db);
       first_nonsilent = 0;
     } else {
-      firstl  = find_first_nonsilent(L, thr_start_db);
+      firstl = find_first_nonsilent(L, thr_start_db);
       firstr = hasR ? find_first_nonsilent(R, thr_start_db) : firstl;
       first_nonsilent = std::min(firstl, firstr);
     }
     first_nonsilent = std::max (first_nonsilent, prefs_->sweep_offset_smp);
   } else {
-    // New behavior: place the peak at sweep_offset_smp
-    // by trimming to the first "non-silent" sample at or
-    // after (peak_idx - sweep_offset_smp).
+    // new behavior: place the peak at ~= sweep_offset_smp by trimming to
+    // the first "non-silent" sample at orafter (peak_idx - sweep_offset_smp).
+    // We pretend everything before (peak_idx - sweep_offset_smp) is silence.
 
     // global peak index (after normalization)
     size_t peakL   = find_peak (L);
@@ -1654,8 +1691,8 @@ void c_deconvolver::normalize_and_trim_stereo (std::vector<float> &L,
 
     // start scanning for "first non-silent" sample
     // at or after (peak_idx - desired_peak_pos)
-    size_t len = L.size ();
-    if (hasR) len = std::min (L.size (), R.size ());
+    //size_t len = L.size (); -- we already have this above
+    //if (hasR) len = std::min (L.size (), R.size ());
 
     size_t search_begin = 0;
     if (peak_idx > desired_peak_pos)
@@ -1712,6 +1749,7 @@ void c_deconvolver::normalize_and_trim_stereo (std::vector<float> &L,
     return;
   }
   
+  first_nonsilent = std::max<int64_t> (first_nonsilent, 0);
   if (first_nonsilent > 0) {
     shift_ir_left(L, first_nonsilent);
     if (hasR) shift_ir_left(R, first_nonsilent);
@@ -1744,11 +1782,18 @@ void c_deconvolver::normalize_and_trim_stereo (std::vector<float> &L,
   }
 }
 
+c_audioclient::c_audioclient (c_deconvolver *dec) {
+  dec_ = dec;
+  prefs_ = dec->prefs_;
+}
+
+c_audioclient::~c_audioclient () { }
+
 #ifdef USE_JACK
-// our jack callback, takes care of actual audio i/o buffers
+// our JACK callback, takes care of actual audio i/o buffers
 static int jack_process_cb (jack_nframes_t nframes, void *arg) {
   //debug ("start");
-  s_jackclient *j = (s_jackclient *) arg;
+  c_jackclient *j = (c_jackclient *) arg;
   
   if (!j) return 0;
   if (!j->port_inL) return 0;
@@ -1764,8 +1809,8 @@ static int jack_process_cb (jack_nframes_t nframes, void *arg) {
 
     for (jack_nframes_t i = 0; i < nframes; ++i) {
       float v = 0.0f;
-      if (j->index < j->sig_out.size ()) {
-        v = j->sig_out [j->index++];
+      if (j->index < j->sig_out_l.size ()) {
+        v = j->sig_out_l [j->index++];
       }
       if (port_outL) port_outL [i] = v;
       //if (port_outR) port_outR [i] = v; // same sweep on both channels
@@ -1814,9 +1859,9 @@ static int jack_process_cb (jack_nframes_t nframes, void *arg) {
 
       // store data / advance index only when actually recording
       if (!j->monitor_only && j->rec_index < j->rec_total) {
-        j->sig_in_L [j->rec_index] = vL;
+        j->sig_in_l [j->rec_index] = vL;
         if (stereo) {
-          j->sig_in_R [j->rec_index] = vR;
+          j->sig_in_r [j->rec_index] = vR;
         }
         j->rec_index++;
         if (j->rec_index >= j->rec_total) {
@@ -1836,15 +1881,14 @@ static int jack_process_cb (jack_nframes_t nframes, void *arg) {
   return 0;
 }
 
-static int jack_get_default_playback (jack_client_t *c,
-                                       int howmany,
+int c_jackclient::get_default_playback (int howmany,
                                        std::vector<std::string> &v) {
   debug ("start");
   //v.clear ();
-  if (!c || howmany <= 0) return 0;
+  if (!client || howmany <= 0) return 0;
 
   const char **ports = jack_get_ports (
-    c,
+    client,
     nullptr,
     nullptr,
     JackPortIsPhysical | JackPortIsInput   // speakers = physical inputs
@@ -1866,15 +1910,14 @@ static int jack_get_default_playback (jack_client_t *c,
   return count;
 }
 
-static int jack_get_default_capture (jack_client_t *c,
-                                      int howmany,
+int c_jackclient::get_default_capture (int howmany,
                                       std::vector<std::string> &v) {
   debug ("start");
   //v.clear ();
-  if (!c || howmany <= 0) return 0;
+  if (!client || howmany <= 0) return 0;
 
   const char **ports = jack_get_ports (
-    c,
+    client,
     nullptr,
     nullptr,
     JackPortIsPhysical | JackPortIsOutput   // microphones = physical outputs
@@ -1896,17 +1939,29 @@ static int jack_get_default_capture (jack_client_t *c,
   return count;
 }
 
-bool c_deconvolver::jack_init (std::string clientname,
-                               int samplerate,
+c_jackclient::c_jackclient (c_deconvolver *dec)
+    : c_audioclient (dec) {
+}
+
+c_jackclient::~c_jackclient () {
+  if (client) {
+    jack_client_close (client); 
+    client = NULL;
+  }
+}
+
+bool c_jackclient::init (std::string clientname,      // = "",
+                               int _samplerate,        // = -1, // ignored for now
                                //const char *jack_out_port,
                                //const char *jack_in_port,
-                               bool stereo_out) {
+                               bool stereo_out) {     // = true) {
   debug ("start");
-  if (jack_inited && jackclient.client) {
+  if (jack_inited) {
     // already have a client; nothing to do
     return true;
   }
   
+  is_stereo = stereo_out;
   jack_status_t status = JackFailure;
   
   // Decide on a client name:
@@ -1921,65 +1976,67 @@ bool c_deconvolver::jack_init (std::string clientname,
     // last-chance default
     name = "deconvolver";
   }
-
-  jackclient.client = jack_client_open (name, JackNullOption, &status);
-  if (!jackclient.client) {
+  
+  client = jack_client_open (name, JackNullOption, &status);
+  if (!client) {
     std::cerr << "Error: cannot connect to JACK (client name \""
               << name << "\")\n";
     jack_inited = false;
     return false;
   }
-
+  
   // JACK is alive, get its sample rate
-  jackclient.samplerate = (int) jack_get_sample_rate (jackclient.client);
-
+  samplerate = (int) jack_get_sample_rate (client);
+  
   if (prefs_) {
-    if (!prefs_->quiet && prefs_->sweep_sr != jackclient.samplerate) {
+    if (!prefs_->quiet && prefs_->sweep_sr != samplerate) {
         std::cerr << "Note: overriding sample rate (" << prefs_->sweep_sr
-                  << " Hz) with JACK sample rate " << jackclient.samplerate << " Hz.\n";
+                  << " Hz) with JACK sample rate " << samplerate << " Hz.\n";
     }
-    prefs_->sweep_sr = jackclient.samplerate;
+    prefs_->sweep_sr = samplerate;
   }
   
   // Reset runtime state
-  jackclient.play_go = false;
-  jackclient.rec_go  = false;
-  jackclient.index   = 0;
-  jackclient.sig_in_L.clear ();
-  jackclient.sig_out.clear ();
-  jackclient.port_inL = jackclient.port_inR = nullptr;
-  //jackclient.port_outL = jackclient.port_outR = nullptr;
+  play_go = false;
+  rec_go  = false;
+  index   = 0;
+  sig_in_l.clear ();
+  sig_in_r.clear ();
+  sig_out_l.clear ();
+  sig_out_r.clear ();
+  port_inL = port_inR = nullptr;
+  //port_outL = port_outR = nullptr;
   
   // register jack ports
-  jackclient.port_outL = jack_port_register (jackclient.client, "out",
+  port_outL = jack_port_register (client, "out",
                             JACK_DEFAULT_AUDIO_TYPE,
                             JackPortIsOutput, 0);
-  /*jackclient.port_outR = jack_port_register (jackclient.client, "out_R",
+  /*port_outR = jack_port_register (client, "out_R",
                             JACK_DEFAULT_AUDIO_TYPE,
                             JackPortIsOutput, 0);*/
-  jackclient.port_inL  = jack_port_register (jackclient.client, "in_L",
+  port_inL  = jack_port_register (client, "in_L",
                             JACK_DEFAULT_AUDIO_TYPE,
                             JackPortIsInput, 0);
-  jackclient.port_inR  = jack_port_register (jackclient.client, "in_R",
+  port_inR  = jack_port_register (client, "in_R",
                             JACK_DEFAULT_AUDIO_TYPE,
                             JackPortIsInput, 0);
 
-  if (!jackclient.port_outL || !jackclient.port_inL || !jackclient.port_inR) {
+  if (!port_outL || !port_inL || (is_stereo && !port_inR)) {
     std::cerr << "Error: cannot register JACK ports.\n";
-    //jack_deactivate (jackclient.client);
-    jack_client_close (jackclient.client);
-    jackclient.client  = nullptr;
+    //jack_deactivate (client);
+    jack_client_close (client);
+    client  = nullptr;
     jack_inited        = false;
     return false;
   }
   
-  jack_set_process_callback (jackclient.client, jack_process_cb, &jackclient);
-
+  jack_set_process_callback (client, jack_process_cb, this);
+  
   // 5) Activate client
-  if (jack_activate (jackclient.client) != 0) {
+  if (jack_activate (client) != 0) {
     std::cerr << "Error: cannot activate JACK client.\n";
-    jack_client_close (jackclient.client);
-    jackclient.client = nullptr;
+    jack_client_close (client);
+    client = nullptr;
     jack_inited       = false;
     return false;
   }
@@ -1992,22 +2049,22 @@ bool c_deconvolver::jack_init (std::string clientname,
   if (prefs_->portname_dry.length () > 0) {
     debug ("got portname_dry");
     // connect to portname_dry
-    int err = jack_connect (jackclient.client,
-                            jack_port_name (jackclient.port_outL),
+    int err = jack_connect (client,
+                            jack_port_name (port_outL),
                             prefs_->portname_dry.c_str ());
-    if (err) std::cerr << "warning: failed to connect to JACK input port " + 
-                          prefs_->portname_dry << std::endl;
+    if (err) std::cerr << "warning: failed to connect to JACK input port "
+                       << prefs_->portname_dry << std::endl;
   } else {
     if (prefs_->mode == deconv_mode::mode_playsweep && !prefs_->sweepwait) {
       // connect to system default
       std::vector<std::string> strv;
-      int n = jack_get_default_playback (jackclient.client, 1, strv);
+      int n = get_default_playback (1, strv);
       if (n == 1) {
-        int err = jack_connect (jackclient.client,
-                                jack_port_name (jackclient.port_outL),
+        int err = jack_connect (client,
+                                jack_port_name (port_outL),
                                 strv [0].c_str ());
-         if (err) std::cerr << "warning: failed to connect to JACK output port" +
-                               strv [0] << std::endl;
+         if (err) std::cerr << "warning: failed to connect to JACK output port"
+                            << strv [0] << std::endl;
       }
     }
   }
@@ -2015,14 +2072,14 @@ bool c_deconvolver::jack_init (std::string clientname,
   // autoconnect input where it makes sense:
   // any port given: auto connect to it
   // no port given: no autoconnect
-  std::cout << "output port L: " + prefs_->portname_wetL << std::endl;
-  std::cout << "output port R: " + prefs_->portname_wetR << std::endl;
+  std::cout << "output port L: " << prefs_->portname_wetL << std::endl;
+  std::cout << "output port R: " << prefs_->portname_wetR << std::endl;
   if (prefs_->portname_wetL.length () > 0) {
     debug ("got portname_wetL");
     // connect to portname_wetL
-    int err = jack_connect (jackclient.client,
+    int err = jack_connect (client,
                             prefs_->portname_wetL.c_str (),
-                            jack_port_name (jackclient.port_inL));
+                            jack_port_name (port_inL));
     if (err) std::cerr << "warning: failed to connect to JACK output port " + 
                           prefs_->portname_wetL << std::endl;
                             
@@ -2030,9 +2087,9 @@ bool c_deconvolver::jack_init (std::string clientname,
   if (prefs_->portname_wetR.length () > 0) {
     debug ("got portname_wetL");
     // connect to portname_wetL
-    int err = jack_connect (jackclient.client,
+    int err = jack_connect (client,
                             prefs_->portname_wetR.c_str (),
-                            jack_port_name (jackclient.port_inR));
+                            jack_port_name (port_inR));
     if (err) std::cerr << "warning: failed to connect to JACK output port " + 
                           prefs_->portname_wetL << std::endl;
                             
@@ -2042,7 +2099,7 @@ bool c_deconvolver::jack_init (std::string clientname,
   }
   
   jack_inited = true;
-
+  
   // ...wuh duh fuuuh?
   //(void) chan_in;
   //(void) chan_out;
@@ -2051,65 +2108,117 @@ bool c_deconvolver::jack_init (std::string clientname,
   return true;
 }
 
-bool c_deconvolver::jack_shutdown () {
+bool c_jackclient::shutdown () {
   if (!jack_inited)
     return false;
-  jack_deactivate (jackclient.client);
-  jack_client_close (jackclient.client);
-  jackclient.client = nullptr;
-  jack_inited       = false;
+  jack_deactivate (client);
+  jack_client_close (client);
+  client = nullptr;
+  jack_inited = false;
   
   return true;
 }
 
-bool c_deconvolver::jack_playrec (const std::vector<float> &sweep,
-                                        std::vector<float> &captured_l,
-                                        std::vector<float> &captured_r) {
+bool c_jackclient::ready () {
+  return jack_inited;
+}
+
+bool c_jackclient::rec (std::vector<float> &sig) {
+  return false;
+}
+
+bool c_jackclient::rec (std::vector<float> &sig_l,
+                        std::vector<float> &sig_r) {
+  return false;
+}
+
+bool c_jackclient::play (const std::vector<float> &sig_l,
+                         const std::vector<float> &sig_r) {
+  debug ("start");
+  if (!jack_inited || !client) {
+    return false;
+  }
+
+  sig_out_l = sig_l;
+  sig_out_r = sig_r;
+  index   = 0;
+  play_go = false;
+  
+  size_t limit = sig_out_l.size ();
+  if (is_stereo && !sig_out_r.empty ())
+      limit = std::min (sig_out_l.size (), sig_out_r.size ());
+  
+  //std::cout << "Playing sweep via JACK... " << std::flush;
+  play_go = true;
+
+  while (index < sig_out_l.size () && ((!is_stereo) || index < sig_out_r.size ())) {
+    usleep (10 * 1000); // 10 ms
+  }
+
+  std::cout << "done.\n";
+
+  // let caller decide when to deactivate/close
+  debug ("end");
+  return true;
+}
+
+// for just 1 channel... do we play it in 1 channel or in both?
+bool c_jackclient::play (const std::vector<float> &sig) {
+  std::vector<float> dummy_r;
+  return play (sig, dummy_r);
+}
+
+bool c_jackclient::playrec (const std::vector<float> &out_l,
+                            const std::vector<float> &out_r,
+                            std::vector<float> &in_l,
+                            std::vector<float> &in_r) {
+  const std::vector<float> &sweep = out_l;
   if (sweep.empty ()) {
     std::cerr << "Sweep buffer is empty.\n";
     return false;
   }
 
   // ensure JACK client
-  if (!jack_inited || !jackclient.client) {
+  if (!jack_inited || !client) {
     //if (!jack_init(std::string (), chn_stereo, chn_stereo)) {
       return false;
     //}
   }
   
   // prepare state
-  jackclient.sig_out  = sweep;
-  jackclient.index    = 0;
-  jackclient.play_go  = false;
+  sig_out_l  = out_l;
+  sig_out_r  = out_r;
+  index    = 0;
+  play_go  = false;
 
   // capture same length + 2 sec. extra tail
-  const size_t extra_tail = (size_t) (2.0 * jackclient.samplerate); // 0.5s
-  jackclient.rec_total = sweep.size () + extra_tail;
-  jackclient.sig_in_L.assign (jackclient.rec_total, 0.0f);
-  jackclient.rec_index = 0;
-  jackclient.rec_done  = false;
-  jackclient.rec_go    = false;
-  jackclient.is_stereo = (prefs_->portname_wetR.length () > 0);
-  if (jackclient.is_stereo)
-    jackclient.sig_in_R.assign (jackclient.rec_total, 0.0f);
+  const size_t extra_tail = (size_t) (2.0 * samplerate); // 0.5s
+  rec_total = sweep.size () + extra_tail;
+  sig_in_l.assign (rec_total, 0.0f);
+  rec_index = 0;
+  rec_done  = false;
+  rec_go    = false;
+  is_stereo = (prefs_->portname_wetR.length () > 0);
+  if (is_stereo)
+    sig_in_r.assign (rec_total, 0.0f);
 
   std::cout << "Playing + recording sweep via JACK... " << std::flush;
-  jackclient.play_go = true;
-  jackclient.rec_go  = true;
+  play_go = true;
+  rec_go  = true;
 
   // block until done, redraw ascii-art level meter
   size_t num_passes = 0;
   float pl, pr;
   char line [256];
-  while ((jackclient.index < jackclient.sig_out.size ()) ||
-         (!jackclient.rec_done)) {
+  while ((index < sig_out_l.size () && index < sig_out_r.size ()) ||
+         (!rec_done)) {
     usleep (10 * 1000); // 10 ms
     num_passes++;
     if (num_passes % 3 == 0) { // redraw at every ~= 30 ms
       //CP
-      pl = std::max (std::fabs (jackclient.peak_plus_l), std::fabs (jackclient.peak_minus_l));
-      pr = std::max (std::fabs (jackclient.peak_plus_r), std::fabs (jackclient.peak_minus_r));
-      jackclient.peak_ack = true;
+      pl = std::max (std::fabs (peak_plus_l), std::fabs (peak_minus_l));
+      pr = std::max (std::fabs (peak_plus_r), std::fabs (peak_minus_r));
+      peak_ack = true;
       //std::cout << "peak L=" << pl << ", peak R=" << pr << "\n";
     }
   }
@@ -2117,32 +2226,13 @@ bool c_deconvolver::jack_playrec (const std::vector<float> &sweep,
   std::cout << "done.\n";
 
   // copy captured mono buffer out
-  captured_l = jackclient.sig_in_L;
+  in_l = sig_in_l;
+  if (is_stereo)
+    in_r = sig_in_r;
 
   return true;
 }
 
-bool c_deconvolver::jack_play (std::vector<float> &sig) {
-  if (!jack_inited || !jackclient.client) {
-    return false;
-  }
-
-  jackclient.sig_out = sig;
-  jackclient.index   = 0;
-  jackclient.play_go = false;
-
-  std::cout << "Playing sweep via JACK... " << std::flush;
-  jackclient.play_go = true;
-
-  while (jackclient.index < jackclient.sig_out.size ()) {
-    usleep (10 * 1000); // 10 ms
-  }
-
-  std::cout << "done.\n";
-
-  // let caller decide when to deactivate/close
-  return true;
-}
 #endif
 
 static void print_usage (const char *prog, bool full = false) {
@@ -2531,7 +2621,7 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
             return ret_err;
         }
         opt.marker_gap_seconds = std::atof (argv [i]);
-        if (opt.preroll_seconds < 0.0) {
+        if (opt.marker_gap_seconds < 0.0) {
             std::cerr << "Post-marker gap length cannot be negative.\n";
             return ret_err;
         }
@@ -2693,6 +2783,7 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
 int main (int argc, char **argv) {
   debug ("start");
   s_prefs p;
+  char realjackname [256] = { 0 };
   
   int paths_bf = parse_args (argc, argv, p);
   if (paths_bf == -1 || p.mode == deconv_mode::mode_error) {
@@ -2708,17 +2799,18 @@ int main (int argc, char **argv) {
   }
   
   // our main deconvolver object
-  c_deconvolver dec(&p);
+  c_deconvolver dec (&p);
   
   // using jack at all?
 #ifdef USE_JACK
+  
   if (p.dry_source == src_jack || p.wet_source == src_jack) {
-    char realjackname [256] = { 0 };
     snprintf (realjackname, 255, p.jack_name.c_str (), argv [0]);
-    dec.jack_init (std::string (realjackname),
-               (p.wet_source == src_jack ? chn_mono : chn_none),
-               (p.dry_source == src_jack || p.mode == deconv_mode::mode_playsweep ?
-                chn_mono : chn_none));
+    
+    if (!dec.init_audio (realjackname, p.sweep_sr, true) || !dec.audio_ready ()) {
+      std::cout << "Error initializing audio\n";
+      return 1;
+    }
   }
 #endif
   
@@ -2759,7 +2851,7 @@ int main (int argc, char **argv) {
                        p.sweep_f1,
                        p.sweep_f2,
                        sweep);
-    if (!write_mono_wav(p.out_path.c_str(), sweep, p.sweep_sr)) {
+    if (!write_mono_wav (p.out_path.c_str (), sweep, p.sweep_sr)) {
       return 1;
     }
     if (!p.quiet) {
@@ -2789,47 +2881,47 @@ int main (int argc, char **argv) {
       std::string str;
       std::getline(std::cin, str);
     }
-
-    int retval = dec.jack_play(sweep);
-    dec.jack_shutdown();
+    
+    int play_ok = dec.audio->play (sweep);
+    dec.audio->shutdown();
     
     debug("return");
-    return retval;
+    return play_ok ? 0 : 1;
   }
 
   // normal deconvolution path (with or without JACK)
   // Special "live" JACK→IR mode: dry=JACK, wet=JACK
   if (p.dry_source == src_jack && p.wet_source == src_jack) {
-      generate_log_sweep(p.sweep_seconds,
-                         p.preroll_seconds,
-                         p.marker_seconds,
-                         p.marker_gap_seconds,
-                         p.sweep_sr,
-                         p.sweep_amp_db,
-                         p.sweep_f1,
-                         p.sweep_f2,
-                         sweep);
+    generate_log_sweep(p.sweep_seconds,
+                       p.preroll_seconds,
+                       p.marker_seconds,
+                       p.marker_gap_seconds,
+                       p.sweep_sr,
+                       p.sweep_amp_db,
+                       p.sweep_f1,
+                       p.sweep_f2,
+                       sweep);
 
-      std::vector<float> wet_l;
-      std::vector<float> wet_r;
+    std::vector<float> wet_l;
+    std::vector<float> wet_r;
 
-      if (p.sweepwait) {
-        std::cout << "Press enter to play and record sinewave sweep... ";
-        std::string str;
-        std::getline(std::cin, str);
-      }
-
-      if (!dec.jack_playrec(sweep, wet_l, wet_r)) {
-        debug("return");
-        return 1;
-      }
-
-      if (!dec.set_dry_from_buffer(sweep, p.sweep_sr)) return 1;
-      if (!dec.set_wet_from_buffer(wet_l, std::vector<float>(), p.sweep_sr)) return 1;
-
-      if (!dec.output_ir(p.out_path.c_str(), p.ir_length_samples)) return 1;
+    if (p.sweepwait) {
+      std::cout << "Press enter to play and record sinewave sweep... ";
+      std::string str;
+      std::getline(std::cin, str);
+    }
+    
+    if (!dec.audio->playrec(sweep, std::vector<float> (), wet_l, wet_r)) {
       debug("return");
-      return 0;
+      return 1;
+    }
+
+    if (!dec.set_dry_from_buffer (sweep, p.sweep_sr)) return 1;
+    if (!dec.set_wet_from_buffer (wet_l, std::vector<float>(), p.sweep_sr)) return 1;
+
+    if (!dec.output_ir(p.out_path.c_str(), p.ir_length_samples)) return 1;
+    debug("return");
+    return 0;
   }
 #endif
 

@@ -41,6 +41,8 @@
 #include <cmath>
 #include <algorithm>
 #include <cstdlib>
+#include <stdio.h>
+#include <stdint.h>
 #include <unistd.h>
 #include <sys/time.h>
 #include <sys/stat.h>
@@ -54,6 +56,7 @@
 #include <fftw3.h>
 #ifdef USE_JACK
 #include <jack/jack.h>
+class c_jackclient;
 #endif
 
 #define MARKER_FREQ                     1000 // in Hz
@@ -92,11 +95,11 @@ enum sig_source {
   src_generate
 };
 
-enum sig_channels {
+/*enum sig_channels {
   chn_none,
   chn_mono,
   chn_stereo
-};
+};*/
 
 enum align_method {
   align_marker,
@@ -105,6 +108,8 @@ enum align_method {
   align_none,
   align_method_max
 };
+
+class c_deconvolver;
 
 struct s_prefs {
   deconv_mode mode = deconv_mode::mode_deconvolve;
@@ -142,22 +147,22 @@ struct s_prefs {
   bool sweepwait                    = false;
   align_method align                = align_marker_dry;
 
-  double sweep_seconds      = DEFAULT_SWEEP_SEC;   // default value not really used
-  double preroll_seconds    = DEFAULT_PREROLL_SEC;
-  double marker_seconds     = DEFAULT_MARKER_SEC;  // alignment marker
-  double marker_gap_seconds = DEFAULT_MARKGAP_SEC;
-  //double regularization_db  = -120.0; // "noise floor" - see calc_ir_raw ()
-  size_t sweep_offset_smp   = DEFAULT_SWEEP_OFFSET_SMP;
-  int    sweep_sr           = DEFAULT_SAMPLE_RATE;
-  bool   sweep_sr_given     = false; // used for warning user<->file sample rate mismatch
-  float  sweep_f1           = DEFAULT_F1;
-  float  sweep_f2           = DEFAULT_F2; // DONE: cap to just below nyquist freq
-  float  sweep_amp_db       = DEFAULT_SWEEP_AMPLITUDE_DB;
-  float  sweep_silence_db   = DEFAULT_SWEEP_SILENCE_THRESH_DB;
-  float  ir_silence_db      = DEFAULT_IR_SILENCE_THRESH_DB;
+  double sweep_seconds         = DEFAULT_SWEEP_SEC;   // default value not really used
+  double preroll_seconds       = DEFAULT_PREROLL_SEC;
+  double marker_seconds        = DEFAULT_MARKER_SEC;  // alignment marker
+  double marker_gap_seconds    = DEFAULT_MARKGAP_SEC;
+  //double regularization_db     = -120.0; // "noise floor" - see calc_ir_raw ()
+  int64_t sweep_offset_smp     = DEFAULT_SWEEP_OFFSET_SMP;
+  int    sweep_sr              = DEFAULT_SAMPLE_RATE;
+  bool   sweep_sr_given        = false; // used for warning user<->file sample rate mismatch
+  float  sweep_f1              = DEFAULT_F1;
+  float  sweep_f2              = DEFAULT_F2; // DONE: cap to just below nyquist freq
+  float  sweep_amp_db          = DEFAULT_SWEEP_AMPLITUDE_DB;
+  float  sweep_silence_db      = DEFAULT_SWEEP_SILENCE_THRESH_DB;
+  float  ir_silence_db         = DEFAULT_IR_SILENCE_THRESH_DB;
   float  ir_start_silence_db   = DEFAULT_IR_SILENCE_THRESH_DB;
-  float  headroom_seconds   = 0.0f;
-  float  normalize_amp      = DEFAULT_NORMALIZE_AMP; // TODO: command opt line for this 
+  float  headroom_seconds      = 0.0f;
+  float  normalize_amp         = DEFAULT_NORMALIZE_AMP; // TODO: command opt line for this 
   
   std::string jack_name = DEFAULT_JACK_NAME;
   //std::string jack_portname;
@@ -166,8 +171,57 @@ struct s_prefs {
   size_t cache_dry_gap_len    = 0;
 };
 
+class c_audioclient {
 #ifdef USE_JACK
-struct s_jackclient {
+friend c_jackclient;
+#endif
+public:
+  c_audioclient (c_deconvolver *dec);
+  virtual ~c_audioclient ();
+  virtual bool init () { return false; }
+  virtual bool init (std::string clientname = "",
+                     int samplerate = -1,
+                     bool stereo_out = true) = 0;
+  virtual bool shutdown () = 0;
+  virtual bool ready () = 0;
+  virtual bool play (const std::vector<float> &out) = 0;
+  virtual bool play (const std::vector<float> &out_l,
+                     const std::vector<float> &out_r) = 0;
+  virtual bool rec (std::vector<float> &in_l) = 0;
+  virtual bool rec (std::vector<float> &in_l,
+                    std::vector<float> &in_r) = 0;
+  virtual bool playrec (const std::vector<float> &out_l,
+                        const std::vector<float> &out_r,
+                        std::vector<float> &in_l,
+                        std::vector<float> &in_r) = 0;
+private:
+  c_deconvolver *dec_;
+  s_prefs *prefs_;
+  bool is_stereo = false;
+};
+
+#ifdef USE_JACK
+class c_jackclient : public c_audioclient {
+public:
+  c_jackclient (c_deconvolver *dec);
+  ~c_jackclient ();
+
+  virtual bool init (std::string clientname = "",
+                     int samplerate = -1,
+                     bool stereo = true);
+  virtual bool shutdown ();
+  virtual bool ready ();
+  virtual bool play (const std::vector<float> &out);
+  virtual bool play (const std::vector<float> &out_l,
+                     const std::vector<float> &out_r);
+  virtual bool rec (std::vector<float> &in_l);
+  virtual bool rec (std::vector<float> &in_l,
+                    std::vector<float> &in_r);
+  virtual bool playrec (const std::vector<float> &out_l,
+                        const std::vector<float> &out_r,
+                        std::vector<float> &in_l,
+                        std::vector<float> &in_r);
+            
   bool play_go = false;
   bool rec_go  = false;
   bool monitor_only = false;
@@ -184,11 +238,12 @@ struct s_jackclient {
   jack_port_t   *port_outL = NULL;
   //jack_port_t   *port_outR = NULL; // not used for now
 
-  std::vector<float> sig_in_L; // mono/left wet capture (mix of L/R)
-  std::vector<float> sig_in_R; //
-  std::vector<float> sig_out;  // sweep to play
+  std::vector<float> sig_in_l; // mono/left wet capture (mix of L/R)
+  std::vector<float> sig_in_r; //
+  std::vector<float> sig_out_l;  // sweep to play
+  std::vector<float> sig_out_r;  // sweep to play
   
-  // for our little ascii-art meter
+  // for meters from UI
   float peak_plus_l  = 0;
   float peak_plus_r  = 0;
   float peak_minus_l = 0;
@@ -203,21 +258,31 @@ struct s_jackclient {
 
   bool rec_done = false;
   //bool play_done = false;
+  
+private:
+  int get_default_playback (int howmany, std::vector<std::string> &v);
+  int get_default_capture (int howmany, std::vector<std::string> &v);
+  
+  bool jack_inited = false;
 };
 #endif
 
 class c_deconvolver {
+friend c_audioclient;
 public:
   //c_deconvolver () = default;
-  c_deconvolver (struct s_prefs *prefs = NULL);
+  c_deconvolver (struct s_prefs *prefs = NULL, std::string name = "");
   //~c_deconvolver ();
   
   void set_prefs (s_prefs *prefs);
   void set_name (std::string str);
   bool load_sweep_dry (const char *in_filename);
   bool load_sweep_wet (const char *in_filename);
-  bool output_ir (const char *out_filename, long ir_length_samples = 0);
+  bool output_ir (const char *out_filename, long int ir_length_samples = 0);
   int samplerate ();
+  bool init_audio (std::string name, int samplerate, bool stereo);
+  bool end_audio ();
+  bool audio_ready ();
   
   /*static bool calc_ir_raw (const std::vector<float> &wet,
                           const std::vector<float>  &dry,
@@ -240,13 +305,13 @@ public:
                             const std::vector<float>& bufR,
                             int sr);
 #ifdef USE_JACK
-  bool jack_init     (const std::string clientname,
+  /*bool jack_init     (const std::string clientname,
                       int samplerate, bool stereo);
   bool jack_shutdown ();
   bool jack_play     (std::vector<float> &buf);
   bool jack_playrec  (const std::vector<float> &buf,
                       std::vector<float> &in_l,
-                      std::vector<float> &in_r);
+                      std::vector<float> &in_r);*/
 
   /*bool jack_playrec_sweep (const std::vector<float> &sweep,
                            int samplerate,
@@ -254,23 +319,22 @@ public:
                            const char *jack_in_port,
                            std::vector<float> &captured);*/
 #endif
-private:
   bool set_samplerate_if_needed (int sr);
+  c_audioclient *audio = NULL;
+  
+private:
 
-#ifdef USE_JACK
-  s_jackclient jackclient;
-#endif
   int samplerate_ = 0;
   std::vector<float> dry_;
   std::vector<float> wet_L_;
   std::vector<float> wet_R_;
   bool have_dry_ = false;
   bool have_wet_ = false;
-  bool jack_inited = false;
   size_t dry_offset_ = 0;
   size_t wet_offset_ = 0;
   s_prefs *prefs_ = NULL;
   s_prefs default_prefs_;
+  std::string audio_clientname;
 };
 
 #undef __IN_DECONVOLVER_H
