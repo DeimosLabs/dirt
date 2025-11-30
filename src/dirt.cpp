@@ -256,9 +256,12 @@ static void print_usage (const char *prog, bool full = false) {
     "  -X, --sweep-f1 F         Sweep start frequency [" << DEFAULT_F1 << "]\n"
     "  -Y, --sweep-f2 F         Sweep end frequency [" << DEFAULT_F2 << "]\n";
   if (full) out <<
-    "  -p, --preroll SEC        Prepend leading silence of SEC seconds\n"
-    "  -m, --marker SEC         Prepend alignment marker of SEC seconds\n"
-    "  -g, --gap SEC            Add gap of SEC seconds after marker\n"
+    "  -p, --preroll SEC        Prepend SEC leading silence, in seconds ["
+                                << DEFAULT_PREROLL_SEC << "]\n"
+    "  -m, --marker SEC         Prepend SEC alignment marker, in seconds ["
+                                << DEFAULT_MARKER_SEC << "]\n"
+    "  -g, --gap SEC            Add SEC gap after marker , in seconds ["
+                                << DEFAULT_MARKGAP_SEC << "]\n"
     "  -W, --wait               Wait for input before playing sweep\n"
 #ifdef USE_JACK
     //"  -j, --jack-port PORT     Connect to this JACK port\n"
