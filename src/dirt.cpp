@@ -41,7 +41,7 @@
 c_audioclient::c_audioclient (c_deconvolver *dec) {
   debug ("start");
   dec_ = dec;
-  prefs_ = dec->prefs_;
+  prefs_ = dec ? dec->prefs_ : NULL;
   debug ("end");
 }
 
@@ -56,6 +56,18 @@ void c_audioclient::peak_acknowledge () {
   clip_r = false;
   peak_new = false;
   audio_error = false;
+}
+
+void c_audioclient::clear_recording () {
+  sig_in_l.clear ();
+  sig_in_r.clear ();
+  rec_index = 0;
+  rec_total = 0;
+  //rec_done  = false;
+}
+
+bool c_audioclient::has_recording () const {
+  return (sig_in_l.size () > 0 || sig_in_r.size () > 0) && state == ST_IDLE;
 }
 
 static bool stdin_has_enter()   /* 100% copy-pasted from chatgpt */
@@ -848,13 +860,19 @@ int main (int argc, char **argv) {
       std::getline(std::cin, str);
     }
     
-    if (!dec.audio_playrec (sweep, std::vector<float> (), wet_l, wet_r)) {
+    std::vector<float> dummy_r_out;
+    if (!dec.audio_playrec (sweep, dummy_r_out)) {
       debug ("return");
       return 1;
     }
-    
+    CP
+    while (!dec.audio_playback_done ()){
+      usleep (10 * 1000);
+    }
+    CP
     if (!dec.set_dry_from_buffer (sweep, p.sweep_sr)) return 1;
-    if (!dec.set_wet_from_buffer (wet_l, std::vector<float>(), p.sweep_sr)) return 1;
+    if (!dec.set_wet_from_buffer (dec.audio->get_recorded_l (),
+                                  dec.audio->get_recorded_r (), p.sweep_sr)) return 1;
     if (!dec.output_ir (p.out_path.c_str(), p.ir_length_samples)) return 1;
     
     debug ("return");

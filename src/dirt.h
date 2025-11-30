@@ -178,9 +178,6 @@ struct s_prefs;
 // this abstract class is mostly "red tape" between
 // c_deconvolver and audio backends
 class c_audioclient {
-#ifdef USE_JACK
-friend c_jackclient;
-#endif
 public:
   c_audioclient (c_deconvolver *dec);
   virtual ~c_audioclient ();
@@ -194,13 +191,17 @@ public:
   virtual bool play (const std::vector<float> &out_l,
                      const std::vector<float> &out_r) = 0;
   virtual bool arm_record () = 0;
-  virtual bool rec (std::vector<float> &in_l) = 0;
-  virtual bool rec (std::vector<float> &in_l,
-                    std::vector<float> &in_r) = 0;
+  virtual bool rec () = 0;
   virtual bool playrec (const std::vector<float> &out_l,
-                        const std::vector<float> &out_r,
-                        std::vector<float> &in_l,
-                        std::vector<float> &in_r) = 0;
+                        const std::vector<float> &out_r) = 0;
+  virtual bool stop () = 0;
+  virtual bool stop_playback () = 0;
+  virtual bool stop_record () = 0;
+  
+  const std::vector<float> &get_recorded_l () const { return sig_in_l; }
+  const std::vector<float> &get_recorded_r () const { return sig_in_r; }
+  void clear_recording ();
+  bool has_recording () const;
   
   // call this after reading and displaying peak/clip/error data
   void peak_acknowledge ();
@@ -212,7 +213,6 @@ public:
   std::vector<float> sig_out_l;  // sweep to play
   std::vector<float> sig_out_r;  // sweep to play
   
-  // for meters from UI
   float peak_plus_l  = 0;
   float peak_plus_r  = 0;
   float peak_minus_l = 0;
@@ -237,10 +237,10 @@ public:
   bool is_stereo = false;
   int samplerate = 0;
   int bufsize = 256; // sensible default in case we can't determine
-  bool rec_done = false;
   //bool play_done = false;
+  audiostate state = ST_IDLE;
 
-private:
+protected:
   c_deconvolver *dec_;
   s_prefs *prefs_;
 };

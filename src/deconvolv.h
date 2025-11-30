@@ -93,20 +93,22 @@ public:
                      bool stereo_out = true);
   virtual bool audio_shutdown ();
   virtual bool audio_ready ();
+  virtual bool audio_playback_done ();
+  virtual audiostate get_audio_state ();
   virtual bool audio_play (const std::vector<float> &out);
   virtual bool audio_play (const std::vector<float> &out_l,
                      const std::vector<float> &out_r);
   virtual bool audio_arm_record ();
-  virtual bool audio_rec (std::vector<float> &in);
-  virtual bool audio_rec (std::vector<float> &in_l,
-                    std::vector<float> &in_r);
+  virtual bool audio_rec ();
   virtual bool audio_playrec (const std::vector<float> &out_l,
-                        const std::vector<float> &out_r,
-                        std::vector<float> &in_l,
-                        std::vector<float> &in_r);
+                              const std::vector<float> &out_r);
+  virtual bool audio_stop ();
+  virtual bool audio_stop_playback ();
+  virtual bool audio_stop_record ();
   
   // UI hooks for derived classes, audio backends should call these
   // override them for UI other than textmode
+  virtual int on_audio_idle () { return 0; }
   virtual int on_play_start (void *data = NULL);
   virtual int on_play_loop (void *data = NULL);
   virtual int on_play_stop (void *data = NULL);
@@ -160,7 +162,7 @@ public:
 
   c_audioclient *audio = NULL;
   
-private:
+protected:
   
   int playrec_loop_passes = 0;
   int vu_meter_size = ANSI_VU_METER_MIN_SIZE;

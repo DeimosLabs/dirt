@@ -28,13 +28,12 @@ public:
   virtual bool play (const std::vector<float> &out_l,
                      const std::vector<float> &out_r);
   virtual bool arm_record ();
-  virtual bool rec (std::vector<float> &in_l);
-  virtual bool rec (std::vector<float> &in_l,
-                    std::vector<float> &in_r);
+  virtual bool rec ();
   virtual bool playrec (const std::vector<float> &out_l,
-                        const std::vector<float> &out_r,
-                        std::vector<float> &in_l,
-                        std::vector<float> &in_r);
+                        const std::vector<float> &out_r);
+  virtual bool stop ();
+  virtual bool stop_playback ();
+  virtual bool stop_record ();
             
   jack_client_t *client = NULL;
   jack_port_t   *port_inL  = NULL;

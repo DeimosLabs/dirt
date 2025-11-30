@@ -811,42 +811,56 @@ bool c_deconvolver::audio_init (std::string clientname,
   return false;
 }
 
-bool c_deconvolver::audio_shutdown () {
+bool c_deconvolver::audio_shutdown () {CP
   if (audio) delete audio;
   return true; // for now
 }
 
-bool c_deconvolver::audio_ready () {
+bool c_deconvolver::audio_ready () {CP
   return audio && audio->ready ();
 }
 
-bool c_deconvolver::audio_play (const std::vector<float> &out) {
+bool c_deconvolver::audio_playback_done () {
+  //debug ("play_go=%d", audio->play_go);
+  return !audio->play_go;
+}
+
+audiostate c_deconvolver::get_audio_state () {CP
+  return audio->state;
+}
+
+bool c_deconvolver::audio_play (const std::vector<float> &out) {CP
   return audio && audio->play (out);
 }
 
 bool c_deconvolver::audio_play (const std::vector<float> &out_l,
-           const std::vector<float> &out_r) {
+           const std::vector<float> &out_r) {CP
   return audio && audio->play (out_l, out_r);
 }
 
-bool c_deconvolver::audio_arm_record () {
+bool c_deconvolver::audio_arm_record () {CP
   return audio && audio->arm_record ();
 }
 
-bool c_deconvolver::audio_rec (std::vector<float> &in) {
-  return audio && audio->rec (in);
-}
-
-bool c_deconvolver::audio_rec (std::vector<float> &in_l,
-          std::vector<float> &in_r) {
-  return audio && audio->rec (in_l, in_r);
+bool c_deconvolver::audio_rec () {
+  return audio && audio->rec ();
 }
 
 bool c_deconvolver::audio_playrec (const std::vector<float> &out_l,
-                      const std::vector<float> &out_r,
-                      std::vector<float> &in_l,
-                      std::vector<float> &in_r) {
-  return audio && audio->playrec (out_l, out_r, in_r, in_l);
+                      const std::vector<float> &out_r) {CP
+  return audio && audio->playrec (out_l, out_r);
+}
+
+bool c_deconvolver::audio_stop () {CP
+  return audio->stop ();
+}
+
+bool c_deconvolver::audio_stop_playback () {CP
+  return audio->stop_playback ();
+}
+
+bool c_deconvolver::audio_stop_record () {CP
+  return audio->stop_record ();
 }
 
 // TODO: these should just print messages like "recording/playing",
@@ -857,7 +871,11 @@ int c_deconvolver::on_arm_rec_start (void *data)     { return 0; }
 int c_deconvolver::on_arm_rec_stop (void *data)      { return 0; }
 int c_deconvolver::on_record_start (void *data)      { return 0; }
 int c_deconvolver::on_record_loop (void *data)       { return 0; }
-int c_deconvolver::on_record_stop (void *data)       { return 0; }
+
+int c_deconvolver::on_record_stop (void *data) { CP
+  audio_stop_playback ();
+  return 0;
+}
 
 int c_deconvolver::on_play_start (void *data)        {
   std::cout << "Playing sweep via " << audio-> backend_name << "... " << std::flush;
@@ -951,36 +969,36 @@ static void ansi_clear_to_endl () {
 }
 #endif
 
-int c_deconvolver::on_playrec_loop (void *data)      {
+int c_deconvolver::on_playrec_loop (void *data) {
   float pl, pr;
   bool xrun = false;
   
   if (audio->bufsize == 0) return -1;
   
-  const float sec_per_redraw = 1.0;
+  const float sec_per_redraw = 0.1;
   int redraw_every = (int) (sec_per_redraw * audio->samplerate / audio->bufsize);
   if (redraw_every < 1)
     redraw_every = 1;
   
   // TODO: calculate number of passes vs buffer size so we get ~= 30ms between redraws
   if (playrec_loop_passes % redraw_every == 0) {
-    debug ("sr=%d, buf=%d, st=%s redraw_every=%d",
-           audio->samplerate, audio->bufsize, audio->is_stereo ? "t" : "f", redraw_every);
+    //debug ("sr=%d, buf=%d, st=%s redraw_every=%d",
+    //       audio->samplerate, audio->bufsize, audio->is_stereo ? "t" : "f", redraw_every);
     
     pl = std::max (std::fabs (audio->peak_plus_l), std::fabs (audio->peak_minus_l));
     pr = std::max (std::fabs (audio->peak_plus_r), std::fabs (audio->peak_minus_r));
     
     if (audio->is_stereo) {  // 2 vu meters
       ansi_cursor_move_x (0);
-      debug ("print_vu_meter: left");
+      //debug ("print_vu_meter: left");
       print_vu_meter (pl, xrun);
-      debug ("print_vu_meter: right");
+      //debug ("print_vu_meter: right");
       ansi_cursor_move_to_x (1);
       print_vu_meter (pr, xrun);
       ansi_cursor_move_x (0);
       ansi_cursor_move_y (-2);
     } else {       // just 1 vu meter
-      debug ("print_vu_meter: mono");
+      //debug ("print_vu_meter: mono");
       print_vu_meter (pl, xrun);
       ansi_cursor_move_x (-1);
     }
@@ -1146,7 +1164,8 @@ bool c_deconvolver::set_wet_from_buffer (const std::vector<float>& bufL,
                                          int sr) {
   debug ("start");
   if (bufL.empty () && bufR.empty ()) {
-    std::cerr << "Wet buffers are empty.\n";
+    std::cerr << (prefs_->request_stereo ? "Wet buffers are empty.\n" :
+                                           "Wet buffer is empty.\n");
     return false;
   }
   if (!set_samplerate_if_needed (sr)) {
