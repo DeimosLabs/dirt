@@ -23,43 +23,68 @@
  * See header file and --help text for more info
  */
 
-#include "timestamp.h"
 #include "dirt.h"
+#include "timestamp.h"
 #include "deconvolv.h"
 #include "jack.h"
 
 #ifdef DEBUG
-#define CMDLINE_IMPLEMENTATION // This should only be in ONE implementation file!!
+#define CMDLINE_IMPLEMENTATION
 #define CMDLINE_DEBUG
-#include "cmdline.h"
+#include "cmdline/cmdline.h"
 #define debug(...) cmdline_debug(stderr,ANSI_RED,__FILE__,__LINE__,__FUNC__,__VA_ARGS__)
 #else
 #define debug(...)
 #endif
 
-static bool stdin_has_enter () {
-  fd_set rfds;
-  FD_ZERO(&rfds);
-  FD_SET(STDIN_FILENO, &rfds);
 
-  struct timeval tv;
-  tv.tv_sec  = 0;
-  tv.tv_usec = 0; // non-blocking
+c_audioclient::c_audioclient (c_deconvolver *dec) {
+  debug ("start");
+  dec_ = dec;
+  prefs_ = dec->prefs_;
+  debug ("end");
+}
 
-  int ret = select(STDIN_FILENO + 1, &rfds, nullptr, nullptr, &tv);
-  if (ret <= 0) return false;  // no data or error
+c_audioclient::~c_audioclient () { }
 
-  if (FD_ISSET(STDIN_FILENO, &rfds)) {
-    char buf[64];
-    ssize_t n = read(STDIN_FILENO, buf, sizeof(buf));
-    if (n > 0) {
-      for (ssize_t i = 0; i < n; ++i) {
-        if (buf[i] == '\n' || buf[i] == '\r')
-          return true;
-      }
+void c_audioclient::peak_acknowledge () {
+  peak_plus_l = 0;
+  peak_plus_r = 0;
+  peak_minus_l = 0;
+  peak_minus_r = 0;
+  clip_l = false;
+  clip_r = false;
+  peak_new = false;
+  audio_error = false;
+}
+
+static bool stdin_has_enter()   /* 100% copy-pasted from chatgpt */
+{
+    fd_set rfds;
+    FD_ZERO(&rfds);
+    FD_SET(STDIN_FILENO, &rfds);
+
+    struct timeval tv;
+    tv.tv_sec  = 0;
+    tv.tv_usec = 0; // non-blocking
+
+    int ret = select(STDIN_FILENO + 1, &rfds, nullptr, nullptr, &tv);
+    if (ret <= 0) return false;  // no data or error
+
+    if (FD_ISSET(STDIN_FILENO, &rfds))
+    {
+        char buf[64];
+        ssize_t n = read(STDIN_FILENO, buf, sizeof(buf));
+        if (n > 0)
+        {
+            for (ssize_t i = 0; i < n; ++i)
+            {
+                if (buf[i] == '\n' || buf[i] == '\r')
+                    return true;
+            }
+        }
     }
-  }
-  return false;
+    return false;
 }
 
 // for now just check if given name contains a ":"
@@ -72,7 +97,6 @@ static bool looks_like_jack_port (const std::string &s) {
 
   return false;
 }
-
 
 // new: marker_gap_seconds, preroll_seconds
 static void generate_log_sweep (double seconds,
@@ -180,7 +204,7 @@ static void print_usage (const char *prog, bool full = false) {
     "  -o, --out FILE           Output IR WAV file\n" <<
     (full ? 
     "  -n, --len N              IR length in samples [0 = auto]\n" : "") <<
-    "  -A, --align METHOD       Choose alignment method" << (full ? ": [none]\n"
+    "  -A, --align METHOD       Choose alignment method" << (full ? ": [dry]\n"
     "                             none: assume already aligned sweeps\n"
     "                             marker: try to detect marker/gap in both sweeps\n"
     "                             dry: detect marker/gap in dry, reuse in wet\n"
@@ -194,22 +218,23 @@ static void print_usage (const char *prog, bool full = false) {
     "  -T, --ir-thresh dB       Threshold in dB for IR silence detection\n"
     "                             (negative) ["
                              << DEFAULT_IR_SILENCE_THRESH_DB << "]\n"
+    "  -O, --offset N           Offset (delay) wet sweep by N samples [10]\n"
     "  -z, --zero-peak          Try to align peak to zero"
                              << (DEFAULT_ZEROPEAK ? " [default]\n" : "\n") <<
     "  -Z, --no-zero-peak       Don't try to align peak to zero"
-                             << (!DEFAULT_ZEROPEAK ? " [default]\n" : "\n") <<
-    "\n";
-    out <<
+                             << (!DEFAULT_ZEROPEAK ? " [default]\n" : "\n") << 
+    "  -M, --mono               Force mono/single channel [no/autodetect]\n"
     "  -q, --quiet              Less verbose output\n"
     "  -v, --verbose            More verbose output\n"
     << (full ? 
-    "  -D, --dump PREFIX        Dump wav files of sweeps used by deconvolver\n"
-    : "") <<
-    "\n" <<
-    (full ? "Sweep generator" : "Some sweep generator") << " options: [default]\n" <<
-    "  -s, --makesweep          Generate sweep WAV instead of deconvolving\n"
+    "  -D, --dump PREFIX        Dump exact wav files of deconvolver input\n"
+    : "\n");
+    out <<
+    (full ? "\nSweep generator" : "\nSome sweep generator") << " options: [default]\n" <<
+    "  -s, --makesweep          Generate sweep WAV file\n"
 #ifdef USE_JACK
-    "  -S, --playsweep          Play sweep via JACK instead of deconvolving\n"
+    "  -S, --playsweep          Generate sweep and play it via " 
+    << AUDIO_BACKEND <<"\n"
 #endif
     "  -R, --sweep-sr SR        Sweep samplerate [48000]\n"
     "  -L, --sweep-seconds SEC  Sweep length in seconds [30]\n"
@@ -217,7 +242,6 @@ static void print_usage (const char *prog, bool full = false) {
     "  -X, --sweep-f1 F         Sweep start frequency [" << DEFAULT_F1 << "]\n"
     "  -Y, --sweep-f2 F         Sweep end frequency [" << DEFAULT_F2 << "]\n";
   if (full) out <<
-    "  -O, --offset N           Offset (delay) wet sweep by N samples [10]\n"
     "  -p, --preroll SEC        Prepend leading silence of SEC seconds\n"
     "  -m, --marker SEC         Prepend alignment marker of SEC seconds\n"
     "  -g, --gap SEC            Add gap of SEC seconds after marker\n"
@@ -366,7 +390,7 @@ static bool resolve_sources (s_prefs &opt, int paths_bf) {
   }
   
   if (opt.dry_source == src_jack && opt.wet_source == src_jack) {
-    opt.preroll_seconds = 0.01;
+    opt.preroll_seconds = 0.1;
     opt.marker_seconds = 0;
     opt.marker_gap_seconds = 0;
   }
@@ -451,6 +475,8 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
                   << argv [i] << " (must be between -200 and 0)\n";
         return ret_err;
       }
+    } else if (arg == "-M" || arg == "--mono") {
+      opt.request_stereo = false;
     } else if (arg == "-q" || arg == "--quiet") {
       opt.quiet = true;
     } else if (arg == "-v" || arg == "--verbose") {
@@ -597,7 +623,7 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
           return ret_err;
       }
       // nothing else to validate here
-      debug("end");
+      debug ("end");
       return bf;
   }
 
@@ -611,7 +637,7 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
           opt.jack_autoconnect_dry = true;
           bf |= 1;
       }
-      debug("end");
+      debug ("end");
       return bf;
   }
 #else
@@ -624,7 +650,7 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
   // --- Deconvolution mode: original bitfield logic ---
   if (opt.mode != deconv_mode::mode_deconvolve) {
       // Shouldn't happen, but just in case
-      debug("end");
+      debug ("end");
       return bf;
   }
 
@@ -685,7 +711,7 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
       break;
   }
 
-  debug("end");
+  debug ("end");
   return bf;
 }
 
@@ -716,7 +742,7 @@ int main (int argc, char **argv) {
   if (p.dry_source == src_jack || p.wet_source == src_jack) {
     snprintf (realjackname, 255, p.jack_name.c_str (), argv [0]);
     
-    if (!dec.init_audio (realjackname, p.sweep_sr, true) || !dec.audio_ready ()) {
+    if (!dec.audio_init (realjackname, p.sweep_sr, p.request_stereo) || !dec.audio_ready ()) {
       std::cout << "Error initializing audio\n";
       return 1;
     }
@@ -768,7 +794,7 @@ int main (int argc, char **argv) {
                   << " (" << sweep.size() << " samples @ "
                   << p.sweep_sr << " Hz)\n";
     }
-    debug("return");
+    debug ("return");
     return 0;
   }
 
@@ -794,12 +820,12 @@ int main (int argc, char **argv) {
     int play_ok = dec.audio->play (sweep);
     dec.audio->shutdown();
     
-    debug("return");
+    debug ("return");
     return play_ok ? 0 : 1;
   }
 
   // normal deconvolution path (with or without JACK)
-  // Special "live" JACK→IR mode: dry=JACK, wet=JACK
+  // Special "live" JACK->IR mode: dry=JACK, wet=JACK
   if (p.dry_source == src_jack && p.wet_source == src_jack) {
     generate_log_sweep(p.sweep_seconds,
                        p.preroll_seconds,
@@ -810,26 +836,28 @@ int main (int argc, char **argv) {
                        p.sweep_f1,
                        p.sweep_f2,
                        sweep);
-
+    
     std::vector<float> wet_l;
     std::vector<float> wet_r;
-
+    
     if (p.sweepwait) {
+      CP
+      dec.audio_arm_record ();
       std::cout << "Press enter to play and record sinewave sweep... ";
       std::string str;
       std::getline(std::cin, str);
     }
     
-    if (!dec.audio->playrec(sweep, std::vector<float> (), wet_l, wet_r)) {
-      debug("return");
+    if (!dec.audio_playrec (sweep, std::vector<float> (), wet_l, wet_r)) {
+      debug ("return");
       return 1;
     }
-
+    
     if (!dec.set_dry_from_buffer (sweep, p.sweep_sr)) return 1;
     if (!dec.set_wet_from_buffer (wet_l, std::vector<float>(), p.sweep_sr)) return 1;
-
-    if (!dec.output_ir(p.out_path.c_str(), p.ir_length_samples)) return 1;
-    debug("return");
+    if (!dec.output_ir (p.out_path.c_str(), p.ir_length_samples)) return 1;
+    
+    debug ("return");
     return 0;
   }
 #endif
@@ -856,7 +884,7 @@ int main (int argc, char **argv) {
 #else
     std::cerr << "Error: Dry JACK not supported (built without JACK).\n";
 #endif
-    debug("return");
+    debug ("return");
     return 1;
   }
 
@@ -868,13 +896,13 @@ int main (int argc, char **argv) {
 #else
     std::cerr << "Error: Wet JACK not supported (built without JACK).\n";
 #endif
-    debug("return");
+    debug ("return");
     return 1;
   }
   
   std::cout << "Detected sample rate: " << dec.samplerate () << std::endl;
   if (!dec.output_ir (p.out_path.c_str (), p.ir_length_samples)) {
-    debug("return");
+    debug ("return");
     return 1;
   }
 

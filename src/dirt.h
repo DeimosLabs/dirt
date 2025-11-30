@@ -52,6 +52,7 @@
 #include <fftw3.h>
 #ifdef USE_JACK
 #include <jack/jack.h>
+#define AUDIO_BACKEND "JACK"
 class c_jackclient;
 #endif
 
@@ -73,6 +74,8 @@ class c_jackclient;
 #define DEFAULT_MARKER_SEC              0.1
 #define DEFAULT_MARKGAP_SEC             1.0
 #define DEFAULT_ZEROPEAK                true // try to zero-align peak?
+#define ANSI_VU_METER_MIN_SIZE          64 // for our ascii-art [---- ] meters
+#define ANSI_VU_REDRAW_EVERY            0.03 // in seconds
 
 //#define THRESH_RELATIVE // relative to peak, comment out for absolute
 //#define DISABLE_LEADING_SILENCE_DETECTION // for debugging
@@ -103,6 +106,15 @@ enum align_method {
   align_silence,
   align_none,
   align_method_max
+};
+
+enum audiostate {
+    ST_IDLE,
+    ST_MONITOR,
+    ST_PLAY,
+    ST_REC,
+    ST_PLAYREC,
+    ST_PLAYMONITOR
 };
 
 // our random number generator, entirely inline/header
@@ -163,6 +175,8 @@ private:
 class c_deconvolver;
 struct s_prefs;
 
+// this abstract class is mostly "red tape" between
+// c_deconvolver and audio backends
 class c_audioclient {
 #ifdef USE_JACK
 friend c_jackclient;
@@ -179,6 +193,7 @@ public:
   virtual bool play (const std::vector<float> &out) = 0;
   virtual bool play (const std::vector<float> &out_l,
                      const std::vector<float> &out_r) = 0;
+  virtual bool arm_record () = 0;
   virtual bool rec (std::vector<float> &in_l) = 0;
   virtual bool rec (std::vector<float> &in_l,
                     std::vector<float> &in_r) = 0;
@@ -186,7 +201,12 @@ public:
                         const std::vector<float> &out_r,
                         std::vector<float> &in_l,
                         std::vector<float> &in_r) = 0;
-
+  
+  // call this after reading and displaying peak/clip/error data
+  void peak_acknowledge ();
+  c_deconvolver *get_deconvolver () { return dec_; }
+  
+  std::string        backend_name = "default"; // or maybe "unknown"?
   std::vector<float> sig_in_l; // mono/left wet capture (mix of L/R)
   std::vector<float> sig_in_r; //
   std::vector<float> sig_out_l;  // sweep to play
@@ -199,19 +219,30 @@ public:
   float peak_minus_r = 0;
   bool clip_l        = false;
   bool clip_r        = false;
-  bool peak_ack      = false;
+  bool audio_error   = false;
+  bool peak_new      = false;
 
   size_t index     = 0;  // playback index
   size_t rec_index = 0;  // record index
   size_t rec_total = 0;  // how many samples to capture
 
+  bool play_go = false;
+  bool rec_go  = false;
+  bool monitor_only = false;
+  
+  /*std::string portname_dry = "";
+  std::string portname_wetL = "";
+  std::string portname_wetR = "";*/
+  
+  bool is_stereo = false;
+  int samplerate = 0;
+  int bufsize = 256; // sensible default in case we can't determine
   bool rec_done = false;
   //bool play_done = false;
 
 private:
   c_deconvolver *dec_;
   s_prefs *prefs_;
-  bool is_stereo = false;
 };
 
 // some static helper functions

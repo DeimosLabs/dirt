@@ -12,7 +12,7 @@
 #ifdef DEBUG
 #define CMDLINE_DEBUG
 #include "cmdline/cmdline.h"
-#define debug(...) cmdline_debug(stderr,ANSI_BLUE,__FILE__,__LINE__,__FUNC__,__VA_ARGS__)
+#define debug(...) cmdline_debug(stderr,ANSI_CYAN,__FILE__,__LINE__,__FUNC__,__VA_ARGS__)
 #else
 #define debug(...)
 #endif
@@ -631,7 +631,7 @@ bool read_wav (const char *filename,
     return true;
   }
 
-  // More than 2 channels is unsupported (consistent with your earlier code)
+  // More than 2 channels is unsupported
   std::cerr << "Error: only mono or stereo WAV files supported: "
             << filename << "\n";
   return false;
@@ -799,11 +799,219 @@ void align_stereo_joint_no_chop (std::vector<float> &L,
     shift_ir_right(R, shift);
 }
 
-// c_deconvolver member functions
+// c_deconvolver "passthrough" red tape for audio backend
+
+bool c_deconvolver::audio_init (std::string clientname,
+           int samplerate, bool stereo_out) {
+#ifdef USE_JACK
+  audio = new c_jackclient (this);
+  if (audio && audio->init (clientname, samplerate, stereo_out))
+    return true;
+#endif
+  return false;
+}
+
+bool c_deconvolver::audio_shutdown () {
+  if (audio) delete audio;
+  return true; // for now
+}
+
+bool c_deconvolver::audio_ready () {
+  return audio && audio->ready ();
+}
+
+bool c_deconvolver::audio_play (const std::vector<float> &out) {
+  return audio && audio->play (out);
+}
+
+bool c_deconvolver::audio_play (const std::vector<float> &out_l,
+           const std::vector<float> &out_r) {
+  return audio && audio->play (out_l, out_r);
+}
+
+bool c_deconvolver::audio_arm_record () {
+  return audio && audio->arm_record ();
+}
+
+bool c_deconvolver::audio_rec (std::vector<float> &in) {
+  return audio && audio->rec (in);
+}
+
+bool c_deconvolver::audio_rec (std::vector<float> &in_l,
+          std::vector<float> &in_r) {
+  return audio && audio->rec (in_l, in_r);
+}
+
+bool c_deconvolver::audio_playrec (const std::vector<float> &out_l,
+                      const std::vector<float> &out_r,
+                      std::vector<float> &in_l,
+                      std::vector<float> &in_r) {
+  return audio && audio->playrec (out_l, out_r, in_r, in_l);
+}
+
+// TODO: these should just print messages like "recording/playing",
+// "done" etc to stdout
+
+int c_deconvolver::on_play_loop (void *data)         { return 0; }
+int c_deconvolver::on_arm_rec_start (void *data)     { return 0; }
+int c_deconvolver::on_arm_rec_stop (void *data)      { return 0; }
+int c_deconvolver::on_record_start (void *data)      { return 0; }
+int c_deconvolver::on_record_loop (void *data)       { return 0; }
+int c_deconvolver::on_record_stop (void *data)       { return 0; }
+
+int c_deconvolver::on_play_start (void *data)        {
+  std::cout << "Playing sweep via " << audio-> backend_name << "... " << std::flush;
+  return 0;
+}
+
+int c_deconvolver::on_play_stop (void *data)         {
+  std::cout << "done.\n" << std::flush;
+  return 0;
+}
+int c_deconvolver::on_playrec_start (void *data)     {
+  std::cout << "Playing + recording sweep via JACK... " << std::flush;
+  return 0; 
+}
+
+#define DONT_USE_ANSI
+
+#ifdef DONT_USE_ANSI
+
+#ifdef DEBUG
+#define ANSI_DUMMY
+#endif
+
+static void print_vu_meter (float, bool)    { ANSI_DUMMY }
+static void ansi_cursor_move_x (int n)      { ANSI_DUMMY }
+static void ansi_cursor_move_to_x (int n)   { ANSI_DUMMY }
+static void ansi_cursor_move_y (int n)      { ANSI_DUMMY }
+static void ansi_cursor_hide ()             { ANSI_DUMMY }
+static void ansi_cursor_show ()             { ANSI_DUMMY }
+static void ansi_clear_screen ()            { ANSI_DUMMY }
+static void ansi_clear_to_endl ()           { ANSI_DUMMY }
+
+#else
+
+static void print_vu_meter (float peak, bool xrun) { CP
+  return;
+  int i, size = ANSI_VU_METER_MIN_SIZE;
+  char buf [size] = { ' ' };
+  int n = (int) peak * (size - 6);
+  
+  buf [0] = '[';
+  buf [size - 4] = ']';
+  
+  for (i = 1; i <n; i++)
+    buf [i] = '-';
+    
+  printf ("%s", buf);
+}
+
+static void ansi_cursor_move_x (int n) {
+  return;
+  if (n == 0)
+    printf ("\x1b[G"); // special case: start of line
+  else if (n < 0)
+    printf ("\x1b[%dD", -n); // left
+  else
+    printf ("\x1b[%dC", n); // right
+}
+
+static void ansi_cursor_move_to_x (int n) {
+  return;
+  printf ("\x1b[%dG", n);
+}
+
+static void ansi_cursor_move_y (int n) {
+  return;
+  if (n < 0)
+    printf ("\x1b[%dA", -n);
+  else if (n > 0)
+    printf ("\x1b[%dB", n);
+}
+
+static void ansi_cursor_hide () {
+  return;
+  printf ("\x1b[?25l");
+}
+
+static void ansi_cursor_show () {
+  return;
+  printf ("\x1b[?25h");
+}
+
+static void ansi_clear_screen () {
+  return;
+  printf ("\x1b[2J");
+}
+
+static void ansi_clear_to_endl () {
+  return;
+  printf ("\x1b[K");
+}
+#endif
+
+int c_deconvolver::on_playrec_loop (void *data)      {
+  float pl, pr;
+  bool xrun = false;
+  
+  if (audio->bufsize == 0) return -1;
+  
+  const float sec_per_redraw = 1.0;
+  int redraw_every = (int) (sec_per_redraw * audio->samplerate / audio->bufsize);
+  if (redraw_every < 1)
+    redraw_every = 1;
+  
+  // TODO: calculate number of passes vs buffer size so we get ~= 30ms between redraws
+  if (playrec_loop_passes % redraw_every == 0) {
+    debug ("sr=%d, buf=%d, st=%s redraw_every=%d",
+           audio->samplerate, audio->bufsize, audio->is_stereo ? "t" : "f", redraw_every);
+    
+    pl = std::max (std::fabs (audio->peak_plus_l), std::fabs (audio->peak_minus_l));
+    pr = std::max (std::fabs (audio->peak_plus_r), std::fabs (audio->peak_minus_r));
+    
+    if (audio->is_stereo) {  // 2 vu meters
+      ansi_cursor_move_x (0);
+      debug ("print_vu_meter: left");
+      print_vu_meter (pl, xrun);
+      debug ("print_vu_meter: right");
+      ansi_cursor_move_to_x (1);
+      print_vu_meter (pr, xrun);
+      ansi_cursor_move_x (0);
+      ansi_cursor_move_y (-2);
+    } else {       // just 1 vu meter
+      debug ("print_vu_meter: mono");
+      print_vu_meter (pl, xrun);
+      ansi_cursor_move_x (-1);
+    }
+    audio->peak_acknowledge ();
+    //std::cout << "peak L=" << pl << ", peak R=" << pr << "\n" << std::flush;
+  }
+  
+  playrec_loop_passes++;
+  return 0; 
+}
+
+int c_deconvolver::on_playrec_stop (void *data)      {
+  std::cout << "done.\n" << std::flush;
+  return 0;
+}
+
+void c_deconvolver::update_peak_data () {
+}
+
+int c_deconvolver::on_arm_rec_loop (void *data) {
+  return on_playrec_loop (data);
+}
+
+// other c_deconvolver member functions
  
 c_deconvolver::c_deconvolver (struct s_prefs *prefs, std::string name) {
   set_prefs (prefs);
   set_name (name);
+}
+
+c_deconvolver::~c_deconvolver () {
 }
 
 void c_deconvolver::set_name (std::string name) {
@@ -815,24 +1023,6 @@ void c_deconvolver::set_prefs (struct s_prefs *prefs) {
     prefs_ = prefs;
   else
     prefs_ = &default_prefs_;
-}
-
-bool c_deconvolver::init_audio (std::string name, int _samplerate, bool stereo) {
-#ifdef USE_JACK
-  audio = new c_jackclient (this);
-  if (audio && audio->init (name, _samplerate, stereo))
-    return true;
-#endif
-  return false;
-}
-
-bool c_deconvolver::end_audio () {
-  if (audio) delete audio;
-  return true; // for now
-}
-
-bool c_deconvolver::audio_ready () {
-  return audio && audio->ready ();
 }
 
 bool c_deconvolver::load_sweep_dry (const char *in_filename) {
@@ -875,8 +1065,8 @@ bool c_deconvolver::load_sweep_wet (const char *in_filename) {
     std::cerr << "Failed to load wet sweep: " << in_filename << "\n";
     return false;
   }
-
-  bool is_stereo = (right.size () > 1);
+  
+  bool is_stereo = (prefs_->request_stereo && right.size () > 1);
 
   if (!set_samplerate_if_needed (sr)) {
     std::cerr << "Samplerate mismatch in wet sweep: " << in_filename << "\n";
@@ -897,7 +1087,6 @@ bool c_deconvolver::load_sweep_wet (const char *in_filename) {
                   << wet_offset_ << " samples\n";
       }
     }
-
   } else {
     // --- STEREO WET: L/R in separate vectors ---
     wet_L_ = std::move (left);
@@ -1578,11 +1767,4 @@ void c_deconvolver::normalize_and_trim_stereo (std::vector<float> &L,
     if (hasR) R.resize (newLen);
   }
 }
-
-c_audioclient::c_audioclient (c_deconvolver *dec) {
-  dec_ = dec;
-  prefs_ = dec->prefs_;
-}
-
-c_audioclient::~c_audioclient () { }
 

@@ -35,6 +35,7 @@ struct s_prefs {
   bool jack_autoconnect_dry         = false;
   bool jack_autoconnect_wet         = false;
   bool jack_autoconnect_to_default  = false;
+  bool request_stereo               = true;
   //bool using_jack                   = false;
   bool quiet                        = false;
 #ifdef DEBUG
@@ -76,7 +77,7 @@ friend c_audioclient;
 public:
   //c_deconvolver () = default;
   c_deconvolver (struct s_prefs *prefs = NULL, std::string name = "");
-  //~c_deconvolver ();
+  virtual ~c_deconvolver ();
   
   void set_prefs (s_prefs *prefs);
   void set_name (std::string str);
@@ -84,9 +85,40 @@ public:
   bool load_sweep_wet (const char *in_filename);
   bool output_ir (const char *out_filename, long int ir_length_samples = 0);
   int samplerate ();
-  bool init_audio (std::string name, int samplerate, bool stereo);
-  bool end_audio ();
-  bool audio_ready ();
+  
+  // passthrough functions for c_audioclient & derived
+  // these just call hooks and corresponding c_audioclient functions 
+  virtual bool audio_init (std::string clientname = "",
+                     int samplerate = -1,
+                     bool stereo_out = true);
+  virtual bool audio_shutdown ();
+  virtual bool audio_ready ();
+  virtual bool audio_play (const std::vector<float> &out);
+  virtual bool audio_play (const std::vector<float> &out_l,
+                     const std::vector<float> &out_r);
+  virtual bool audio_arm_record ();
+  virtual bool audio_rec (std::vector<float> &in);
+  virtual bool audio_rec (std::vector<float> &in_l,
+                    std::vector<float> &in_r);
+  virtual bool audio_playrec (const std::vector<float> &out_l,
+                        const std::vector<float> &out_r,
+                        std::vector<float> &in_l,
+                        std::vector<float> &in_r);
+  
+  // UI hooks for derived classes, audio backends should call these
+  // override them for UI other than textmode
+  virtual int on_play_start (void *data = NULL);
+  virtual int on_play_loop (void *data = NULL);
+  virtual int on_play_stop (void *data = NULL);
+  virtual int on_arm_rec_start (void *data = NULL);
+  virtual int on_arm_rec_loop (void *data = NULL);
+  virtual int on_arm_rec_stop (void *data = NULL);
+  virtual int on_record_start (void *data = NULL);
+  virtual int on_record_loop (void *data = NULL);
+  virtual int on_record_stop (void *data = NULL);
+  virtual int on_playrec_start (void *data = NULL);
+  virtual int on_playrec_loop (void *data = NULL);
+  virtual int on_playrec_stop (void *data = NULL);
   
   /*static bool calc_ir_raw (const std::vector<float> &wet,
                           const std::vector<float>  &dry,
@@ -124,10 +156,14 @@ public:
                            std::vector<float> &captured);*/
 #endif
   bool set_samplerate_if_needed (int sr);
+  void update_peak_data ();
+
   c_audioclient *audio = NULL;
   
 private:
-
+  
+  int playrec_loop_passes = 0;
+  int vu_meter_size = ANSI_VU_METER_MIN_SIZE;
   int samplerate_ = 0;
   std::vector<float> dry_;
   std::vector<float> wet_L_;

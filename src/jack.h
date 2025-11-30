@@ -27,6 +27,7 @@ public:
   virtual bool play (const std::vector<float> &out);
   virtual bool play (const std::vector<float> &out_l,
                      const std::vector<float> &out_r);
+  virtual bool arm_record ();
   virtual bool rec (std::vector<float> &in_l);
   virtual bool rec (std::vector<float> &in_l,
                     std::vector<float> &in_r);
@@ -35,16 +36,6 @@ public:
                         std::vector<float> &in_l,
                         std::vector<float> &in_r);
             
-  bool play_go = false;
-  bool rec_go  = false;
-  bool monitor_only = false;
-  
-  /*std::string portname_dry = "";
-  std::string portname_wetL = "";
-  std::string portname_wetR = "";*/
-  
-  bool is_stereo = false;
-  int samplerate = 0;
   jack_client_t *client = NULL;
   jack_port_t   *port_inL  = NULL;
   jack_port_t   *port_inR  = NULL;

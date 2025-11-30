@@ -17,10 +17,93 @@
 #define debug(...)
 #endif
 
+// ...more red tape...
+
+static void handle_play_start (c_deconvolver *d) {
+  d->on_play_start ();
+}
+
+static void handle_play_loop (c_deconvolver *d) {
+  d->on_play_loop ();
+}
+
+static void handle_play_stop (c_deconvolver *d) {
+  d->on_play_stop ();
+}
+
+static void handle_rec_start (c_deconvolver *d) {
+  if (d->audio->monitor_only) d->on_arm_rec_start ();
+  else                        d->on_record_start ();
+}
+
+static void handle_rec_loop (c_deconvolver *d) {
+  if (d->audio->monitor_only) d->on_arm_rec_loop ();
+  else                        d->on_record_loop ();
+}
+
+static void handle_rec_stop (c_deconvolver *d) {
+  if (d->audio->monitor_only) d->on_arm_rec_stop ();
+  else                        d->on_record_stop ();
+}
+
+static void handle_playrec_start (c_deconvolver *d) {
+  if (d->audio->monitor_only) { d->on_arm_rec_start (); d->on_play_start (); }
+  else                        d->on_playrec_start ();
+}
+
+static void handle_playrec_loop (c_deconvolver *d) {
+  if (d->audio->monitor_only) { d->on_arm_rec_loop (); d->on_play_loop (); }
+  else                        d->on_record_loop ();
+}
+
+static void handle_playrec_stop (c_deconvolver *d) {
+  if (d->audio->monitor_only) { d->on_arm_rec_stop (); d->on_play_stop (); }
+  else                        d->on_record_stop ();
+}
+
 // our JACK callback, takes care of actual audio i/o buffers
 static int jack_process_cb (jack_nframes_t nframes, void *arg) {
-  //debug ("start");
+  static bool rec_go = false;
+  static bool play_go = false;
   c_jackclient *j = (c_jackclient *) arg;
+  
+  unsigned int bf = 0;
+  if (play_go)       bf |= 1;
+  if (rec_go)        bf |= 2;
+  if (j->play_go)    bf |= 4;
+  if (j->rec_go)     bf |= 8;
+  
+  //debug ("bf=0x%x", bf);
+  c_deconvolver *d = j->get_deconvolver ();
+  
+  switch (bf) {
+    case 0x00:   /* not activated */        break;     //      ->
+    case 0x01: handle_play_stop (d);        break;     // p    ->
+    case 0x02: handle_rec_stop (d);         break;     //   r  ->
+    case 0x03: handle_playrec_stop (d);     break;     // p r  ->
+    case 0x04: handle_play_start (d);       break;     //      -> p
+    case 0x05: handle_play_loop (d);        break;     // p    -> p
+    case 0x06: handle_rec_stop (d);                    //   r  -> p
+               handle_play_start (d);       break;     
+    case 0x07: handle_rec_stop (d);                    // p r  -> p
+               handle_play_loop (d);        break;     
+    case 0x08: handle_rec_start (d);        break;     //      ->   r
+    case 0x09: handle_play_stop (d);                   // p    ->   r
+               handle_rec_start (d);        break;    
+    case 0x0a: handle_rec_loop (d);         break;     //   r  ->   r
+    case 0x0b: handle_play_stop (d);                   // p r  ->   r
+               handle_rec_loop (d);         break;    
+    case 0x0c: handle_playrec_start (d);    break;     //      -> p r
+    case 0x0d: handle_rec_start (d);                   // p    -> p r
+               handle_play_loop (d);        break;    
+    case 0x0e: handle_play_start (d);                  //   r  -> p r
+               handle_rec_loop (d);         break;    
+    case 0x0f: handle_playrec_loop (d);     break;     // p r  -> p r
+    default:   /* wtf is this? */           break;
+  }
+  
+  play_go = j->play_go;
+  rec_go = j->rec_go;
   
   if (!j) return 0;
   if (!j->port_inL) return 0;
@@ -53,7 +136,7 @@ static int jack_process_cb (jack_nframes_t nframes, void *arg) {
       port_inR = (jack_default_audio_sample_t *) jack_port_get_buffer (j->port_inR, nframes);
     }
     
-    if (j->peak_ack) {
+    /*if (j->peak_ack) {
       j->peak_plus_l = 0;
       j->peak_plus_r = 0;
       j->peak_minus_l = 0;
@@ -61,7 +144,7 @@ static int jack_process_cb (jack_nframes_t nframes, void *arg) {
       j->clip_l = false;
       j->clip_r = false;
       j->peak_ack = false;
-    }
+    }*/
     
     if (!stereo) {
       j->peak_plus_r = 0;
@@ -168,6 +251,7 @@ int c_jackclient::get_default_capture (int howmany,
 
 c_jackclient::c_jackclient (c_deconvolver *dec)
     : c_audioclient (dec) {
+  backend_name = "JACK";
 }
 
 c_jackclient::~c_jackclient () {
@@ -214,6 +298,7 @@ bool c_jackclient::init (std::string clientname,      // = "",
   
   // JACK is alive, get its sample rate
   samplerate = (int) jack_get_sample_rate (client);
+  bufsize = (int) jack_get_buffer_size (client);
   
   if (prefs_) {
     if (!prefs_->quiet && prefs_->sweep_sr != samplerate) {
@@ -241,12 +326,18 @@ bool c_jackclient::init (std::string clientname,      // = "",
   /*port_outR = jack_port_register (client, "out_R",
                             JACK_DEFAULT_AUDIO_TYPE,
                             JackPortIsOutput, 0);*/
-  port_inL  = jack_port_register (client, "in_L",
-                            JACK_DEFAULT_AUDIO_TYPE,
-                            JackPortIsInput, 0);
-  port_inR  = jack_port_register (client, "in_R",
-                            JACK_DEFAULT_AUDIO_TYPE,
-                            JackPortIsInput, 0);
+  if (is_stereo) {
+    port_inL  = jack_port_register (client, "in_L",
+                              JACK_DEFAULT_AUDIO_TYPE,
+                              JackPortIsInput, 0);
+    port_inR  = jack_port_register (client, "in_R",
+                              JACK_DEFAULT_AUDIO_TYPE,
+                              JackPortIsInput, 0);
+  } else {
+    port_inL  = jack_port_register (client, "in",
+                              JACK_DEFAULT_AUDIO_TYPE,
+                              JackPortIsInput, 0);
+  }
 
   if (!port_outL || !port_inL || (is_stereo && !port_inR)) {
     std::cerr << "Error: cannot register JACK ports.\n";
@@ -350,6 +441,16 @@ bool c_jackclient::ready () {
   return jack_inited;
 }
 
+bool c_jackclient::arm_record () {
+  if (rec_go || monitor_only)
+    return false;
+  
+  rec_go = true;
+  monitor_only = true;
+  
+  return true;
+}
+
 bool c_jackclient::rec (std::vector<float> &sig) {
   return false;
 }
@@ -365,6 +466,8 @@ bool c_jackclient::play (const std::vector<float> &sig_l,
   if (!jack_inited || !client) {
     return false;
   }
+  
+  dec_->on_play_start ();
 
   sig_out_l = sig_l;
   sig_out_r = sig_r;
@@ -375,16 +478,15 @@ bool c_jackclient::play (const std::vector<float> &sig_l,
   if (is_stereo && !sig_out_r.empty ())
       limit = std::min (sig_out_l.size (), sig_out_r.size ());
   
-  //std::cout << "Playing sweep via JACK... " << std::flush;
   play_go = true;
 
   while (index < sig_out_l.size () && ((!is_stereo) || index < sig_out_r.size ())) {
     usleep (10 * 1000); // 10 ms
+    dec_->on_play_loop ();
   }
+  
+  dec_->on_play_stop ();
 
-  std::cout << "done.\n";
-
-  // let caller decide when to deactivate/close
   debug ("end");
   return true;
 }
@@ -400,10 +502,11 @@ bool c_jackclient::playrec (const std::vector<float> &out_l,
                             std::vector<float> &in_l,
                             std::vector<float> &in_r) {
   const std::vector<float> &sweep = out_l;
-  if (sweep.empty ()) {
-    std::cerr << "Sweep buffer is empty.\n";
+  debug ("start, is_stereo=%s", (is_stereo ? "true" : "false"));
+  /*if (sweep.empty ()) {
+    std::cerr << "Dry sweep buffer is empty.\n";
     return false;
-  }
+  }*/
 
   // ensure JACK client
   if (!jack_inited || !client) {
@@ -428,35 +531,36 @@ bool c_jackclient::playrec (const std::vector<float> &out_l,
   is_stereo = (prefs_->portname_wetR.length () > 0);
   if (is_stereo)
     sig_in_r.assign (rec_total, 0.0f);
-
-  std::cout << "Playing + recording sweep via JACK... " << std::flush;
+  
+  dec_->on_playrec_start ();
   play_go = true;
   rec_go  = true;
 
-  // block until done, redraw ascii-art level meter
   size_t num_passes = 0;
-  float pl, pr;
   char line [256];
   while ((index < sig_out_l.size () && index < sig_out_r.size ()) ||
          (!rec_done)) {
     usleep (10 * 1000); // 10 ms
+    
+    dec_->on_playrec_loop ();
     num_passes++;
-    if (num_passes % 3 == 0) { // redraw at every ~= 30 ms
+    /*if (num_passes % 3 == 0) { // redraw at every ~= 30 ms
       //CP
       pl = std::max (std::fabs (peak_plus_l), std::fabs (peak_minus_l));
       pr = std::max (std::fabs (peak_plus_r), std::fabs (peak_minus_r));
-      peak_ack = true;
+      //peak_ack = true;
       //std::cout << "peak L=" << pl << ", peak R=" << pr << "\n";
-    }
+    }*/
   }
-
-  std::cout << "done.\n";
 
   // copy captured mono buffer out
   in_l = sig_in_l;
   if (is_stereo)
     in_r = sig_in_r;
 
+  dec_->on_playrec_stop ();
+  
+  debug ("end");
   return true;
 }
 
