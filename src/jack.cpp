@@ -513,7 +513,8 @@ bool c_jackclient::playrec (const std::vector<float> &out_l,
   rec_total = std::max (out_l.size (), out_r.size ()) + extra_tail;
   sig_in_l.assign (rec_total, 0.0f);
   rec_index = 0;
-  is_stereo = (prefs_->portname_wetR.length () > 0);
+  
+  //is_stereo = (prefs_->portname_wetR.length () > 0); <--- nope
   if (is_stereo)
     sig_in_r.assign (rec_total, 0.0f);
   

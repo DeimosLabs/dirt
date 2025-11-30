@@ -260,7 +260,7 @@ static void print_usage (const char *prog, bool full = false) {
                                 << DEFAULT_PREROLL_SEC << "]\n"
     "  -m, --marker SEC         Prepend SEC alignment marker, in seconds ["
                                 << DEFAULT_MARKER_SEC << "]\n"
-    "  -g, --gap SEC            Add SEC gap after marker , in seconds ["
+    "  -g, --gap SEC            Add SEC gap after marker, in seconds ["
                                 << DEFAULT_MARKGAP_SEC << "]\n"
     "  -W, --wait               Wait for input before playing sweep\n"
 #ifdef USE_JACK
@@ -494,6 +494,8 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
       }
     } else if (arg == "-M" || arg == "--mono") {
       opt.request_stereo = false;
+    } else if (arg == "--stereo") { // just accept this for symmetry
+      opt.request_stereo = true;
     } else if (arg == "-q" || arg == "--quiet") {
       opt.quiet = true;
     } else if (arg == "-v" || arg == "--verbose") {

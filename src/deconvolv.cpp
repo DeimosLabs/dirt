@@ -1233,7 +1233,9 @@ bool c_deconvolver::output_ir (const char *out_filename, long ir_length_samples)
 
   // --- deconvolve left ---
   if (!calc_ir_raw (wet_L_, dry_, irL, ir_length_samples)) {
-    std::cerr << "Error: calc_ir_raw failed for left channel.\n";
+    std::cerr << "Error: calc_ir_raw failed for "
+              << (prefs_->request_stereo ? "left" : "mono")
+              << " channel.\n";
     return false;
   }
 
@@ -1250,29 +1252,29 @@ bool c_deconvolver::output_ir (const char *out_filename, long ir_length_samples)
   float cutoff = (prefs_->sweep_sr / 2) * 0.9;
   // ...or just a fixed frequency
   //float cutoff = 18000;
-  float lp_cut = std::min((float)LOWPASS_F, cutoff);
+  float lp_cut = std::min ((float) LOWPASS_F, cutoff);
 
-  if (irL.size() > 0) {
+  if (irL.size () > 0) {
 #ifdef HIGHPASS_F
-    highpass_ir(irL, prefs_->sweep_sr, HIGHPASS_F);
+    highpass_ir (irL, prefs_->sweep_sr, HIGHPASS_F);
 #endif
 #ifdef LOWPASS_F
-    lowpass_ir(irL, prefs_->sweep_sr, lp_cut);
+    lowpass_ir (irL, prefs_->sweep_sr, lp_cut);
 #endif
   }
-  if (irR.size() > 0) {
+  if (irR.size () > 0) {
 #ifdef HIGHPASS_F
-    highpass_ir(irR, prefs_->sweep_sr, HIGHPASS_F);
+    highpass_ir (irR, prefs_->sweep_sr, HIGHPASS_F);
 #endif
 #ifdef LOWPASS_F
-    lowpass_ir(irR, prefs_->sweep_sr, lp_cut);
+    lowpass_ir (irR, prefs_->sweep_sr, lp_cut);
 #endif
   }
   
   // TODO: figure out why this even works for L/R delay
   //align_stereo_independent (irL, irR, 0);
   
-  /*if (!irL.empty() || !irR.empty()) {
+  /*if (!irL.empty () || !irR.empty ()) {
     align_stereo_joint_no_chop (irL, irR, 0); // move reference peak to index 0
   }*/
   //normalize_and_trim_stereo (irL, irR, prefs_->zeropeak);
@@ -1293,6 +1295,12 @@ bool c_deconvolver::output_ir (const char *out_filename, long ir_length_samples)
     }
   }
   
+  debug ("have_right_channel=%d, have_right_energy=%d, irR.empty=%d",
+         (int) have_right_channel, have_right_energy, irR.empty ());
+         
+  if (prefs_->verbose && have_right_channel && !have_right_energy) {
+      std::cerr << "Note: Right channel silent, writing MONO IR\n";
+  }
   if (!have_right_channel || !have_right_energy || irR.empty ()) {
     // MONO IR
     if (!write_mono_wav (out_filename, irL, samplerate_)) {
@@ -1304,7 +1312,7 @@ bool c_deconvolver::output_ir (const char *out_filename, long ir_length_samples)
     debug ("return");
     return true;
   }
-
+  
   // STEREO IR
   size_t len = std::max (irL.size (), irR.size ());
   irL.resize (len, 0.0f);
