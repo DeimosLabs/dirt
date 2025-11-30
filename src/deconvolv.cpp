@@ -15,6 +15,8 @@
 #define debug(...) cmdline_debug(stderr,ANSI_CYAN,__FILE__,__LINE__,__FUNC__,__VA_ARGS__)
 #else
 #define debug(...)
+#define CP
+#define BP
 #endif
 
 
@@ -896,6 +898,8 @@ int c_deconvolver::on_playrec_start (void *data)     {
 #ifdef DONT_USE_ANSI
 
 #ifdef DEBUG
+#define ANSI_DUMMY
+#else
 #define ANSI_DUMMY
 #endif
 

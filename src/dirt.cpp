@@ -35,6 +35,8 @@
 #define debug(...) cmdline_debug(stderr,ANSI_RED,__FILE__,__LINE__,__FUNC__,__VA_ARGS__)
 #else
 #define debug(...)
+#define CP
+#define BP
 #endif
 
 
