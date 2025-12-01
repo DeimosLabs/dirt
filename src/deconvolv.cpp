@@ -915,23 +915,25 @@ static void ansi_clear_to_endl ()           { ANSI_DUMMY }
 
 #else
 
-static void print_vu_meter (float peak, bool xrun) {
-  int i, size = ANSI_VU_METER_MIN_SIZE;
-  char buf [size] = { ' ' };
-  int n = (int) ((float) (peak) * (float) (size - 6));
-  if (n > size) n = size;
-  
-  for (i = 1; i <n; i++)   buf [i] = '-';
-  for (; i < size; i++)    buf [i] = ' ';
-
-  buf [0] = '[';
-  buf [size - 6] = ']';
-  buf [size - 1] = 0;
-  
-    
-  //printf ("%s", buf);
-  std::cout << buf << " \n" << std::flush;
-}
+#ifndef __CMDLINE_H
+char ANSI_BLACK [] =          "\x1B[0;30m";  //  0
+char ANSI_DARK_RED [] =       "\x1B[0;31m";  //  1
+char ANSI_DARK_GREEN [] =     "\x1B[0;32m";  //  2
+char ANSI_DARK_YELLOW [] =    "\x1B[0;33m";  //  3
+char ANSI_DARK_BLUE [] =      "\x1B[0;34m";  //  4
+char ANSI_DARK_MAGENTA [] =   "\x1B[0;35m";  //  5
+char ANSI_DARK_CYAN [] =      "\x1B[0;36m";  //  6
+char ANSI_DARK_GREY [] =      "\x1B[1;30m";  //  7
+char ANSI_GREY [] =           "\x1B[1;30m";  //  8
+char ANSI_RED [] =            "\x1B[1;31m";  //  9
+char ANSI_GREEN [] =          "\x1B[1;32m";  // 10
+char ANSI_YELLOW [] =         "\x1B[1;33m";  // 11
+char ANSI_BLUE [] =           "\x1B[1;34m";  // 12
+char ANSI_MAGENTA [] =        "\x1B[1;35m";  // 13
+char ANSI_CYAN [] =           "\x1B[1;36m";  // 14
+char ANSI_WHITE [] =          "\x1B[1;37m";  // 15
+char ANSI_RESET [] =          "\x1B[0m";
+#endif
 
 static void ansi_cursor_move_x (int n) {
   if (n == 0)
@@ -970,9 +972,40 @@ static void ansi_clear_to_endl () {
 }
 #endif
 
-int c_deconvolver::on_playrec_loop (void *data) {
-  float pl, pr;
+static void print_vu_meter (float level, float hold, bool clip, bool xrun) {
+  if (level < 0) level = 0;
+  if (level > 1) level = 1;
+  if (hold > 1) hold = 1;
+  //debug ("level=%f hold=%f, %s, %s", level, hold,
+  //       clip ? "clip" : "!clip", xrun ? "xrun" : "!xrun");
+  //return;
+  int i, size = ANSI_VU_METER_MIN_SIZE;
+  char buf [size] = { ' ' };
+  char colors [size] = { 8 };
+  int n = (int) ((float) (level) * (float) (size - 6));
+  if (n > size) n = size;
+  if (n < 0) n = 0;
   
+  for (i = 1; i <n; i++)     { buf [i] = '='; colors [i] |= 0x08; }
+  for (; i < size - 5; i++)  { buf [i] = '-'; colors [i] &= 0x07; }
+  if (hold > 0) { 
+    int idx = (int) (hold * (float) (size - 6));
+    if (idx > size - 6) idx = size - 6;
+    if (idx > 0 && idx < size - 6) buf [idx] = '|';
+  }
+
+  buf [0] = '[';
+  buf [size - 6] = ']';
+  colors [0] = 15;
+  colors [size - 6] = 15;
+  
+  buf [size - 1] = 0;
+    
+  //printf ("%s", buf);
+  std::cout << buf << " \n" << std::flush;
+}
+
+int c_deconvolver::on_playrec_loop (void *data) {
   static float show_l = 0;
   static float show_r = 0;
   static float hold_l = 0;
@@ -981,47 +1014,71 @@ int c_deconvolver::on_playrec_loop (void *data) {
   static uint32_t hold_r_timestamp = 0;
   static uint32_t clip_l_timestamp = 0;
   static uint32_t clip_r_timestamp = 0;
+  static uint32_t xrun_timestamp = 0;
+  
+  float pl, pr;
+  int bufs_sec = 0;
+  if (audio->bufsize > 0)
+    bufs_sec = audio->samplerate / audio->bufsize;
   
   if (audio->bufsize == 0) return -1;
   
   const float sec_per_redraw = ANSI_VU_REDRAW_EVERY;
-  int redraw_every = (int) (sec_per_redraw * audio->samplerate / audio->bufsize);
+  int redraw_every = (int) (sec_per_redraw * bufs_sec);
   if (redraw_every < 1)
     redraw_every = 1;
   
-  uint32_t now = playrec_loop_passes / redraw_every;
-  
   if (playrec_loop_passes % redraw_every == 0) {
+    int peak_hold_frames = (ANSI_VU_PEAK_HOLD * bufs_sec / redraw_every);
+    int clip_hold_frames = (ANSI_VU_CLIP_HOLD * bufs_sec / redraw_every);
+    int xrun_hold_frames = (ANSI_VU_XRUN_HOLD * bufs_sec / redraw_every);
+    
     pl = std::max (std::fabs (audio->peak_plus_l), std::fabs (audio->peak_minus_l));
     pr = std::max (std::fabs (audio->peak_plus_r), std::fabs (audio->peak_minus_r));
-    //debug ("pl/r=%f,%f", (float) pl, (float) pr);
+    uint32_t now = playrec_loop_passes / redraw_every;
+    bool show_xrun = false, show_clip_l = false, show_clip_r = false;
     
-    if (pl > 0.99)
-      clip_l_timestamp = playrec_loop_passes / redraw_every;
-    if (pr > 0.99)
-      clip_r_timestamp = playrec_loop_passes / redraw_every;
+    if (pl > show_l) show_l = pl;
+    if (pr > show_r) show_r = pr;
+    if (now - hold_l_timestamp > peak_hold_frames) hold_l = 0;
+    if (now - hold_r_timestamp > peak_hold_frames) hold_r = 0;
+    if (pl > hold_l) { hold_l = pl; hold_l_timestamp = now; }
+    if (pr > hold_r) { hold_r = pr; hold_r_timestamp = now; }
+    if (pl > 0.99) clip_l_timestamp = now;
+    if (pr > 0.99) clip_r_timestamp = now;
+    if (audio->xrun) xrun_timestamp = now;
     
-    if (pl > show_l) { hold_l = show_l = pl; hold_l_timestamp = now; }
-    if (pr > show_r) { hold_r = show_r = pl; hold_r_timestamp = now; }
+    if (clip_l_timestamp && now - clip_l_timestamp < xrun_hold_frames) show_clip_l = true;
+    if (clip_r_timestamp && now - clip_r_timestamp < xrun_hold_frames) show_clip_r = true;
+    if (xrun_timestamp && now - xrun_timestamp < xrun_hold_frames)     show_xrun = true;
     
-    print_vu_meter (show_l, audio->xrun);
-    
+    print_vu_meter (show_l, hold_l, show_clip_l, show_xrun);
     if (audio->is_stereo) {  // 2 vu meters
       ansi_cursor_move_x (0);
-      print_vu_meter (show_r, audio->xrun);
+      print_vu_meter (show_r, hold_r, show_clip_r, show_xrun);
       ansi_cursor_move_x (0);
       ansi_cursor_move_y (-2);
     } else {       // just 1 vu meter
       ansi_cursor_move_y (-1);
     }
     
-    show_l -= ANSI_VU_FALL_SPEED;
-    if (show_l < 0) show_l = 0;
-    show_r -= ANSI_VU_FALL_SPEED;
-    if (show_r < 0) show_r = 0;
+    if (pl > show_l)
+      show_l = pl;
+    else {
+      show_l -= ANSI_VU_FALL_SPEED;
+      if (show_l < 0) show_l = 0;
+    }
+
+    if (pr > show_r)
+      show_r = pr;
+    else {
+      show_r -= ANSI_VU_FALL_SPEED;
+      if (show_r < 0) show_r = 0;
+    }
     
     audio->peak_acknowledge ();
-    //std::cout << "peak L=" << pl << ", peak R=" << pr << "\n" << std::flush;
+    //std::cout << "peak L=" << pl << ",R=" << pr << " hold L=" 
+    //                     << hold_l << ", R=" << hold_r << std::endl << std::flush;
   }
   
   playrec_loop_passes++;

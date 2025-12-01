@@ -78,9 +78,33 @@ class c_jackclient;
 #define ANSI_VU_REDRAW_EVERY            0.03 // in seconds
 #define ANSI_VU_FALL_SPEED              0.1
 #define ANSI_VU_PEAK_HOLD               0.5
+#define ANSI_VU_CLIP_HOLD               0.5
+#define ANSI_VU_XRUN_HOLD               1.0
 
 //#define THRESH_RELATIVE // relative to peak, comment out for absolute
 //#define DISABLE_LEADING_SILENCE_DETECTION // for debugging
+
+extern char   
+ANSI_GREY [],      ANSI_BLACK [],
+ANSI_RED [],       ANSI_DARK_RED [],
+ANSI_GREEN [],     ANSI_DARK_GREEN [],
+ANSI_YELLOW [],    ANSI_DARK_YELLOW [],
+ANSI_BLUE [],      ANSI_DARK_BLUE [],
+ANSI_MAGENTA [],   ANSI_DARK_MAGENTA [],
+ANSI_CYAN [],      ANSI_DARK_CYAN [],
+ANSI_WHITE [],     ANSI_DARK_GREY [],
+ANSI_RESET [];
+
+/* synonyms for some of the above */
+#define ANSI_PURPLE        ANSI_MAGENTA
+#define ANSI_DARK_PURPLE   ANSI_DARK_MAGENTA
+#define ANSI_RED_DARK      ANSI_DARK_RED
+#define ANSI_GREEN_DARK    ANSI_DARK_GREEN
+#define ANSI_YELLOW_DARK   ANSI_DARK_YELLOW
+#define ANSI_BLUE_DARK     ANSI_DARK_BLUE
+#define ANSI_MAGENTA_DARK  ANSI_DARK_MAGENTA
+#define ANSI_PURPLE_DARK   ANSI_DARK_PURPLE
+#define ANSI_CYAN_DARK     ANSI_DARK_CYAN
 
 enum deconv_mode {
   mode_deconvolve,
