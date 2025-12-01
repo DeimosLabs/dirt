@@ -893,7 +893,8 @@ int c_deconvolver::on_playrec_start (void *data)     {
   return 0; 
 }
 
-#define DONT_USE_ANSI
+
+//#define DONT_USE_ANSI
 
 #ifdef DONT_USE_ANSI
 
@@ -914,23 +915,25 @@ static void ansi_clear_to_endl ()           { ANSI_DUMMY }
 
 #else
 
-static void print_vu_meter (float peak, bool xrun) { CP
-  return;
+static void print_vu_meter (float peak, bool xrun) {
   int i, size = ANSI_VU_METER_MIN_SIZE;
   char buf [size] = { ' ' };
-  int n = (int) peak * (size - 6);
+  int n = (int) ((float) (peak) * (float) (size - 6));
+  if (n > size) n = size;
   
+  for (i = 1; i <n; i++)   buf [i] = '-';
+  for (; i < size; i++)    buf [i] = ' ';
+
   buf [0] = '[';
-  buf [size - 4] = ']';
+  buf [size - 6] = ']';
+  buf [size - 1] = 0;
   
-  for (i = 1; i <n; i++)
-    buf [i] = '-';
     
-  printf ("%s", buf);
+  //printf ("%s", buf);
+  std::cout << buf << " \n" << std::flush;
 }
 
 static void ansi_cursor_move_x (int n) {
-  return;
   if (n == 0)
     printf ("\x1b[G"); // special case: start of line
   else if (n < 0)
@@ -940,12 +943,10 @@ static void ansi_cursor_move_x (int n) {
 }
 
 static void ansi_cursor_move_to_x (int n) {
-  return;
   printf ("\x1b[%dG", n);
 }
 
 static void ansi_cursor_move_y (int n) {
-  return;
   if (n < 0)
     printf ("\x1b[%dA", -n);
   else if (n > 0)
@@ -953,59 +954,72 @@ static void ansi_cursor_move_y (int n) {
 }
 
 static void ansi_cursor_hide () {
-  return;
   printf ("\x1b[?25l");
 }
 
 static void ansi_cursor_show () {
-  return;
   printf ("\x1b[?25h");
 }
 
 static void ansi_clear_screen () {
-  return;
   printf ("\x1b[2J");
 }
 
 static void ansi_clear_to_endl () {
-  return;
   printf ("\x1b[K");
 }
 #endif
 
 int c_deconvolver::on_playrec_loop (void *data) {
   float pl, pr;
-  bool xrun = false;
+  
+  static float show_l = 0;
+  static float show_r = 0;
+  static float hold_l = 0;
+  static float hold_r = 0;
+  static uint32_t hold_l_timestamp = 0;
+  static uint32_t hold_r_timestamp = 0;
+  static uint32_t clip_l_timestamp = 0;
+  static uint32_t clip_r_timestamp = 0;
   
   if (audio->bufsize == 0) return -1;
   
-  const float sec_per_redraw = 0.1;
+  const float sec_per_redraw = ANSI_VU_REDRAW_EVERY;
   int redraw_every = (int) (sec_per_redraw * audio->samplerate / audio->bufsize);
   if (redraw_every < 1)
     redraw_every = 1;
   
-  // TODO: calculate number of passes vs buffer size so we get ~= 30ms between redraws
+  uint32_t now = playrec_loop_passes / redraw_every;
+  
   if (playrec_loop_passes % redraw_every == 0) {
-    //debug ("sr=%d, buf=%d, st=%s redraw_every=%d",
-    //       audio->samplerate, audio->bufsize, audio->is_stereo ? "t" : "f", redraw_every);
-    
     pl = std::max (std::fabs (audio->peak_plus_l), std::fabs (audio->peak_minus_l));
     pr = std::max (std::fabs (audio->peak_plus_r), std::fabs (audio->peak_minus_r));
+    //debug ("pl/r=%f,%f", (float) pl, (float) pr);
+    
+    if (pl > 0.99)
+      clip_l_timestamp = playrec_loop_passes / redraw_every;
+    if (pr > 0.99)
+      clip_r_timestamp = playrec_loop_passes / redraw_every;
+    
+    if (pl > show_l) { hold_l = show_l = pl; hold_l_timestamp = now; }
+    if (pr > show_r) { hold_r = show_r = pl; hold_r_timestamp = now; }
+    
+    print_vu_meter (show_l, audio->xrun);
     
     if (audio->is_stereo) {  // 2 vu meters
       ansi_cursor_move_x (0);
-      //debug ("print_vu_meter: left");
-      print_vu_meter (pl, xrun);
-      //debug ("print_vu_meter: right");
-      ansi_cursor_move_to_x (1);
-      print_vu_meter (pr, xrun);
+      print_vu_meter (show_r, audio->xrun);
       ansi_cursor_move_x (0);
       ansi_cursor_move_y (-2);
     } else {       // just 1 vu meter
-      //debug ("print_vu_meter: mono");
-      print_vu_meter (pl, xrun);
-      ansi_cursor_move_x (-1);
+      ansi_cursor_move_y (-1);
     }
+    
+    show_l -= ANSI_VU_FALL_SPEED;
+    if (show_l < 0) show_l = 0;
+    show_r -= ANSI_VU_FALL_SPEED;
+    if (show_r < 0) show_r = 0;
+    
     audio->peak_acknowledge ();
     //std::cout << "peak L=" << pl << ", peak R=" << pr << "\n" << std::flush;
   }

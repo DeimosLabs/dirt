@@ -129,7 +129,7 @@ static int jack_process_cb (jack_nframes_t nframes, void *arg) {
   }
 
   // RECORDING
-  if (j->rec_go && j->port_inL && j->rec_index < j->rec_total) {
+  if (j->rec_go && j->port_inL /*&& j->rec_index < j->rec_total*/) {
     auto *port_inL =
         (jack_default_audio_sample_t *) jack_port_get_buffer(j->port_inL, nframes);
     jack_default_audio_sample_t *port_inR = nullptr;
@@ -147,6 +147,7 @@ static int jack_process_cb (jack_nframes_t nframes, void *arg) {
     for (jack_nframes_t i = 0; i < nframes; ++i) {
       float vL = port_inL [i];
       float vR = port_inR ? port_inR [i] : vL;
+      //debug ("vL=%f, vR=%f", vL, vR);
 
       // meters
       if (vL > j->peak_plus_l)  j->peak_plus_l  = vL;
@@ -176,8 +177,10 @@ static int jack_process_cb (jack_nframes_t nframes, void *arg) {
         }
       }
     }
+    /*debug ("state=%d, peak L %f/%f, peak R %f/%f", j->state, j->peak_plus_l, j->peak_minus_l,
+                                         j->peak_plus_r, j->peak_minus_r);*/
   }
-
+  
   //debug ("end");
   return 0;
 }
@@ -431,7 +434,8 @@ bool c_jackclient::ready () {
 }
 
 bool c_jackclient::arm_record () {
-  if (rec_go || monitor_only)
+  CP
+  if (rec_go /*|| monitor_only*/)
     return false;
   
   rec_go = true;
@@ -506,7 +510,6 @@ bool c_jackclient::playrec (const std::vector<float> &out_l,
   sig_out_l  = out_l;
   sig_out_r  = out_r;
   index    = 0;
-  play_go  = false;
 
   // capture same length + 2 sec. extra tail
   const size_t extra_tail = (size_t) (2.0 * samplerate); // 0.5s

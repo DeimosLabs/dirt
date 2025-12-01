@@ -76,6 +76,8 @@ class c_jackclient;
 #define DEFAULT_ZEROPEAK                true // try to zero-align peak?
 #define ANSI_VU_METER_MIN_SIZE          64 // for our ascii-art [---- ] meters
 #define ANSI_VU_REDRAW_EVERY            0.03 // in seconds
+#define ANSI_VU_FALL_SPEED              0.1
+#define ANSI_VU_PEAK_HOLD               0.5
 
 //#define THRESH_RELATIVE // relative to peak, comment out for absolute
 //#define DISABLE_LEADING_SILENCE_DETECTION // for debugging
@@ -229,6 +231,7 @@ public:
   bool play_go = false;
   bool rec_go  = false;
   bool monitor_only = false;
+  bool xrun = false;
   
   /*std::string portname_dry = "";
   std::string portname_wetL = "";

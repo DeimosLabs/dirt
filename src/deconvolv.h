@@ -164,7 +164,7 @@ public:
   
 protected:
   
-  int playrec_loop_passes = 0;
+  uint64_t playrec_loop_passes = 0;
   int vu_meter_size = ANSI_VU_METER_MIN_SIZE;
   int samplerate_ = 0;
   std::vector<float> dry_;
