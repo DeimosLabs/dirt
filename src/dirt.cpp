@@ -831,7 +831,7 @@ int main (int argc, char **argv) {
                        sweep);
 
     if (p.sweepwait) {
-      std::cout << "Press enter to play sinewave sweep... ";
+      std::cout << "Press enter to play sinewave sweep... \n";
       std::string str;
       std::getline(std::cin, str);
     }
@@ -862,7 +862,7 @@ int main (int argc, char **argv) {
     if (p.sweepwait) {
       CP
       dec.audio_arm_record ();
-      std::cout << "Press enter to play and record sinewave sweep... ";
+      std::cout << "Press enter to play and record sinewave sweep... \n";
       std::string str;
       std::getline(std::cin, str);
     }

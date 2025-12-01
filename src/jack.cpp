@@ -48,9 +48,9 @@ static int jack_process_cb (jack_nframes_t nframes, void *arg) {
 
   audiostate prev_state = j->state;   // stored from last callback
   audiostate new_state  = determine_state_from_flags (j);
-  if (prev_state != new_state) {
+  /*if (prev_state != new_state) {
       debug ("prev_state=%d, new_state=%d", prev_state, new_state);
-  }
+  }*/
 
   if (new_state != prev_state) {
     // leave previous state

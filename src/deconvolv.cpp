@@ -933,7 +933,16 @@ char ANSI_MAGENTA [] =        "\x1B[1;35m";  // 13
 char ANSI_CYAN [] =           "\x1B[1;36m";  // 14
 char ANSI_WHITE [] =          "\x1B[1;37m";  // 15
 char ANSI_RESET [] =          "\x1B[0m";
+
 #endif
+
+char *g_ansi_colors [] = {
+  ANSI_BLACK,       ANSI_DARK_RED,       ANSI_DARK_GREEN,     ANSI_DARK_YELLOW,
+  ANSI_DARK_BLUE,   ANSI_DARK_MAGENTA,   ANSI_DARK_CYAN,      ANSI_DARK_GREY,
+  ANSI_GREY,        ANSI_RED,            ANSI_GREEN,          ANSI_YELLOW,
+  ANSI_BLUE,        ANSI_MAGENTA,        ANSI_CYAN,           ANSI_WHITE,
+  ANSI_RESET  
+};
 
 static void ansi_cursor_move_x (int n) {
   if (n == 0)
@@ -982,27 +991,72 @@ static void print_vu_meter (float level, float hold, bool clip, bool xrun) {
   int i, size = ANSI_VU_METER_MIN_SIZE;
   char buf [size] = { ' ' };
   char colors [size] = { 8 };
-  int n = (int) ((float) (level) * (float) (size - 6));
+  int right = size - 6;
+  int yellow = (right * 2) / 3;
+  int red = (right * 5) / 6;
+  int n = (int) ((float) (level) * (float) (right));
   if (n > size) n = size;
   if (n < 0) n = 0;
   
-  for (i = 1; i <n; i++)     { buf [i] = '='; colors [i] |= 0x08; }
-  for (; i < size - 5; i++)  { buf [i] = '-'; colors [i] &= 0x07; }
-  if (hold > 0) { 
-    int idx = (int) (hold * (float) (size - 6));
-    if (idx > size - 6) idx = size - 6;
-    if (idx > 0 && idx < size - 6) buf [idx] = '|';
+  for (i = 1; i < n && i < yellow; i++)    { buf [i] = '='; colors [i] = 10; }
+  for (; i < n && i < red; i++)            { buf [i] = '='; colors [i] = 11; }
+  for (; i < n && i < right; i++)          { buf [i] = '='; colors [i] = 9; }
+  for (i = n; i < yellow; i++)             { buf [i] = '-'; colors [i] = 2; }   
+  for (; i < red; i++)                     { buf [i] = '-'; colors [i] = 3; }
+  for (; i < right; i++)                   { buf [i] = '-'; colors [i] = 1; }
+  //for (; i < size - 5; i++)  { buf [i] = '-'; colors [i] = 0x07; }
+  int holdpos = (int) (hold * (float) right);
+  if (holdpos > right - 1) holdpos = right - 1;
+  if (holdpos > 0) { 
+    if (holdpos > 0 && holdpos < right) {
+      buf [holdpos] = (holdpos == right - 1) ? '!' : '|';
+      colors [holdpos] = (holdpos == right - 1) ? 9 : 15;
+    }
   }
 
-  buf [0] = '[';
-  buf [size - 6] = ']';
   colors [0] = 15;
   colors [size - 6] = 15;
   
   buf [size - 1] = 0;
+  clip = true;
+  // lazyyyyyy... who cares
+  if (xrun) {
+    buf [right + 2] = 'X';
+    buf [right + 3] = 'R';
+    buf [right + 4] = 'U';
+    buf [right + 5] = 'N';
+  } else if (clip) {
+    buf [right + 2] = 'C';
+    buf [right + 3] = 'L';
+    buf [right + 4] = 'I';
+    buf [right + 5] = 'P';
+  }
+  if (buf || clip) {
+    colors [right + 2] = 9;
+    colors [right + 3] = 9;
+    colors [right + 4] = 9;
+    colors [right + 5] = 9;
+  }
+
+  buf [0] = '[';
+  buf [right] = ']';
+  colors [0] = 15;
+  colors [right] = 15;
+  
+  buf [size - 1] = 0;
+  
+  std::string output = ""; 
+  int col = -1;
+  for (i = 0; buf [i]; i++) {
+    if (colors [i] != col) {
+      output += g_ansi_colors [colors [i]];
+      col = colors [i];
+    }
+    output += buf [i];
+  }
     
   //printf ("%s", buf);
-  std::cout << buf << " \n" << std::flush;
+  std::cout << output << " \n" << std::flush;
 }
 
 int c_deconvolver::on_playrec_loop (void *data) {
