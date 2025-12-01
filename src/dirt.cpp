@@ -39,6 +39,7 @@
 #define BP
 #endif
 
+int wx_main (int argc, char **argv);
 
 c_audioclient::c_audioclient (c_deconvolver *dec) {
   debug ("start");
@@ -735,9 +736,13 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
 }
 
 int main (int argc, char **argv) {
-  debug ("start");
+  debug ("start, argc=%d", argc);
   s_prefs p;
   char realjackname [256] = { 0 };
+  
+#ifdef USE_WXWIDGETS
+  if (argc <= 1) return wx_main (argc, argv);
+#endif
   
   int paths_bf = parse_args (argc, argv, p);
   if (paths_bf == -1 || p.mode == deconv_mode::mode_error) {

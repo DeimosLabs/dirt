@@ -1018,24 +1018,33 @@ static void print_vu_meter (float level, float hold, bool clip, bool xrun) {
   colors [size - 6] = 15;
   
   buf [size - 1] = 0;
-  clip = true;
+  
   // lazyyyyyy... who cares
   if (xrun) {
-    buf [right + 2] = 'X';
-    buf [right + 3] = 'R';
-    buf [right + 4] = 'U';
-    buf [right + 5] = 'N';
+    buf [right + 1] = 'X';
+    buf [right + 2] = 'R';
+    buf [right + 3] = 'U';
+    buf [right + 4] = 'N';
   } else if (clip) {
-    buf [right + 2] = 'C';
-    buf [right + 3] = 'L';
-    buf [right + 4] = 'I';
-    buf [right + 5] = 'P';
+    buf [right + 1] = 'C';
+    buf [right + 2] = 'L';
+    buf [right + 3] = 'I';
+    buf [right + 4] = 'P';
+  } else  {
+    buf [right + 1] = ' ';
+    buf [right + 2] = 'O';
+    buf [right + 3] = 'K';
+    buf [right + 4] = ' ';
+    colors [right + 1] = 10;
+    colors [right + 2] = 10;
+    colors [right + 3] = 10;
+    colors [right + 4] = 10;
   }
-  if (buf || clip) {
+  if (xrun || clip) {
+    colors [right + 1] = 9;
     colors [right + 2] = 9;
     colors [right + 3] = 9;
     colors [right + 4] = 9;
-    colors [right + 5] = 9;
   }
 
   buf [0] = '[';
@@ -1106,9 +1115,11 @@ int c_deconvolver::on_playrec_loop (void *data) {
     if (clip_r_timestamp && now - clip_r_timestamp < xrun_hold_frames) show_clip_r = true;
     if (xrun_timestamp && now - xrun_timestamp < xrun_hold_frames)     show_xrun = true;
     
+    ansi_clear_to_endl ();
     print_vu_meter (show_l, hold_l, show_clip_l, show_xrun);
     if (audio->is_stereo) {  // 2 vu meters
       ansi_cursor_move_x (0);
+      ansi_clear_to_endl ();
       print_vu_meter (show_r, hold_r, show_clip_r, show_xrun);
       ansi_cursor_move_x (0);
       ansi_cursor_move_y (-2);

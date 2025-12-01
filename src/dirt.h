@@ -76,7 +76,7 @@ class c_jackclient;
 #define DEFAULT_ZEROPEAK                true // try to zero-align peak?
 #define ANSI_VU_METER_MIN_SIZE          64 // for our ascii-art [---- ] meters
 #define ANSI_VU_REDRAW_EVERY            0.03 // in seconds
-#define ANSI_VU_FALL_SPEED              0.1
+#define ANSI_VU_FALL_SPEED              0.05
 #define ANSI_VU_PEAK_HOLD               0.5
 #define ANSI_VU_CLIP_HOLD               0.5
 #define ANSI_VU_XRUN_HOLD               1.0
@@ -105,6 +105,15 @@ ANSI_RESET [];
 #define ANSI_MAGENTA_DARK  ANSI_DARK_MAGENTA
 #define ANSI_PURPLE_DARK   ANSI_DARK_PURPLE
 #define ANSI_CYAN_DARK     ANSI_DARK_CYAN
+
+enum __dirt_ansi_colors {
+  COLOR_BLACK,        COLOR_DARK_RED,     COLOR_DARK_GREEN,  COLOR_DARK_YELLOW,
+  COLOR_DARK_BLUE,    COLOR_DARK_MAGENTA, COLOR_DARK_CYAN,   COLOR_DARK_GREY,
+  COLOR_GREY,         COLOR_RED,          COLOR_GREEN,       COLOR_YELLOW,
+  COLOR_BLUE,         COLOR_MAGENTA,      COLOR_CYAN,        COLOR_WHITE,
+  COLOR_RESET
+};
+
 
 enum deconv_mode {
   mode_deconvolve,
