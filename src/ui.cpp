@@ -12,16 +12,49 @@
 #define BP
 #endif
 
+// c_mainwindow
 
 wxBEGIN_EVENT_TABLE (c_mainwindow, ui_mainwindow)
+  //EVT_CLOSE (c_mainwindow::on_close)
+  //EVT_SIZE (c_mainwindow::on_resize)
+  EVT_BUTTON (wxID_ABOUT, c_mainwindow::on_about)
+  EVT_BUTTON (wxID_OK, c_mainwindow::on_ok)
+  EVT_BUTTON (wxID_CANCEL, c_mainwindow::on_cancel)
 wxEND_EVENT_TABLE ();
 
 c_mainwindow::c_mainwindow ()
 : ui_mainwindow (NULL, wxID_ANY) {
+  CP
 }
 
 c_mainwindow::~c_mainwindow () {
+  CP
 }
+
+void c_mainwindow::on_about (wxCommandEvent &ev) {
+  CP
+  wxMessageBox ("dirt");
+}
+
+void c_mainwindow::on_ok (wxCommandEvent &ev) {
+  CP
+}
+
+void c_mainwindow::on_resize (wxSizeEvent &ev) {
+  CP
+}
+
+void c_mainwindow::on_close (wxCloseEvent &ev) {
+  CP
+  Close ();
+}
+
+void c_mainwindow::on_cancel (wxCommandEvent &ev) {
+  CP
+  Close ();
+}
+
+// c_app
 
 c_app::c_app ()
 : wxApp::wxApp () {

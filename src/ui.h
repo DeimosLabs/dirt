@@ -31,6 +31,21 @@ public:
   c_mainwindow ();
   ~c_mainwindow ();
   
+  //void on_debug (wxCommandEvent &ev);
+  void on_close (wxCloseEvent &ev);
+  //void on_keydown (wxKeyEvent &ev);
+  void on_resize (wxSizeEvent &ev);
+  void on_Close (wxCloseEvent &ev);
+  void on_about (wxCommandEvent &ev);
+  void on_ok (wxCommandEvent &ev);
+  void on_cancel (wxCommandEvent &ev);
+  //void on_prefs (wxCommandEvent &ev);
+  //void on_quit (wxCommandEvent &ev);
+  //void on_menu_highlight (wxMenuEvent &ev);
+  //void on_debug_stuff_toggled (bool b);
+  
+  void set_statustext (const char *str, ...);
+
 private:
   wxDECLARE_EVENT_TABLE ();
 };
@@ -44,7 +59,6 @@ public:
   int OnExit ();
 
   c_mainwindow *mainwindow = NULL;
-  wxPanel *testpanel = NULL;
 protected:
   //virtual int FilterEvent (wxEvent &ev);
   

@@ -40,49 +40,52 @@ class wxSpinCtrl;
 #define ID_UI_MAINWINDOW 10000
 #define ID_NOTEBOOK 10038
 #define ID_PANEL 10039
-#define ID_RADIOBUTTON 10013
-#define ID_RADIOBUTTON1 10016
-#define ID_RADIOBUTTON2 10012
-#define ID_CHOICE4 10043
-#define ID_RADIOBUTTON3 10037
-#define ID_CHOICE1 10023
-#define ID_TEXTCTRL3 10014
-#define ID_BUTTON5 10015
-#define ID_SPINCTRL 10017
-#define ID_SPINCTRL1 10018
-#define ID_SPINCTRL2 10019
-#define ID_SPINCTRL3 10020
-#define ID_SPINCTRL4 10021
-#define ID_SPINCTRL5 10022
-#define ID_COMBOBOX 10024
-#define ID_COMBOBOX1 10025
-#define ID_CHECKBOX6 10032
-#define ID_COMBOBOX2 10026
+#define ID_FILE 10013
+#define ID_MAKESWEEP 10016
+#define ID_ROUNDTRIP 10012
+#define ID_PLAYSWEEP 10037
+#define ID_BACKEND 10023
+#define ID_DRYFILE 10014
+#define ID_DRYFILE_BROWSE 10015
+#define ID_DRY_LENGTH 10017
+#define ID_DRY_F1 10018
+#define ID_DRY_F2 10019
+#define ID_DRY_PREROLL 10020
+#define ID_DRY_MARKER 10021
+#define ID_DRY_GAP 10022
+#define ID_BUTTON3 10046
+#define ID_JACK_DRY 10024
+#define ID_JACK_WET_L 10025
+#define ID_JACK_MONO 10032
+#define ID_JACK_WET_R 10026
+#define ID_BUTTON 10031
 #define ID_PANEL1 10040
-#define ID_CHECKBOX3 10006
-#define ID_TEXTCTRL1 10007
-#define ID_BUTTON2 10005
-#define ID_BUTTON3 10008
-#define ID_BUTTON 10001
-#define ID_LISTBOX 10002
-#define ID_TEXTCTRL 10010
-#define ID_BUTTON1 10011
-#define ID_CHOICE 10003
-#define ID_CHOICE2 10028
-#define ID_SPINCTRL6 10033
-#define ID_CHOICE3 10029
-#define ID_SPINCTRL7 10034
-#define ID_CHECKBOX 10004
-#define ID_CHECKBOX1 10009
-#define ID_CHECKBOX7 10036
-#define ID_CHECKBOX2 10027
-#define ID_SPINCTRL8 10035
-#define ID_SPINCTRL10 10042
-#define ID_SPINCTRL9 10041
+#define ID_INPUTDIR_RECURSIVE 10006
+#define ID_INPUTDIR 10007
+#define ID_INPUTDIR_SCAN 10005
+#define ID_INPUTDIR_BROWSE 10008
+#define ID_INPUTFILES_CLEAR 10030
+#define ID_INPUTFILES_ADD 10001
+#define ID_INPUTFILES 10002
+#define ID_OUTPUTDIR 10010
+#define ID_OUTPUTDIR_BROWSE 10011
+#define ID_SWEEP_ALIGN 10003
+#define ID_HPF_MODE 10028
+#define ID_HPF_FREQ 10033
+#define ID_LPF_MODE 10029
+#define ID_LPF_FREQ 10034
+#define ID_ZEROALIGN 10004
+#define ID_FORCEMONO 10009
+#define ID_OVERWRITE 10036
+#define ID_DEBUG 10027
+#define ID_SWEEP_THR 10035
+#define ID_IR_THR 10042
+#define ID_CHN_OFFSET 10041
+#define ID_PROCESS 10045
 #define SYMBOL_UI_MAINWINDOW_STYLE wxCAPTION|wxRESIZE_BORDER|wxSYSTEM_MENU|wxCLOSE_BOX
 #define SYMBOL_UI_MAINWINDOW_TITLE _("DIRT")
 #define SYMBOL_UI_MAINWINDOW_IDNAME ID_UI_MAINWINDOW
-#define SYMBOL_UI_MAINWINDOW_SIZE wxSize(960, 512)
+#define SYMBOL_UI_MAINWINDOW_SIZE wxSize(960, 560)
 #define SYMBOL_UI_MAINWINDOW_POSITION wxDefaultPosition
 ////@end control identifiers
 
@@ -131,9 +134,9 @@ public:
 ////@begin ui_mainwindow member variables
     wxBoxSizer* staticbox_drysweep;
     wxRadioButton* radio_file;
-    wxRadioButton* radio_generate;
+    wxRadioButton* radio_makesweep;
     wxRadioButton* radio_roundtrip;
-    wxRadioButton* radio_play;
+    wxRadioButton* radio_playsweep;
     wxChoice* list_backend;
     wxTextCtrl* text_dryfile;
     wxButton* btn_dryfile_browse;
@@ -148,16 +151,18 @@ public:
     wxCheckBox* chk_jack_mono;
     wxComboBox* list_jack_wet_r;
     wxBoxSizer* sizer_meters;
+    wxButton* btn_play;
     wxBoxSizer* staticbox_deconvolv;
     wxCheckBox* chk_inputdir_recursive;
     wxTextCtrl* text_inputdir;
     wxButton* btn_inputdir_scan;
     wxButton* btn_inputdir_browse;
+    wxButton* btn_inputfiles_clear;
     wxButton* btn_inputfiles_add;
     wxListBox* list_inputfiles;
     wxTextCtrl* text_outputdir;
     wxButton* btn_outputdir_browse;
-    wxChoice* list_alignmethod;
+    wxChoice* list_align;
     wxChoice* list_hpf_mode;
     wxSpinCtrl* spin_hpf_freq;
     wxChoice* list_lpf_mode;
@@ -167,10 +172,10 @@ public:
     wxCheckBox* chk_overwrite;
     wxCheckBox* chk_debug;
     wxSpinCtrl* spin_sweep_thr;
-    wxSpinCtrl* spin_ir_thresh;
+    wxSpinCtrl* spin_ir_thr;
     wxSpinCtrl* spin_chn_offset;
+    wxButton* btn_process;
     wxButton* btn_about;
-    wxButton* btn_cancel;
     wxButton* btn_ok;
 ////@end ui_mainwindow member variables
 };

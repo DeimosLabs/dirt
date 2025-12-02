@@ -66,7 +66,6 @@ struct s_prefs {
   float  normalize_amp         = DEFAULT_NORMALIZE_AMP; // TODO: command opt line for this 
   
   std::string jack_name = DEFAULT_JACK_NAME;
-  //std::string jack_portname;
   
   size_t cache_dry_marker_len = 0;
   size_t cache_dry_gap_len    = 0;
