@@ -78,8 +78,8 @@ class c_jackclient;
 #define ANSI_VU_REDRAW_EVERY            0.03 // in seconds
 #define ANSI_VU_FALL_SPEED              0.05
 #define ANSI_VU_PEAK_HOLD               0.5
-#define ANSI_VU_CLIP_HOLD               0.5
-#define ANSI_VU_XRUN_HOLD               1.0
+#define ANSI_VU_CLIP_HOLD               1.0
+#define ANSI_VU_XRUN_HOLD               5.0
 
 //#define THRESH_RELATIVE // relative to peak, comment out for absolute
 //#define DISABLE_LEADING_SILENCE_DETECTION // for debugging
@@ -237,6 +237,8 @@ public:
   const std::vector<float> &get_recorded_r () const { return sig_in_r; }
   void clear_recording ();
   bool has_recording () const;
+  size_t get_rec_left ();
+  size_t get_play_left ();
   
   // call this after reading and displaying peak/clip/error data
   void peak_acknowledge ();
@@ -292,7 +294,7 @@ bool write_stereo_wav (const char *filename,
                        const std::vector<float> &r,
                        int samplerate);
 
-// a few small inline functions
+// a few small static inline functions
 // ...these "shouldn't" generate dup code
 
 static bool file_exists (const std::string &path) {

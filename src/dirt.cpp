@@ -73,6 +73,14 @@ bool c_audioclient::has_recording () const {
   return (sig_in_l.size () > 0 || sig_in_r.size () > 0) && state == ST_IDLE;
 }
 
+size_t c_audioclient::get_rec_left () {
+  return rec_total - rec_index;
+}
+
+size_t c_audioclient::get_play_left () {
+  return std::max (sig_in_l.size (), sig_in_r.size ()) - index;
+}
+
 static bool stdin_has_enter()   /* 100% copy-pasted from chatgpt */
 {
     fd_set rfds;
@@ -739,9 +747,14 @@ int main (int argc, char **argv) {
   debug ("start, argc=%d", argc);
   s_prefs p;
   char realjackname [256] = { 0 };
+  int retval = 0;
   
 #ifdef USE_WXWIDGETS
-  if (argc <= 1) return wx_main (argc, argv);
+  if (argc <= 1) {
+    retval = wx_main (argc, argv);
+    CP 
+    return retval;
+  }
 #endif
   
   int paths_bf = parse_args (argc, argv, p);
