@@ -186,8 +186,9 @@ static int jack_process_cb (jack_nframes_t nframes, void *arg) {
 }
 
 // these two APPEND the number of system/default ports to passed vector
-int c_jackclient::get_default_playback (int howmany,
-                                       std::vector<std::string> &v) {
+int c_jackclient::get_playback_ports (int howmany,
+                                      std::vector<std::string> &v,
+                                      bool default_only) {
   debug ("start");
   //v.clear ();
   if (!client || howmany <= 0) return 0;
@@ -196,7 +197,7 @@ int c_jackclient::get_default_playback (int howmany,
     client,
     nullptr,
     nullptr,
-    JackPortIsPhysical | JackPortIsInput   // speakers = physical inputs
+    (default_only ? JackPortIsPhysical : 0) | JackPortIsInput   // speakers = physical inputs
   );
 
   if (!ports)
@@ -215,8 +216,9 @@ int c_jackclient::get_default_playback (int howmany,
   return count;
 }
 
-int c_jackclient::get_default_capture (int howmany,
-                                      std::vector<std::string> &v) {
+int c_jackclient::get_capture_ports (int howmany,
+                                      std::vector<std::string> &v,
+                                      bool default_only) {
   debug ("start");
   //v.clear ();
   if (!client || howmany <= 0) return 0;
@@ -225,7 +227,7 @@ int c_jackclient::get_default_capture (int howmany,
     client,
     nullptr,
     nullptr,
-    JackPortIsPhysical | JackPortIsOutput   // microphones = physical outputs
+    (default_only ? JackPortIsPhysical : 0) | JackPortIsOutput
   );
 
   if (!ports)

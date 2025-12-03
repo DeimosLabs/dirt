@@ -39,7 +39,7 @@
 #define BP
 #endif
 
-int wx_main (int argc, char **argv);
+int wx_main (int argc, char **argv, c_deconvolver *p);
 
 c_audioclient::c_audioclient (c_deconvolver *dec) {
   debug ("start");
@@ -222,6 +222,7 @@ static void print_usage (const char *prog, bool full = false) {
     "  -h, --help               Show " << (full ? "this" : "full")
                              << " help/usage text and version\n"
     "  -V, --version            Same as --help\n"
+    "  -g, --gui                Use X11/wxWidgets UI [on if no options]\n"
     "  -d, --dry FILE           Dry sweep WAV file\n"
     "  -w, --wet FILE           Recorded (wet) sweep WAV file\n"
     "  -o, --out FILE           Output IR WAV file\n" <<
@@ -246,7 +247,7 @@ static void print_usage (const char *prog, bool full = false) {
                              << (DEFAULT_ZEROPEAK ? " [default]\n" : "\n") <<
     "  -Z, --no-zero-peak       Don't try to align peak to zero"
                              << (!DEFAULT_ZEROPEAK ? " [default]\n" : "\n") << 
-    "  -M, --mono               Force mono/single channel [no/autodetect]\n"
+    "  -m, --mono               Force mono/single channel [no/autodetect]\n"
     "  -q, --quiet              Less verbose output\n"
     "  -v, --verbose            More verbose output\n"
     << (full ? 
@@ -265,11 +266,11 @@ static void print_usage (const char *prog, bool full = false) {
     "  -X, --sweep-f1 F         Sweep start frequency [" << DEFAULT_F1 << "]\n"
     "  -Y, --sweep-f2 F         Sweep end frequency [" << DEFAULT_F2 << "]\n";
   if (full) out <<
-    "  -p, --preroll SEC        Prepend SEC leading silence, in seconds ["
+    "  -P, --preroll SEC        Prepend SEC leading silence, in seconds ["
                                 << DEFAULT_PREROLL_SEC << "]\n"
-    "  -m, --marker SEC         Prepend SEC alignment marker, in seconds ["
+    "  -M, --marker SEC         Prepend SEC alignment marker, in seconds ["
                                 << DEFAULT_MARKER_SEC << "]\n"
-    "  -g, --gap SEC            Add SEC gap after marker, in seconds ["
+    "  -G, --gap SEC            Add SEC gap after marker, in seconds ["
                                 << DEFAULT_MARKGAP_SEC << "]\n"
     "  -W, --wait               Wait for input before playing sweep\n"
 #ifdef USE_JACK
@@ -446,6 +447,8 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
     } else if (arg == "-d" || arg == "--dry") {
       if (++i >= argc) { std::cerr << "Missing value for " << arg << "\n"; return ret_err; }
       opt.dry_path = argv [i];
+    } else if (arg == "-g" || arg == "--gui") {
+      opt.gui = true;
     } else if (arg == "-w" || arg == "--wet") {
       if (++i >= argc) { std::cerr << "Missing value for " << arg << "\n"; return ret_err; }
       opt.wet_path = argv [i];
@@ -501,7 +504,7 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
                   << argv [i] << " (must be between -200 and 0)\n";
         return ret_err;
       }
-    } else if (arg == "-M" || arg == "--mono") {
+    } else if (arg == "-m" || arg == "--mono") {
       opt.request_stereo = false;
     } else if (arg == "--stereo") { // just accept this for symmetry
       opt.request_stereo = true;
@@ -554,7 +557,7 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
         std::cerr << "Amplitude needs to be from -200 to 0\n";
         return ret_err;
       }
-    } else if (arg == "-m" || arg == "--marker") {
+    } else if (arg == "-M" || arg == "--marker") {
         if (++i >= argc) {
             std::cerr << "Missing value for " << arg << "\n";
             return ret_err;
@@ -568,7 +571,7 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
             std::cerr << "Marker length cannot be negative.\n";
             return ret_err;
         }
-    } else if (arg == "-p" || arg == "--preroll") {
+    } else if (arg == "-P" || arg == "--preroll") {
         if (++i >= argc) {
             std::cerr << "Missing value for " << arg << "\n";
             return ret_err;
@@ -578,7 +581,7 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
             std::cerr << "Preroll length cannot be negative.\n";
             return ret_err;
         }
-    } else if (arg == "-g" || arg == "--gap") {
+    } else if (arg == "-G" || arg == "--gap") {
         if (++i >= argc) {
             std::cerr << "Missing value for " << arg << "\n";
             return ret_err;
@@ -638,7 +641,9 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
           opt.ir_length_samples = std::strtol(positionals[3], nullptr, 10);
       }
   }
-
+  
+  if (opt.gui) return 0;
+  CP
   int bf = 0;
   if (!opt.dry_path.empty()) bf |= 1;
   if (!opt.wet_path.empty()) bf |= 2;
@@ -674,7 +679,7 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
       return ret_err;
   }
 #endif
-
+  
   // --- Deconvolution mode: original bitfield logic ---
   if (opt.mode != deconv_mode::mode_deconvolve) {
       // Shouldn't happen, but just in case
@@ -685,8 +690,10 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
   switch (bf) {
     case 0:
       // deconvolve mode but no paths at all -> show full usage
-      print_usage(argv[0], false);
-      exit(1);
+      if (!opt.gui) {
+        print_usage (argv [0], false);
+        exit (1);
+      }
       break;
 
     case 1: // only dry path given
@@ -751,32 +758,32 @@ int main (int argc, char **argv) {
   
 #ifdef USE_WXWIDGETS
   if (argc <= 1) {
-    retval = wx_main (argc, argv);
-    CP 
-    return retval;
+    p.gui = true;
   }
 #endif
   
   int paths_bf = parse_args (argc, argv, p);
-  if (paths_bf == -1 || p.mode == deconv_mode::mode_error) {
-    print_usage (argv [0]);
-    debug ("return");
-    return 1;
-  }
-
-  if (!resolve_sources (p, paths_bf)) {
-    print_usage (argv [0], false);
-    debug ("return");
-    return 1;
+  
+  if (!p.gui) {
+    if (paths_bf == -1 || p.mode == deconv_mode::mode_error) {
+      print_usage (argv [0]);
+      debug ("return");
+      return 1;
+    }
+    
+    if (!resolve_sources (p, paths_bf)) {
+      print_usage (argv [0], false);
+      debug ("return");
+      return 1;
+    }
   }
   
   // our main deconvolver object
+  // this needs to be created after we parse args but before wx_main
   c_deconvolver dec (&p);
   
-  // using jack at all?
 #ifdef USE_JACK
-  
-  if (p.dry_source == src_jack || p.wet_source == src_jack) {
+  if (p.dry_source == src_jack || p.wet_source == src_jack || p.gui) {
     snprintf (realjackname, 255, p.jack_name.c_str (), argv [0]);
     
     if (!dec.audio_init (realjackname, p.sweep_sr, p.request_stereo) || !dec.audio_ready ()) {
@@ -785,7 +792,14 @@ int main (int argc, char **argv) {
     }
   }
 #endif
+
+  if (p.gui) {
+    //char **argv_dummy = { NULL };
+    retval = wx_main (1, argv, &dec);
+    return retval;
+  }
   
+  // using jack at all?
   // avoid upper freq. aliasing: now that we have sample rate from either user
   // or jack, make sure we don't sweep past 95% of nyquist frequency
   // only relevant when we are going to *generate* a sweep

@@ -39,11 +39,13 @@ class wxSpinCtrl;
 ////@begin control identifiers
 #define ID_UI_MAINWINDOW 10000
 #define ID_NOTEBOOK 10038
-#define ID_PANEL 10039
+#define ID_TAB1 10039
 #define ID_FILE 10013
 #define ID_MAKESWEEP 10016
 #define ID_ROUNDTRIP 10012
 #define ID_PLAYSWEEP 10037
+#define ID_SAMPLERATE 10044
+#define ID_FORCEMONO 10009
 #define ID_BACKEND 10023
 #define ID_DRYFILE 10014
 #define ID_DRYFILE_BROWSE 10015
@@ -53,13 +55,12 @@ class wxSpinCtrl;
 #define ID_DRY_PREROLL 10020
 #define ID_DRY_MARKER 10021
 #define ID_DRY_GAP 10022
-#define ID_BUTTON3 10046
+#define ID_DRY_SAVE 10046
 #define ID_JACK_DRY 10024
 #define ID_JACK_WET_L 10025
-#define ID_JACK_MONO 10032
 #define ID_JACK_WET_R 10026
-#define ID_BUTTON 10031
-#define ID_PANEL1 10040
+#define ID_PLAY 10031
+#define ID_TAB2 10040
 #define ID_INPUTDIR_RECURSIVE 10006
 #define ID_INPUTDIR 10007
 #define ID_INPUTDIR_SCAN 10005
@@ -75,17 +76,17 @@ class wxSpinCtrl;
 #define ID_LPF_MODE 10029
 #define ID_LPF_FREQ 10034
 #define ID_ZEROALIGN 10004
-#define ID_FORCEMONO 10009
 #define ID_OVERWRITE 10036
 #define ID_DEBUG 10027
 #define ID_SWEEP_THR 10035
 #define ID_IR_THR 10042
+#define ID_SPINCTRL 10043
 #define ID_CHN_OFFSET 10041
 #define ID_PROCESS 10045
 #define SYMBOL_UI_MAINWINDOW_STYLE wxCAPTION|wxRESIZE_BORDER|wxSYSTEM_MENU|wxCLOSE_BOX
 #define SYMBOL_UI_MAINWINDOW_TITLE _("DIRT")
 #define SYMBOL_UI_MAINWINDOW_IDNAME ID_UI_MAINWINDOW
-#define SYMBOL_UI_MAINWINDOW_SIZE wxSize(960, 560)
+#define SYMBOL_UI_MAINWINDOW_SIZE wxSize(1024, 640)
 #define SYMBOL_UI_MAINWINDOW_POSITION wxDefaultPosition
 ////@end control identifiers
 
@@ -132,11 +133,14 @@ public:
     static bool ShowToolTips();
 
 ////@begin ui_mainwindow member variables
+    wxPanel* tab_drysweep;
     wxBoxSizer* staticbox_drysweep;
     wxRadioButton* radio_file;
     wxRadioButton* radio_makesweep;
     wxRadioButton* radio_roundtrip;
     wxRadioButton* radio_playsweep;
+    wxTextCtrl* text_samplerate;
+    wxCheckBox* chk_forcemono;
     wxChoice* list_backend;
     wxTextCtrl* text_dryfile;
     wxButton* btn_dryfile_browse;
@@ -148,10 +152,10 @@ public:
     wxSpinCtrl* spin_dry_gap;
     wxComboBox* list_jack_dry;
     wxComboBox* list_jack_wet_l;
-    wxCheckBox* chk_jack_mono;
     wxComboBox* list_jack_wet_r;
     wxBoxSizer* sizer_meters;
     wxButton* btn_play;
+    wxPanel* tab_deconvolv;
     wxBoxSizer* staticbox_deconvolv;
     wxCheckBox* chk_inputdir_recursive;
     wxTextCtrl* text_inputdir;
@@ -168,11 +172,11 @@ public:
     wxChoice* list_lpf_mode;
     wxSpinCtrl* spin_lpf_freq;
     wxCheckBox* chk_zeroalign;
-    wxCheckBox* chk_forcemono;
     wxCheckBox* chk_overwrite;
     wxCheckBox* chk_debug;
     wxSpinCtrl* spin_sweep_thr;
-    wxSpinCtrl* spin_ir_thr;
+    wxSpinCtrl* spin_ir_start_thr;
+    wxSpinCtrl* spin_ir_end_thr;
     wxSpinCtrl* spin_chn_offset;
     wxButton* btn_process;
     wxButton* btn_about;

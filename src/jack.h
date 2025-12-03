@@ -41,10 +41,15 @@ public:
   jack_port_t   *port_outL = NULL;
   //jack_port_t   *port_outR = NULL; // not used for now
   
-private:
-  int get_default_playback (int howmany, std::vector<std::string> &v);
-  int get_default_capture (int howmany, std::vector<std::string> &v);
+  int get_capture_ports (int howmany, std::vector<std::string> &v, bool default_only);
+  int get_playback_ports (int howmany, std::vector<std::string> &v, bool default_only);
   
+  int get_default_capture (int howmany, std::vector<std::string> &v)
+      { return get_capture_ports (howmany, v, false); }
+  int get_default_playback (int howmany, std::vector<std::string> &v)
+      { return get_playback_ports (howmany, v, false); }
+  
+private:
   bool jack_inited = false;
 };
 

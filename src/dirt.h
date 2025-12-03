@@ -114,6 +114,10 @@ enum __dirt_ansi_colors {
   COLOR_RESET
 };
 
+enum audio_driver {
+  driver_jack,
+  num_drivers
+};
 
 enum deconv_mode {
   mode_deconvolve,
@@ -267,6 +271,8 @@ public:
   bool rec_go  = false;
   bool monitor_only = false;
   bool xrun = false;
+  audio_driver driver = driver_jack;
+  
   
   /*std::string portname_dry = "";
   std::string portname_wetL = "";

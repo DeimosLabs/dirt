@@ -21,7 +21,7 @@ struct s_prefs {
   std::string portname_dry = "";
   std::string portname_wetL = "";
   std::string portname_wetR = "";
-  
+  bool gui = false;
 
   long ir_length_samples = 0;    // 0 = auto
 #ifdef THRESH_RELATIVE
@@ -64,6 +64,12 @@ struct s_prefs {
   float  ir_start_silence_db   = DEFAULT_IR_SILENCE_THRESH_DB;
   float  headroom_seconds      = 0.0f;
   float  normalize_amp         = DEFAULT_NORMALIZE_AMP; // TODO: command opt line for this 
+#ifdef HIGHPASS_F
+  int    hpf                   = HIGHPASS_F;
+#endif
+#ifdef LOWPASS_F
+  int    lpf                   = LOWPASS_F;
+#endif
   
   std::string jack_name = DEFAULT_JACK_NAME;
   
@@ -71,8 +77,13 @@ struct s_prefs {
   size_t cache_dry_gap_len    = 0;
 };
 
+class c_mainwindow;
+
 class c_deconvolver {
 friend c_audioclient;
+#ifdef USE_WXWIDGETS
+friend c_mainwindow;
+#endif
 public:
   //c_deconvolver () = default;
   c_deconvolver (struct s_prefs *prefs = NULL, std::string name = "");

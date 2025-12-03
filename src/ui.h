@@ -22,13 +22,18 @@
  *
  * See header file and --help text for more info
  */
+ 
+ 
+#ifndef    __DIRT_UI_H
+#define    __DIRT_UI_H
+#define __IN_DIRT_UI_H
 
 #include "wx/wx.h"
 #include "wxwidgets/mainwindow.h"
 
 class c_mainwindow : public ui_mainwindow {
 public:
-  c_mainwindow ();
+  c_mainwindow (c_deconvolver *d = NULL);
   ~c_mainwindow ();
   
   //void on_debug (wxCommandEvent &ev);
@@ -39,26 +44,43 @@ public:
   void on_about (wxCommandEvent &ev);
   void on_ok (wxCommandEvent &ev);
   void on_cancel (wxCommandEvent &ev);
+  void on_radio_file (wxCommandEvent &ev);
+  void on_radio_playsweep (wxCommandEvent &ev);
+  void on_radio_makesweep (wxCommandEvent &ev);
+  void on_radio_roundtrip (wxCommandEvent &ev);
+  void on_checkbox (wxCommandEvent &ev);
   //void on_prefs (wxCommandEvent &ev);
   //void on_quit (wxCommandEvent &ev);
   //void on_menu_highlight (wxMenuEvent &ev);
   //void on_debug_stuff_toggled (bool b);
+  void set_mode (long int mode);
+  void set_prefs (s_prefs *prefs);
+  void get_prefs (s_prefs *prefs);
+  bool init_audio ();
   
   void set_statustext (const char *str, ...);
+  
+  c_deconvolver *dec = NULL;
 
 private:
   wxDECLARE_EVENT_TABLE ();
+  void set_enable (wxWindow *w, bool b);
+  void disable (wxWindow *w) { set_enable (w, false); }
+  void enable (wxWindow *w) { set_enable (w, true); }
+  
+  bool init_audio_done = false;
 };
 
 class c_app : public wxApp {
 public:
-  c_app ();
+  c_app (c_deconvolver *d);
   ~c_app ();
   bool OnInit ();
   //int OnRun ();
   int OnExit ();
 
   c_mainwindow *mainwindow = NULL;
+  c_deconvolver *dec;
 protected:
   //virtual int FilterEvent (wxEvent &ev);
   
@@ -66,3 +88,9 @@ private:
 };
 
 wxDECLARE_APP (c_app);
+
+extern c_app *g_app;
+
+#undef  __IN_DIRT_UI_H
+#endif  // __DIRT_UI_H
+

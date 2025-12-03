@@ -99,11 +99,14 @@ ui_mainwindow::~ui_mainwindow()
 void ui_mainwindow::Init()
 {
 ////@begin ui_mainwindow member initialisation
+    tab_drysweep = NULL;
     staticbox_drysweep = NULL;
     radio_file = NULL;
     radio_makesweep = NULL;
     radio_roundtrip = NULL;
     radio_playsweep = NULL;
+    text_samplerate = NULL;
+    chk_forcemono = NULL;
     list_backend = NULL;
     text_dryfile = NULL;
     btn_dryfile_browse = NULL;
@@ -115,10 +118,10 @@ void ui_mainwindow::Init()
     spin_dry_gap = NULL;
     list_jack_dry = NULL;
     list_jack_wet_l = NULL;
-    chk_jack_mono = NULL;
     list_jack_wet_r = NULL;
     sizer_meters = NULL;
     btn_play = NULL;
+    tab_deconvolv = NULL;
     staticbox_deconvolv = NULL;
     chk_inputdir_recursive = NULL;
     text_inputdir = NULL;
@@ -135,11 +138,11 @@ void ui_mainwindow::Init()
     list_lpf_mode = NULL;
     spin_lpf_freq = NULL;
     chk_zeroalign = NULL;
-    chk_forcemono = NULL;
     chk_overwrite = NULL;
     chk_debug = NULL;
     spin_sweep_thr = NULL;
-    spin_ir_thr = NULL;
+    spin_ir_start_thr = NULL;
+    spin_ir_end_thr = NULL;
     spin_chn_offset = NULL;
     btn_process = NULL;
     btn_about = NULL;
@@ -162,10 +165,10 @@ void ui_mainwindow::CreateControls()
 
     wxNotebook* itemNotebook1 = new wxNotebook( itemFrame1, ID_NOTEBOOK, wxDefaultPosition, wxDefaultSize, wxBK_DEFAULT );
 
-    wxPanel* itemPanel2 = new wxPanel( itemNotebook1, ID_PANEL, wxDefaultPosition, wxDefaultSize, wxSUNKEN_BORDER|wxTAB_TRAVERSAL );
-    itemPanel2->SetExtraStyle(wxWS_EX_VALIDATE_RECURSIVELY);
+    tab_drysweep = new wxPanel( itemNotebook1, ID_TAB1, wxDefaultPosition, wxDefaultSize, wxSUNKEN_BORDER|wxTAB_TRAVERSAL );
+    tab_drysweep->SetExtraStyle(wxWS_EX_VALIDATE_RECURSIVELY);
     staticbox_drysweep = new wxBoxSizer(wxHORIZONTAL);
-    itemPanel2->SetSizer(staticbox_drysweep);
+    tab_drysweep->SetSizer(staticbox_drysweep);
 
     wxBoxSizer* itemBoxSizer4 = new wxBoxSizer(wxVERTICAL);
     staticbox_drysweep->Add(itemBoxSizer4, 1, wxGROW|wxALL, 5);
@@ -173,35 +176,46 @@ void ui_mainwindow::CreateControls()
     itemBoxSizer4->Add(itemGridSizer1, 3, wxGROW|wxALL, 0);
     wxBoxSizer* itemBoxSizer7 = new wxBoxSizer(wxHORIZONTAL);
     itemGridSizer1->Add(itemBoxSizer7, 1, wxGROW|wxALL, 5);
-    radio_file = new wxRadioButton( itemPanel2, ID_FILE, _("File"), wxDefaultPosition, wxDefaultSize, 0 );
+    radio_file = new wxRadioButton( tab_drysweep, ID_FILE, _("File"), wxDefaultPosition, wxDefaultSize, 0 );
     radio_file->SetValue(false);
     itemBoxSizer7->Add(radio_file, 1, wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
     wxBoxSizer* itemBoxSizer9 = new wxBoxSizer(wxHORIZONTAL);
     itemGridSizer1->Add(itemBoxSizer9, 1, wxGROW|wxALL, 5);
-    radio_makesweep = new wxRadioButton( itemPanel2, ID_MAKESWEEP, _("Generate"), wxDefaultPosition, wxDefaultSize, 0 );
+    radio_makesweep = new wxRadioButton( tab_drysweep, ID_MAKESWEEP, _("Generate"), wxDefaultPosition, wxDefaultSize, 0 );
     radio_makesweep->SetValue(false);
     itemBoxSizer9->Add(radio_makesweep, 1, wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
     wxBoxSizer* itemBoxSizer11 = new wxBoxSizer(wxHORIZONTAL);
     itemGridSizer1->Add(itemBoxSizer11, 1, wxGROW|wxALL, 5);
-    radio_roundtrip = new wxRadioButton( itemPanel2, ID_ROUNDTRIP, _("Round-trip"), wxDefaultPosition, wxDefaultSize, 0 );
+    radio_roundtrip = new wxRadioButton( tab_drysweep, ID_ROUNDTRIP, _("Round-trip"), wxDefaultPosition, wxDefaultSize, 0 );
     radio_roundtrip->SetValue(false);
     itemBoxSizer11->Add(radio_roundtrip, 1, wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
     wxBoxSizer* itemBoxSizer6 = new wxBoxSizer(wxHORIZONTAL);
     itemGridSizer1->Add(itemBoxSizer6, 1, wxGROW|wxALL, 5);
-    radio_playsweep = new wxRadioButton( itemPanel2, ID_PLAYSWEEP, _("Audio out"), wxDefaultPosition, wxDefaultSize, 0 );
+    radio_playsweep = new wxRadioButton( tab_drysweep, ID_PLAYSWEEP, _("Audio out"), wxDefaultPosition, wxDefaultSize, 0 );
     radio_playsweep->SetValue(false);
-    itemBoxSizer6->Add(radio_playsweep, 1, wxALIGN_CENTER_VERTICAL|wxALL, 5);
+    radio_playsweep->Show(false);
+    itemBoxSizer6->Add(radio_playsweep, 1, wxALIGN_CENTER_VERTICAL|wxALL|wxRESERVE_SPACE_EVEN_IF_HIDDEN, 5);
 
     itemBoxSizer4->Add(5, 5, 1, wxALIGN_CENTER_HORIZONTAL|wxALL, 5);
 
-    wxStaticText* itemStaticText3 = new wxStaticText( itemPanel2, wxID_STATIC, _("Driver:"), wxDefaultPosition, wxDefaultSize, 0 );
+    wxStaticText* itemStaticText4 = new wxStaticText( tab_drysweep, wxID_STATIC, _("Sample rate:"), wxDefaultPosition, wxDefaultSize, 0 );
+    itemBoxSizer4->Add(itemStaticText4, 0, wxALIGN_LEFT|wxALL, 5);
+
+    text_samplerate = new wxTextCtrl( tab_drysweep, ID_SAMPLERATE, wxEmptyString, wxDefaultPosition, wxDefaultSize, 0 );
+    itemBoxSizer4->Add(text_samplerate, 0, wxGROW|wxALL, 5);
+
+    chk_forcemono = new wxCheckBox( tab_drysweep, ID_FORCEMONO, _("Force mono"), wxDefaultPosition, wxDefaultSize, 0 );
+    chk_forcemono->SetValue(false);
+    itemBoxSizer4->Add(chk_forcemono, 0, wxALIGN_LEFT|wxALL, 5);
+
+    wxStaticText* itemStaticText3 = new wxStaticText( tab_drysweep, wxID_STATIC, _("Driver:"), wxDefaultPosition, wxDefaultSize, 0 );
     itemBoxSizer4->Add(itemStaticText3, 0, wxALIGN_LEFT|wxALL, 5);
 
     wxArrayString list_backendStrings;
-    list_backend = new wxChoice( itemPanel2, ID_BACKEND, wxDefaultPosition, wxDefaultSize, list_backendStrings, 0 );
+    list_backend = new wxChoice( tab_drysweep, ID_BACKEND, wxDefaultPosition, wxDefaultSize, list_backendStrings, 0 );
     list_backend->SetStringSelection(_("0"));
     itemBoxSizer4->Add(list_backend, 0, wxGROW|wxBOTTOM, 5);
 
@@ -209,55 +223,55 @@ void ui_mainwindow::CreateControls()
     staticbox_drysweep->Add(itemBoxSizer14, 5, wxGROW|wxALL, 5);
     wxBoxSizer* itemBoxSizer15 = new wxBoxSizer(wxHORIZONTAL);
     itemBoxSizer14->Add(itemBoxSizer15, 0, wxGROW|wxALL, 5);
-    text_dryfile = new wxTextCtrl( itemPanel2, ID_DRYFILE, wxEmptyString, wxDefaultPosition, wxDefaultSize, 0 );
+    text_dryfile = new wxTextCtrl( tab_drysweep, ID_DRYFILE, wxEmptyString, wxDefaultPosition, wxDefaultSize, 0 );
     itemBoxSizer15->Add(text_dryfile, 1, wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
-    btn_dryfile_browse = new wxButton( itemPanel2, ID_DRYFILE_BROWSE, _("Browse..."), wxDefaultPosition, wxDefaultSize, 0 );
+    btn_dryfile_browse = new wxButton( tab_drysweep, ID_DRYFILE_BROWSE, _("Browse..."), wxDefaultPosition, wxDefaultSize, 0 );
     itemBoxSizer15->Add(btn_dryfile_browse, 0, wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
     itemBoxSizer14->Add(5, 5, 0, wxALIGN_CENTER_HORIZONTAL|wxALL, 0);
 
     wxFlexGridSizer* itemFlexGridSizer19 = new wxFlexGridSizer(0, 7, 0, 0);
     itemBoxSizer14->Add(itemFlexGridSizer19, 0, wxGROW|wxALL, 5);
-    wxStaticText* itemStaticText20 = new wxStaticText( itemPanel2, wxID_STATIC, _("Length (seconds):"), wxDefaultPosition, wxDefaultSize, 0 );
+    wxStaticText* itemStaticText20 = new wxStaticText( tab_drysweep, wxID_STATIC, _("Length (seconds):"), wxDefaultPosition, wxDefaultSize, 0 );
     itemFlexGridSizer19->Add(itemStaticText20, 0, wxALIGN_RIGHT|wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
-    spin_dry_length = new wxSpinCtrl( itemPanel2, ID_DRY_LENGTH, wxT("0"), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 100, 0 );
+    spin_dry_length = new wxSpinCtrl( tab_drysweep, ID_DRY_LENGTH, wxT("0"), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 500, 0 );
     itemFlexGridSizer19->Add(spin_dry_length, 0, wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
-    wxStaticText* itemStaticText22 = new wxStaticText( itemPanel2, wxID_STATIC, _("Start freq:"), wxDefaultPosition, wxDefaultSize, 0 );
+    wxStaticText* itemStaticText22 = new wxStaticText( tab_drysweep, wxID_STATIC, _("Start freq:"), wxDefaultPosition, wxDefaultSize, 0 );
     itemFlexGridSizer19->Add(itemStaticText22, 0, wxALIGN_RIGHT|wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
-    spin_dry_f1 = new wxSpinCtrl( itemPanel2, ID_DRY_F1, wxT("0"), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 100, 0 );
+    spin_dry_f1 = new wxSpinCtrl( tab_drysweep, ID_DRY_F1, wxT("0"), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 48000, 0 );
     itemFlexGridSizer19->Add(spin_dry_f1, 0, wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
-    wxStaticText* itemStaticText24 = new wxStaticText( itemPanel2, wxID_STATIC, _("End freq:"), wxDefaultPosition, wxDefaultSize, 0 );
+    wxStaticText* itemStaticText24 = new wxStaticText( tab_drysweep, wxID_STATIC, _("End freq:"), wxDefaultPosition, wxDefaultSize, 0 );
     itemFlexGridSizer19->Add(itemStaticText24, 0, wxALIGN_RIGHT|wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
-    spin_dry_f2 = new wxSpinCtrl( itemPanel2, ID_DRY_F2, wxT("0"), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 100, 0 );
+    spin_dry_f2 = new wxSpinCtrl( tab_drysweep, ID_DRY_F2, wxT("0"), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 48000, 0 );
     itemFlexGridSizer19->Add(spin_dry_f2, 0, wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
     itemFlexGridSizer19->Add(5, 5, 0, wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
-    wxStaticText* itemStaticText26 = new wxStaticText( itemPanel2, wxID_STATIC, _("Preroll (ms):"), wxDefaultPosition, wxDefaultSize, 0 );
+    wxStaticText* itemStaticText26 = new wxStaticText( tab_drysweep, wxID_STATIC, _("Preroll (ms):"), wxDefaultPosition, wxDefaultSize, 0 );
     itemFlexGridSizer19->Add(itemStaticText26, 0, wxALIGN_RIGHT|wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
-    spin_dry_preroll = new wxSpinCtrl( itemPanel2, ID_DRY_PREROLL, wxT("0"), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 100, 0 );
+    spin_dry_preroll = new wxSpinCtrl( tab_drysweep, ID_DRY_PREROLL, wxT("0"), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 1000000, 0 );
     itemFlexGridSizer19->Add(spin_dry_preroll, 0, wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
-    wxStaticText* itemStaticText28 = new wxStaticText( itemPanel2, wxID_STATIC, _("Marker (ms):"), wxDefaultPosition, wxDefaultSize, 0 );
+    wxStaticText* itemStaticText28 = new wxStaticText( tab_drysweep, wxID_STATIC, _("Marker (ms):"), wxDefaultPosition, wxDefaultSize, 0 );
     itemFlexGridSizer19->Add(itemStaticText28, 0, wxALIGN_RIGHT|wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
-    spin_dry_marker = new wxSpinCtrl( itemPanel2, ID_DRY_MARKER, wxT("0"), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 100, 0 );
+    spin_dry_marker = new wxSpinCtrl( tab_drysweep, ID_DRY_MARKER, wxT("0"), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 1000000, 0 );
     itemFlexGridSizer19->Add(spin_dry_marker, 0, wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
-    wxStaticText* itemStaticText30 = new wxStaticText( itemPanel2, wxID_STATIC, _("Gap (ms):"), wxDefaultPosition, wxDefaultSize, 0 );
+    wxStaticText* itemStaticText30 = new wxStaticText( tab_drysweep, wxID_STATIC, _("Gap (ms):"), wxDefaultPosition, wxDefaultSize, 0 );
     itemFlexGridSizer19->Add(itemStaticText30, 0, wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
-    spin_dry_gap = new wxSpinCtrl( itemPanel2, ID_DRY_GAP, wxT("0"), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 100, 0 );
+    spin_dry_gap = new wxSpinCtrl( tab_drysweep, ID_DRY_GAP, wxT("0"), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 1000000, 0 );
     itemFlexGridSizer19->Add(spin_dry_gap, 0, wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
-    wxButton* itemButton5 = new wxButton( itemPanel2, ID_BUTTON3, _("Save"), wxDefaultPosition, wxDefaultSize, 0 );
+    wxButton* itemButton5 = new wxButton( tab_drysweep, ID_DRY_SAVE, _("Save"), wxDefaultPosition, wxDefaultSize, 0 );
     itemFlexGridSizer19->Add(itemButton5, 0, wxALIGN_RIGHT|wxALIGN_BOTTOM|wxALL, 5);
 
     itemFlexGridSizer19->AddGrowableCol(6);
@@ -268,40 +282,38 @@ void ui_mainwindow::CreateControls()
     itemBoxSizer14->Add(itemBoxSizer33, 0, wxGROW|wxALL, 0);
     wxBoxSizer* itemBoxSizer34 = new wxBoxSizer(wxHORIZONTAL);
     itemBoxSizer33->Add(itemBoxSizer34, 0, wxGROW|wxALL, 5);
-    wxStaticText* itemStaticText35 = new wxStaticText( itemPanel2, wxID_STATIC, _("\"Round trip\" mode: adjust sweep settings above and select in/out audio ports."), wxDefaultPosition, wxDefaultSize, 0 );
+    wxStaticText* itemStaticText35 = new wxStaticText( tab_drysweep, wxID_STATIC, _("\"Round trip\" mode: adjust sweep settings above and select in/out audio ports."), wxDefaultPosition, wxDefaultSize, 0 );
     itemBoxSizer34->Add(itemStaticText35, 0, wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
     wxFlexGridSizer* itemFlexGridSizer36 = new wxFlexGridSizer(0, 5, 0, 0);
     itemBoxSizer33->Add(itemFlexGridSizer36, 0, wxGROW|wxALL, 5);
-    wxStaticText* itemStaticText37 = new wxStaticText( itemPanel2, wxID_STATIC, _("Play dry"), wxDefaultPosition, wxDefaultSize, 0 );
+    wxStaticText* itemStaticText37 = new wxStaticText( tab_drysweep, wxID_STATIC, _("Play dry"), wxDefaultPosition, wxDefaultSize, 0 );
     itemFlexGridSizer36->Add(itemStaticText37, 0, wxALIGN_LEFT|wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
     wxArrayString list_jack_dryStrings;
-    list_jack_dry = new wxComboBox( itemPanel2, ID_JACK_DRY, wxEmptyString, wxDefaultPosition, wxDefaultSize, list_jack_dryStrings, wxCB_DROPDOWN );
+    list_jack_dry = new wxComboBox( tab_drysweep, ID_JACK_DRY, wxEmptyString, wxDefaultPosition, wxDefaultSize, list_jack_dryStrings, wxCB_DROPDOWN );
     itemFlexGridSizer36->Add(list_jack_dry, 0, wxGROW|wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
     itemFlexGridSizer36->Add(5, 5, 0, wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
-    wxStaticText* itemStaticText40 = new wxStaticText( itemPanel2, wxID_STATIC, _("Record wet L"), wxDefaultPosition, wxDefaultSize, 0 );
+    wxStaticText* itemStaticText40 = new wxStaticText( tab_drysweep, wxID_STATIC, _("Record wet L"), wxDefaultPosition, wxDefaultSize, 0 );
     itemFlexGridSizer36->Add(itemStaticText40, 0, wxALIGN_LEFT|wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
     wxArrayString list_jack_wet_lStrings;
-    list_jack_wet_l = new wxComboBox( itemPanel2, ID_JACK_WET_L, wxEmptyString, wxDefaultPosition, wxDefaultSize, list_jack_wet_lStrings, wxCB_DROPDOWN );
+    list_jack_wet_l = new wxComboBox( tab_drysweep, ID_JACK_WET_L, wxEmptyString, wxDefaultPosition, wxDefaultSize, list_jack_wet_lStrings, wxCB_DROPDOWN );
     itemFlexGridSizer36->Add(list_jack_wet_l, 0, wxGROW|wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
     itemFlexGridSizer36->Add(5, 5, 0, wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
-    chk_jack_mono = new wxCheckBox( itemPanel2, ID_JACK_MONO, _("Mono"), wxDefaultPosition, wxDefaultSize, 0 );
-    chk_jack_mono->SetValue(false);
-    itemFlexGridSizer36->Add(chk_jack_mono, 0, wxALIGN_RIGHT|wxALIGN_CENTER_VERTICAL|wxALL, 5);
+    itemFlexGridSizer36->Add(5, 5, 0, wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
     itemFlexGridSizer36->Add(5, 5, 0, wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
-    wxStaticText* itemStaticText45 = new wxStaticText( itemPanel2, wxID_STATIC, _("Record wet R"), wxDefaultPosition, wxDefaultSize, 0 );
+    wxStaticText* itemStaticText45 = new wxStaticText( tab_drysweep, wxID_STATIC, _("Record wet R"), wxDefaultPosition, wxDefaultSize, 0 );
     itemFlexGridSizer36->Add(itemStaticText45, 0, wxALIGN_LEFT|wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
     wxArrayString list_jack_wet_rStrings;
-    list_jack_wet_r = new wxComboBox( itemPanel2, ID_JACK_WET_R, wxEmptyString, wxDefaultPosition, wxDefaultSize, list_jack_wet_rStrings, wxCB_DROPDOWN );
+    list_jack_wet_r = new wxComboBox( tab_drysweep, ID_JACK_WET_R, wxEmptyString, wxDefaultPosition, wxDefaultSize, list_jack_wet_rStrings, wxCB_DROPDOWN );
     itemFlexGridSizer36->Add(list_jack_wet_r, 0, wxGROW|wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
     itemFlexGridSizer36->AddGrowableCol(1);
@@ -312,15 +324,15 @@ void ui_mainwindow::CreateControls()
 
     itemBoxSizer14->Add(5, 5, 1, wxALIGN_CENTER_HORIZONTAL|wxALL, 5);
 
-    btn_play = new wxButton( itemPanel2, ID_BUTTON, _("Play"), wxDefaultPosition, wxDefaultSize, 0 );
+    btn_play = new wxButton( tab_drysweep, ID_PLAY, _("Play"), wxDefaultPosition, wxDefaultSize, 0 );
     itemBoxSizer14->Add(btn_play, 0, wxGROW|wxALL, 5);
 
-    itemNotebook1->AddPage(itemPanel2, _("Dry sweep"));
+    itemNotebook1->AddPage(tab_drysweep, _("Dry sweep"));
 
-    wxPanel* itemPanel47 = new wxPanel( itemNotebook1, ID_PANEL1, wxDefaultPosition, wxDefaultSize, wxSUNKEN_BORDER|wxTAB_TRAVERSAL );
-    itemPanel47->SetExtraStyle(wxWS_EX_VALIDATE_RECURSIVELY);
+    tab_deconvolv = new wxPanel( itemNotebook1, ID_TAB2, wxDefaultPosition, wxDefaultSize, wxSUNKEN_BORDER|wxTAB_TRAVERSAL );
+    tab_deconvolv->SetExtraStyle(wxWS_EX_VALIDATE_RECURSIVELY);
     staticbox_deconvolv = new wxBoxSizer(wxVERTICAL);
-    itemPanel47->SetSizer(staticbox_deconvolv);
+    tab_deconvolv->SetSizer(staticbox_deconvolv);
 
     staticbox_deconvolv->Add(5, 5, 0, wxALIGN_CENTER_HORIZONTAL|wxALL, 5);
 
@@ -332,35 +344,35 @@ void ui_mainwindow::CreateControls()
     itemBoxSizer10->Add(itemBoxSizer12, 0, wxGROW|wxALL, 0);
     wxBoxSizer* itemBoxSizer13 = new wxBoxSizer(wxVERTICAL);
     itemBoxSizer12->Add(itemBoxSizer13, 0, wxALIGN_CENTER_VERTICAL|wxALL, 5);
-    wxStaticText* itemStaticText14 = new wxStaticText( itemPanel47, wxID_STATIC, _("Scan directory:"), wxDefaultPosition, wxDefaultSize, 0 );
+    wxStaticText* itemStaticText14 = new wxStaticText( tab_deconvolv, wxID_STATIC, _("Scan directory:"), wxDefaultPosition, wxDefaultSize, 0 );
     itemBoxSizer13->Add(itemStaticText14, 0, wxALIGN_LEFT|wxALL, 0);
 
-    chk_inputdir_recursive = new wxCheckBox( itemPanel47, ID_INPUTDIR_RECURSIVE, _("Include sub"), wxDefaultPosition, wxDefaultSize, 0 );
+    chk_inputdir_recursive = new wxCheckBox( tab_deconvolv, ID_INPUTDIR_RECURSIVE, _("Include sub"), wxDefaultPosition, wxDefaultSize, 0 );
     chk_inputdir_recursive->SetValue(false);
     itemBoxSizer13->Add(chk_inputdir_recursive, 0, wxALIGN_LEFT|wxALL, 0);
 
-    text_inputdir = new wxTextCtrl( itemPanel47, ID_INPUTDIR, wxEmptyString, wxDefaultPosition, wxDefaultSize, 0 );
+    text_inputdir = new wxTextCtrl( tab_deconvolv, ID_INPUTDIR, wxEmptyString, wxDefaultPosition, wxDefaultSize, 0 );
     itemBoxSizer12->Add(text_inputdir, 1, wxALIGN_TOP|wxALL, 5);
 
     itemBoxSizer10->Add(5, 5, 1, wxALIGN_CENTER_HORIZONTAL|wxALL, 1);
 
     wxBoxSizer* itemBoxSizer21 = new wxBoxSizer(wxHORIZONTAL);
     itemBoxSizer10->Add(itemBoxSizer21, 0, wxGROW|wxALL, 0);
-    wxStaticText* itemStaticText23 = new wxStaticText( itemPanel47, wxID_STATIC, _("List of sweep files to process:"), wxDefaultPosition, wxDefaultSize, 0 );
+    wxStaticText* itemStaticText23 = new wxStaticText( tab_deconvolv, wxID_STATIC, _("List of sweep files to process:"), wxDefaultPosition, wxDefaultSize, 0 );
     itemBoxSizer21->Add(itemStaticText23, 0, wxALIGN_CENTER_VERTICAL|wxLEFT|wxRIGHT|wxBOTTOM, 5);
 
     wxGridSizer* itemGridSizer24 = new wxGridSizer(0, 2, 0, 0);
     itemBoxSizer8->Add(itemGridSizer24, 0, wxALIGN_CENTER_VERTICAL|wxALL, 0);
-    btn_inputdir_scan = new wxButton( itemPanel47, ID_INPUTDIR_SCAN, _("Scan"), wxDefaultPosition, wxDefaultSize, 0 );
+    btn_inputdir_scan = new wxButton( tab_deconvolv, ID_INPUTDIR_SCAN, _("Scan"), wxDefaultPosition, wxDefaultSize, 0 );
     itemGridSizer24->Add(btn_inputdir_scan, 0, wxGROW|wxALIGN_TOP|wxALL, 5);
 
-    btn_inputdir_browse = new wxButton( itemPanel47, ID_INPUTDIR_BROWSE, _("Browse..."), wxDefaultPosition, wxDefaultSize, 0 );
+    btn_inputdir_browse = new wxButton( tab_deconvolv, ID_INPUTDIR_BROWSE, _("Browse..."), wxDefaultPosition, wxDefaultSize, 0 );
     itemGridSizer24->Add(btn_inputdir_browse, 0, wxGROW|wxALIGN_TOP|wxALL, 5);
 
-    btn_inputfiles_clear = new wxButton( itemPanel47, ID_INPUTFILES_CLEAR, _("Clear"), wxDefaultPosition, wxDefaultSize, 0 );
+    btn_inputfiles_clear = new wxButton( tab_deconvolv, ID_INPUTFILES_CLEAR, _("Clear"), wxDefaultPosition, wxDefaultSize, 0 );
     itemGridSizer24->Add(btn_inputfiles_clear, 0, wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
-    btn_inputfiles_add = new wxButton( itemPanel47, ID_INPUTFILES_ADD, _("Add files..."), wxDefaultPosition, wxDefaultSize, 0 );
+    btn_inputfiles_add = new wxButton( tab_deconvolv, ID_INPUTFILES_ADD, _("Add files..."), wxDefaultPosition, wxDefaultSize, 0 );
     itemGridSizer24->Add(btn_inputfiles_add, 0, wxGROW|wxALIGN_BOTTOM|wxALL, 5);
 
     wxFlexGridSizer* itemFlexGridSizer49 = new wxFlexGridSizer(0, 3, 0, 0);
@@ -377,18 +389,18 @@ void ui_mainwindow::CreateControls()
     itemBoxSizer58->Add(5, 5, 1, wxALIGN_CENTER_VERTICAL|wxALL, 0);
 
     wxArrayString list_inputfilesStrings;
-    list_inputfiles = new wxListBox( itemPanel47, ID_INPUTFILES, wxDefaultPosition, wxDefaultSize, list_inputfilesStrings, wxLB_SINGLE );
+    list_inputfiles = new wxListBox( tab_deconvolv, ID_INPUTFILES, wxDefaultPosition, wxDefaultSize, list_inputfilesStrings, wxLB_SINGLE );
     staticbox_deconvolv->Add(list_inputfiles, 1, wxGROW|wxLEFT|wxRIGHT|wxBOTTOM, 5);
 
     wxBoxSizer* itemBoxSizer63 = new wxBoxSizer(wxHORIZONTAL);
     staticbox_deconvolv->Add(itemBoxSizer63, 0, wxGROW|wxALL, 0);
-    wxStaticText* itemStaticText64 = new wxStaticText( itemPanel47, wxID_STATIC, _("Output directory:"), wxDefaultPosition, wxDefaultSize, 0 );
+    wxStaticText* itemStaticText64 = new wxStaticText( tab_deconvolv, wxID_STATIC, _("Output directory:"), wxDefaultPosition, wxDefaultSize, 0 );
     itemBoxSizer63->Add(itemStaticText64, 0, wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
-    text_outputdir = new wxTextCtrl( itemPanel47, ID_OUTPUTDIR, wxEmptyString, wxDefaultPosition, wxDefaultSize, 0 );
+    text_outputdir = new wxTextCtrl( tab_deconvolv, ID_OUTPUTDIR, wxEmptyString, wxDefaultPosition, wxDefaultSize, 0 );
     itemBoxSizer63->Add(text_outputdir, 1, wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
-    btn_outputdir_browse = new wxButton( itemPanel47, ID_OUTPUTDIR_BROWSE, _("Browse..."), wxDefaultPosition, wxDefaultSize, 0 );
+    btn_outputdir_browse = new wxButton( tab_deconvolv, ID_OUTPUTDIR_BROWSE, _("Browse..."), wxDefaultPosition, wxDefaultSize, 0 );
     itemBoxSizer63->Add(btn_outputdir_browse, 0, wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
     wxBoxSizer* itemBoxSizer67 = new wxBoxSizer(wxHORIZONTAL);
@@ -397,56 +409,52 @@ void ui_mainwindow::CreateControls()
     itemBoxSizer67->Add(itemBoxSizer68, 0, wxALIGN_CENTER_VERTICAL|wxALL, 0);
     wxBoxSizer* itemBoxSizer69 = new wxBoxSizer(wxHORIZONTAL);
     itemBoxSizer68->Add(itemBoxSizer69, 0, wxGROW|wxALL, 0);
-    wxStaticText* itemStaticText70 = new wxStaticText( itemPanel47, wxID_STATIC, _("Sweep alignment method:"), wxDefaultPosition, wxDefaultSize, 0 );
+    wxStaticText* itemStaticText70 = new wxStaticText( tab_deconvolv, wxID_STATIC, _("Sweep alignment method:"), wxDefaultPosition, wxDefaultSize, 0 );
     itemBoxSizer69->Add(itemStaticText70, 0, wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
     wxArrayString list_alignStrings;
-    list_align = new wxChoice( itemPanel47, ID_SWEEP_ALIGN, wxDefaultPosition, wxDefaultSize, list_alignStrings, 0 );
+    list_align = new wxChoice( tab_deconvolv, ID_SWEEP_ALIGN, wxDefaultPosition, wxDefaultSize, list_alignStrings, 0 );
     itemBoxSizer69->Add(list_align, 1, wxGROW|wxALL, 5);
 
     wxBoxSizer* itemBoxSizer72 = new wxBoxSizer(wxHORIZONTAL);
     itemBoxSizer68->Add(itemBoxSizer72, 0, wxGROW|wxALL, 0);
-    wxStaticText* itemStaticText1 = new wxStaticText( itemPanel47, wxID_STATIC, _("High-pass filter:"), wxDefaultPosition, wxDefaultSize, 0 );
+    wxStaticText* itemStaticText1 = new wxStaticText( tab_deconvolv, wxID_STATIC, _("High-pass filter:"), wxDefaultPosition, wxDefaultSize, 0 );
     itemBoxSizer72->Add(itemStaticText1, 0, wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
     itemBoxSizer72->Add(5, 5, 1, wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
     wxArrayString list_hpf_modeStrings;
-    list_hpf_mode = new wxChoice( itemPanel47, ID_HPF_MODE, wxDefaultPosition, wxDefaultSize, list_hpf_modeStrings, 0 );
+    list_hpf_mode = new wxChoice( tab_deconvolv, ID_HPF_MODE, wxDefaultPosition, wxDefaultSize, list_hpf_modeStrings, 0 );
     itemBoxSizer72->Add(list_hpf_mode, 0, wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
-    spin_hpf_freq = new wxSpinCtrl( itemPanel47, ID_HPF_FREQ, wxT("0"), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 100, 0 );
+    spin_hpf_freq = new wxSpinCtrl( tab_deconvolv, ID_HPF_FREQ, wxT("0"), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 11025, 0 );
     itemBoxSizer72->Add(spin_hpf_freq, 0, wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
     wxBoxSizer* itemBoxSizer77 = new wxBoxSizer(wxHORIZONTAL);
     itemBoxSizer68->Add(itemBoxSizer77, 0, wxGROW|wxALL, 0);
-    wxStaticText* itemStaticText2 = new wxStaticText( itemPanel47, wxID_STATIC, _("Low-pass filter:"), wxDefaultPosition, wxDefaultSize, 0 );
+    wxStaticText* itemStaticText2 = new wxStaticText( tab_deconvolv, wxID_STATIC, _("Low-pass filter:"), wxDefaultPosition, wxDefaultSize, 0 );
     itemBoxSizer77->Add(itemStaticText2, 0, wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
     itemBoxSizer77->Add(5, 5, 1, wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
     wxArrayString list_lpf_modeStrings;
-    list_lpf_mode = new wxChoice( itemPanel47, ID_LPF_MODE, wxDefaultPosition, wxDefaultSize, list_lpf_modeStrings, 0 );
+    list_lpf_mode = new wxChoice( tab_deconvolv, ID_LPF_MODE, wxDefaultPosition, wxDefaultSize, list_lpf_modeStrings, 0 );
     itemBoxSizer77->Add(list_lpf_mode, 0, wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
-    spin_lpf_freq = new wxSpinCtrl( itemPanel47, ID_LPF_FREQ, wxT("0"), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 100, 0 );
+    spin_lpf_freq = new wxSpinCtrl( tab_deconvolv, ID_LPF_FREQ, wxT("0"), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 48000, 0 );
     itemBoxSizer77->Add(spin_lpf_freq, 0, wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
     wxBoxSizer* itemBoxSizer82 = new wxBoxSizer(wxVERTICAL);
     itemBoxSizer67->Add(itemBoxSizer82, 0, wxALIGN_CENTER_VERTICAL|wxALL, 0);
-    chk_zeroalign = new wxCheckBox( itemPanel47, ID_ZEROALIGN, _("Zero-align IR peak"), wxDefaultPosition, wxDefaultSize, 0 );
+    chk_zeroalign = new wxCheckBox( tab_deconvolv, ID_ZEROALIGN, _("Zero-align IR peak"), wxDefaultPosition, wxDefaultSize, 0 );
     chk_zeroalign->SetValue(false);
     itemBoxSizer82->Add(chk_zeroalign, 1, wxALIGN_LEFT|wxALL, 5);
 
-    chk_forcemono = new wxCheckBox( itemPanel47, ID_FORCEMONO, _("Force mono output"), wxDefaultPosition, wxDefaultSize, 0 );
-    chk_forcemono->SetValue(false);
-    itemBoxSizer82->Add(chk_forcemono, 1, wxALIGN_LEFT|wxALL, 5);
-
-    chk_overwrite = new wxCheckBox( itemPanel47, ID_OVERWRITE, _("Overwrite existing files"), wxDefaultPosition, wxDefaultSize, 0 );
+    chk_overwrite = new wxCheckBox( tab_deconvolv, ID_OVERWRITE, _("Overwrite existing files"), wxDefaultPosition, wxDefaultSize, 0 );
     chk_overwrite->SetValue(false);
     itemBoxSizer82->Add(chk_overwrite, 0, wxALIGN_LEFT|wxALL, 5);
 
-    chk_debug = new wxCheckBox( itemPanel47, ID_DEBUG, _("Debug info"), wxDefaultPosition, wxDefaultSize, 0 );
+    chk_debug = new wxCheckBox( tab_deconvolv, ID_DEBUG, _("Debug info"), wxDefaultPosition, wxDefaultSize, 0 );
     chk_debug->SetValue(false);
     itemBoxSizer82->Add(chk_debug, 1, wxALIGN_LEFT|wxALL, 5);
 
@@ -454,42 +462,52 @@ void ui_mainwindow::CreateControls()
     itemBoxSizer67->Add(itemBoxSizer87, 0, wxGROW|wxALL, 0);
     wxBoxSizer* itemBoxSizer88 = new wxBoxSizer(wxHORIZONTAL);
     itemBoxSizer87->Add(itemBoxSizer88, 1, wxGROW|wxALL, 0);
-    wxStaticText* itemStaticText89 = new wxStaticText( itemPanel47, wxID_STATIC, _("Sweep silence thresh (dB):"), wxDefaultPosition, wxDefaultSize, 0 );
+    wxStaticText* itemStaticText89 = new wxStaticText( tab_deconvolv, wxID_STATIC, _("Sweep silence thresh (dB):"), wxDefaultPosition, wxDefaultSize, 0 );
     itemBoxSizer88->Add(itemStaticText89, 0, wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
     itemBoxSizer88->Add(5, 5, 1, wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
-    spin_sweep_thr = new wxSpinCtrl( itemPanel47, ID_SWEEP_THR, wxT("0"), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 100, 0 );
+    spin_sweep_thr = new wxSpinCtrl( tab_deconvolv, ID_SWEEP_THR, wxT("0"), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, -200, 0, 0 );
     itemBoxSizer88->Add(spin_sweep_thr, 0, wxALIGN_CENTER_VERTICAL|wxALL, 0);
 
     wxBoxSizer* itemBoxSizer92 = new wxBoxSizer(wxHORIZONTAL);
     itemBoxSizer87->Add(itemBoxSizer92, 1, wxGROW|wxALL, 0);
-    wxStaticText* itemStaticText93 = new wxStaticText( itemPanel47, wxID_STATIC, _("IR silence thresh (dB):"), wxDefaultPosition, wxDefaultSize, 0 );
+    wxStaticText* itemStaticText93 = new wxStaticText( tab_deconvolv, wxID_STATIC, _("IR start silence thresh (dB):"), wxDefaultPosition, wxDefaultSize, 0 );
     itemBoxSizer92->Add(itemStaticText93, 0, wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
     itemBoxSizer92->Add(5, 5, 1, wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
-    spin_ir_thr = new wxSpinCtrl( itemPanel47, ID_IR_THR, wxT("0"), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 100, 0 );
-    itemBoxSizer92->Add(spin_ir_thr, 0, wxALIGN_CENTER_VERTICAL|wxALL, 0);
+    spin_ir_start_thr = new wxSpinCtrl( tab_deconvolv, ID_IR_THR, wxT("0"), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, -200, 0, 0 );
+    itemBoxSizer92->Add(spin_ir_start_thr, 0, wxALIGN_CENTER_VERTICAL|wxALL, 0);
+
+    wxBoxSizer* itemBoxSizer18 = new wxBoxSizer(wxHORIZONTAL);
+    itemBoxSizer87->Add(itemBoxSizer18, 1, wxGROW|wxALL, 0);
+    wxStaticText* itemStaticText19 = new wxStaticText( tab_deconvolv, wxID_STATIC, _("IR end silence thresh (dB):"), wxDefaultPosition, wxDefaultSize, 0 );
+    itemBoxSizer18->Add(itemStaticText19, 0, wxALIGN_CENTER_VERTICAL|wxALL, 5);
+
+    itemBoxSizer18->Add(5, 5, 1, wxALIGN_CENTER_VERTICAL|wxALL, 5);
+
+    spin_ir_end_thr = new wxSpinCtrl( tab_deconvolv, ID_SPINCTRL, wxT("0"), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, -200, 0, 0 );
+    itemBoxSizer18->Add(spin_ir_end_thr, 0, wxALIGN_CENTER_VERTICAL|wxALL, 0);
 
     wxBoxSizer* itemBoxSizer96 = new wxBoxSizer(wxHORIZONTAL);
     itemBoxSizer87->Add(itemBoxSizer96, 1, wxGROW|wxALL, 0);
-    wxStaticText* itemStaticText97 = new wxStaticText( itemPanel47, wxID_STATIC, _("(stereo) Offset channels"), wxDefaultPosition, wxDefaultSize, 0 );
+    wxStaticText* itemStaticText97 = new wxStaticText( tab_deconvolv, wxID_STATIC, _("Offset stereo channels (samples):"), wxDefaultPosition, wxDefaultSize, 0 );
     itemBoxSizer96->Add(itemStaticText97, 0, wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
     itemBoxSizer96->Add(5, 5, 1, wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
-    spin_chn_offset = new wxSpinCtrl( itemPanel47, ID_CHN_OFFSET, wxT("0"), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 100, 0 );
+    spin_chn_offset = new wxSpinCtrl( tab_deconvolv, ID_CHN_OFFSET, wxT("0"), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, -48000, 48000, 0 );
     itemBoxSizer96->Add(spin_chn_offset, 0, wxALIGN_CENTER_VERTICAL|wxALL, 0);
 
     wxBoxSizer* itemBoxSizer17 = new wxBoxSizer(wxHORIZONTAL);
     staticbox_deconvolv->Add(itemBoxSizer17, 0, wxGROW|wxALL, 5);
     itemBoxSizer17->Add(5, 5, 1, wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
-    btn_process = new wxButton( itemPanel47, ID_PROCESS, _("Process"), wxDefaultPosition, wxDefaultSize, 0 );
+    btn_process = new wxButton( tab_deconvolv, ID_PROCESS, _("Process"), wxDefaultPosition, wxDefaultSize, 0 );
     itemBoxSizer17->Add(btn_process, 5, wxALIGN_BOTTOM|wxALL, 5);
 
-    itemNotebook1->AddPage(itemPanel47, _("Deconvolver"));
+    itemNotebook1->AddPage(tab_deconvolv, _("Deconvolver"));
 
     itemBoxSizer1->Add(itemNotebook1, 1, wxGROW|wxALL, 5);
 
