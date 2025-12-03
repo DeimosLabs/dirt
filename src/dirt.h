@@ -63,7 +63,7 @@ class c_jackclient;
 #define DEFAULT_SAMPLE_RATE             48000
 #define DEFAULT_F1                      20
 #define DEFAULT_F2                      22000
-#define DEFAULT_JACK_NAME               "%s_ir_sweep" // %s becomes argv [0]
+#define DEFAULT_JACK_NAME               "%s_IR_sweep" // %s becomes argv [0]
 #define DEFAULT_IR_SILENCE_THRESH_DB    -72.0
 #define DEFAULT_SWEEP_SILENCE_THRESH_DB -60.0
 #define DEFAULT_SWEEP_SEC               30
@@ -236,6 +236,13 @@ public:
   virtual bool stop () = 0;
   virtual bool stop_playback () = 0;
   virtual bool stop_record () = 0;
+  
+  virtual bool init_input (bool stereo) = 0;
+  virtual bool init_output (bool stereo) = 0;
+  
+  //virtual int get_samplerate () = 0;
+  //virtual int get_bufsize () = 0;
+  //virtual int get_bitdepth () = 0;
   
   const std::vector<float> &get_recorded_l () const { return sig_in_l; }
   const std::vector<float> &get_recorded_r () const { return sig_in_r; }

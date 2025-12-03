@@ -79,8 +79,8 @@ class wxSpinCtrl;
 #define ID_OVERWRITE 10036
 #define ID_DEBUG 10027
 #define ID_SWEEP_THR 10035
-#define ID_IR_THR 10042
-#define ID_SPINCTRL 10043
+#define ID_IR_START_THR 10042
+#define ID_IR_END_THR 10043
 #define ID_CHN_OFFSET 10041
 #define ID_PROCESS 10045
 #define SYMBOL_UI_MAINWINDOW_STYLE wxCAPTION|wxRESIZE_BORDER|wxSYSTEM_MENU|wxCLOSE_BOX
@@ -139,7 +139,7 @@ public:
     wxRadioButton* radio_makesweep;
     wxRadioButton* radio_roundtrip;
     wxRadioButton* radio_playsweep;
-    wxTextCtrl* text_samplerate;
+    wxComboBox* comb_samplerate;
     wxCheckBox* chk_forcemono;
     wxChoice* list_backend;
     wxTextCtrl* text_dryfile;

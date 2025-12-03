@@ -186,9 +186,10 @@ static int jack_process_cb (jack_nframes_t nframes, void *arg) {
 }
 
 // these two APPEND the number of system/default ports to passed vector
-int c_jackclient::get_playback_ports (int howmany,
-                                      std::vector<std::string> &v,
-                                      bool default_only) {
+int /*c_jackclient::*/j_get_playback_ports (jack_client_t *client,
+                                          int howmany,
+                                          std::vector<std::string> &v,
+                                          bool default_only) {
   debug ("start");
   //v.clear ();
   if (!client || howmany <= 0) return 0;
@@ -216,9 +217,10 @@ int c_jackclient::get_playback_ports (int howmany,
   return count;
 }
 
-int c_jackclient::get_capture_ports (int howmany,
-                                      std::vector<std::string> &v,
-                                      bool default_only) {
+int /*c_jackclient::*/j_get_capture_ports (jack_client_t *client,
+                                         int howmany,
+                                         std::vector<std::string> &v,
+                                         bool default_only) {
   debug ("start");
   //v.clear ();
   if (!client || howmany <= 0) return 0;
@@ -246,8 +248,15 @@ int c_jackclient::get_capture_ports (int howmany,
   return count;
 }
 
-c_jackclient::c_jackclient (c_deconvolver *dec)
+int j_get_default_capture (jack_client_t *c, int howmany, std::vector<std::string> &v)
+    { return j_get_capture_ports (c, howmany, v, false); }
+int j_get_default_playback (jack_client_t *c, int howmany, std::vector<std::string> &v)
+    { return j_get_playback_ports (c, howmany, v, false); }
+  
+
+c_jackclient::c_jackclient (c_deconvolver *dec, jack_client_t *jc)
     : c_audioclient (dec) {
+  if (jc) client = jc;
   backend_name = "JACK";
 }
 
@@ -285,7 +294,8 @@ bool c_jackclient::init (std::string clientname,      // = "",
     name = "deconvolver";
   }
   
-  client = jack_client_open (name, JackNullOption, &status);
+  if (!client)
+    client = jack_client_open (name, JackNullOption, &status);
   if (!client) {
     std::cerr << "Error: cannot connect to JACK (client name \""
               << name << "\")\n";
@@ -315,7 +325,12 @@ bool c_jackclient::init (std::string clientname,      // = "",
   sig_out_r.clear ();
   port_inL = port_inR = nullptr;
   //port_outL = port_outR = nullptr;
-  
+#if 0
+  // force init by passing opposite of stereo state - hackish but WORKS
+  init_output (false);
+  is_stereo = !is_stereo;
+  init_input (!is_stereo);
+#else
   // register jack ports
   port_outL = jack_port_register (client, "out",
                             JACK_DEFAULT_AUDIO_TYPE,
@@ -335,6 +350,9 @@ bool c_jackclient::init (std::string clientname,      // = "",
                               JACK_DEFAULT_AUDIO_TYPE,
                               JackPortIsInput, 0);
   }
+#endif
+  init_output (false);
+  init_input (is_stereo);
 
   if (!port_outL || !port_inL || (is_stereo && !port_inR)) {
     std::cerr << "Error: cannot register JACK ports.\n";
@@ -373,7 +391,7 @@ bool c_jackclient::init (std::string clientname,      // = "",
     if (prefs_->mode == deconv_mode::mode_playsweep && !prefs_->sweepwait) {
       // connect to system default
       std::vector<std::string> strv;
-      int n = get_default_playback (1, strv);
+      int n = j_get_default_playback (client, 1, strv);
       if (n == 1) {
         int err = jack_connect (client,
                                 jack_port_name (port_outL),
@@ -415,6 +433,73 @@ bool c_jackclient::init (std::string clientname,      // = "",
   // ...wuh duh fuuuh?
   //(void) chan_in;
   //(void) chan_out;
+  
+  debug ("end");
+  return true;
+}
+
+bool c_jackclient::init_output (bool st) {
+  debug ("start (TODO: fix this)");
+  
+  if (port_outL) {
+    jack_port_unregister (client, port_outL);
+    port_outL = NULL;
+  }
+  
+  // register jack ports
+  if (!port_outL) {
+    port_outL = jack_port_register (client, "out",
+                              JACK_DEFAULT_AUDIO_TYPE,
+                              JackPortIsOutput, 0);
+  }
+
+  // if (.....)
+  /*port_outR = jack_port_register (client, "out_R",
+                            JACK_DEFAULT_AUDIO_TYPE,
+                            JackPortIsOutput, 0);*/
+  if (!port_outL)
+    return false;
+  /*if (b && !port_outR)
+    return false;*/
+  
+  debug ("end");
+  return true;
+}
+
+bool c_jackclient::init_input (bool st) {
+  debug ("start, st=%s", st ? "true" : "false");
+  //if (st == is_stereo)
+  //  return true;
+    
+  is_stereo = st;
+  
+  if (port_inL) {
+    jack_port_unregister (client, port_inL);
+    port_inL = NULL;
+  }
+  
+  if (port_inR) {
+    jack_port_unregister (client, port_inR);
+    port_inR = NULL;
+  }
+  
+  if (is_stereo) {
+    if (!port_inL) port_inL  = jack_port_register (client, "in_L",
+                                                  JACK_DEFAULT_AUDIO_TYPE,
+                                                  JackPortIsInput, 0);
+    if (!port_inR) port_inR  = jack_port_register (client, "in_R",
+                                                  JACK_DEFAULT_AUDIO_TYPE,
+                                                  JackPortIsInput, 0);
+  } else {
+    if (!port_inL) port_inL  = jack_port_register (client, "in",
+                                                  JACK_DEFAULT_AUDIO_TYPE,
+                                                  JackPortIsInput, 0);
+  }
+  
+  if (!port_inL)
+    return false;
+  if (is_stereo && !port_inR)
+    return false;
   
   debug ("end");
   return true;

@@ -782,6 +782,16 @@ int main (int argc, char **argv) {
   // this needs to be created after we parse args but before wx_main
   c_deconvolver dec (&p);
   
+  // start gui BEFORE init audio
+  if (p.gui) {
+    //char **argv_dummy = { NULL };
+    CP
+    retval = wx_main (1, argv, &dec);
+    CP
+    exit (retval);
+    //return retval; // TODO: why does this sometimes segfault?
+  }
+  
 #ifdef USE_JACK
   if (p.dry_source == src_jack || p.wet_source == src_jack || p.gui) {
     snprintf (realjackname, 255, p.jack_name.c_str (), argv [0]);
@@ -793,12 +803,6 @@ int main (int argc, char **argv) {
   }
 #endif
 
-  if (p.gui) {
-    //char **argv_dummy = { NULL };
-    retval = wx_main (1, argv, &dec);
-    return retval;
-  }
-  
   // using jack at all?
   // avoid upper freq. aliasing: now that we have sample rate from either user
   // or jack, make sure we don't sweep past 95% of nyquist frequency

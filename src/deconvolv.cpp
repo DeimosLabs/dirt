@@ -968,11 +968,17 @@ static void print_vu_meter (float level, float hold, bool clip, bool xrun) {
 
 bool c_deconvolver::audio_init (std::string clientname,
            int samplerate, bool stereo_out) {
+  debug ("start, clientname=%s, samplerate=%d, stereo_out=%s",
+         clientname.c_str (), samplerate, stereo_out ? "true" : "false");
 #ifdef USE_JACK
   audio = new c_jackclient (this);
-  if (audio && audio->init (clientname, samplerate, stereo_out))
+  if (audio && audio->init (clientname, samplerate, stereo_out)) {
+    debug ("return (true)");
     return true;
+  }
 #endif
+  
+  debug ("end (false)");
   return false;
 }
 

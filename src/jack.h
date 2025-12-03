@@ -16,7 +16,7 @@
 
 class c_jackclient : public c_audioclient {
 public:
-  c_jackclient (c_deconvolver *dec);
+  c_jackclient (c_deconvolver *dec, jack_client_t *jc = NULL);
   ~c_jackclient ();
 
   virtual bool init (std::string clientname = "",
@@ -34,25 +34,33 @@ public:
   virtual bool stop ();
   virtual bool stop_playback ();
   virtual bool stop_record ();
-            
+  
+  virtual bool init_input (bool stereo);
+  virtual bool init_output (bool stereo);
+    
+  //virtual int get_samplerate ();
+  //virtual int get_bufsize ();
+  //virtual int get_bitdepth ();
+  
   jack_client_t *client = NULL;
   jack_port_t   *port_inL  = NULL;
   jack_port_t   *port_inR  = NULL;
   jack_port_t   *port_outL = NULL;
   //jack_port_t   *port_outR = NULL; // not used for now
   
-  int get_capture_ports (int howmany, std::vector<std::string> &v, bool default_only);
-  int get_playback_ports (int howmany, std::vector<std::string> &v, bool default_only);
-  
-  int get_default_capture (int howmany, std::vector<std::string> &v)
-      { return get_capture_ports (howmany, v, false); }
-  int get_default_playback (int howmany, std::vector<std::string> &v)
-      { return get_playback_ports (howmany, v, false); }
-  
 private:
   bool jack_inited = false;
 };
 
+
+int j_get_capture_ports (jack_client_t *c, int howmany,
+                            std::vector<std::string> &v, bool default_only);
+int j_get_playback_ports (jack_client_t *c, int howmany, 
+                             std::vector<std::string> &v, bool default_only);
+
+int j_get_default_capture (jack_client_t *c, int howmany, std::vector<std::string> &v);
+int j_get_default_playback (jack_client_t *c, int howmany, std::vector<std::string> &v);
+  
 
 #endif // USE_JACK
 

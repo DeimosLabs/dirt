@@ -56,7 +56,7 @@ public:
   void set_mode (long int mode);
   void set_prefs (s_prefs *prefs);
   void get_prefs (s_prefs *prefs);
-  bool init_audio ();
+  bool init_audio (int samplerate = -1, bool stereo = true);
   
   void set_statustext (const char *str, ...);
   
@@ -80,7 +80,8 @@ public:
   int OnExit ();
 
   c_mainwindow *mainwindow = NULL;
-  c_deconvolver *dec;
+  c_deconvolver *dec = NULL;
+  
 protected:
   //virtual int FilterEvent (wxEvent &ev);
   

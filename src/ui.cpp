@@ -48,9 +48,10 @@ c_mainwindow::~c_mainwindow () {
   CP
 }
 
-bool c_mainwindow::init_audio () {
+bool c_mainwindow::init_audio (int samplerate, bool stereo) {
   if (init_audio_done)
     return true;
+  debug ("start, samplerate=%d, stereo=%s", samplerate, stereo ? "true" : "false");
   CP
   
   if (!dec) {
@@ -59,24 +60,30 @@ bool c_mainwindow::init_audio () {
   }
   
   if (!dec->audio) {
-    debug ("deconvolver has no audio client");
+    dec->audio_init ("DIRT", -1, stereo);
   }
   
-  int sr = ::atoi (text_samplerate->GetValue ().c_str ());
+  if (!dec->audio) {
+    debug ("deconvolver has no audio client");
+    return false;
+  }
+  
+  int sr = ::atoi (comb_samplerate->GetValue ().c_str ());
   bool st = !chk_forcemono->GetValue ();
   
-  std::string jack_name = "asdf";
+  std::string jack_name = "";
   if (dec->prefs_) jack_name = dec->prefs_->jack_name;
   std::cout << "name: " << jack_name << "\n";
   CP
   if (!dec->audio->init (jack_name, sr, st)) {
     CP
     debug ("audio init failed");
+    return false;
   }
   
-  std::vector<std::string> ports_list;
-  
   init_audio_done = true;
+  
+  debug ("end");
   return true;
 }
 
@@ -185,7 +192,8 @@ void c_mainwindow::set_mode (long int mode) {
     { ID_OVERWRITE,            true  },
     { ID_DEBUG,                true  },
     { ID_SWEEP_THR,            true  },
-    { ID_IR_THR,               true  },
+    { ID_IR_START_THR,         true  },
+    { ID_IR_END_THR,           true  },
     { ID_CHN_OFFSET,           true  },
     { ID_PROCESS,              true  },
     { -1,                      false }
@@ -228,7 +236,8 @@ void c_mainwindow::set_mode (long int mode) {
     { ID_OVERWRITE,            true  },
     { ID_DEBUG,                true  },
     { ID_SWEEP_THR,            true  },
-    { ID_IR_THR,               true  },
+    { ID_IR_START_THR,         true },
+    { ID_IR_END_THR,           true },
     { ID_CHN_OFFSET,           true  },
     { ID_PROCESS,              true  },
     { -1,                      false }
@@ -238,7 +247,7 @@ void c_mainwindow::set_mode (long int mode) {
     // dry sweep tab
     { ID_BACKEND,              true  },
     { ID_FORCEMONO,            true  },
-    { ID_SAMPLERATE,           false }, // TODO: might change with other backends
+    { ID_SAMPLERATE,           true  }, // TODO: might change with other backends
     { ID_DRYFILE,              false },
     { ID_DRYFILE_BROWSE,       false },
     { ID_DRY_LENGTH,           false },
@@ -271,11 +280,14 @@ void c_mainwindow::set_mode (long int mode) {
     { ID_OVERWRITE,            false },
     { ID_DEBUG,                false },
     { ID_SWEEP_THR,            false },
-    { ID_IR_THR,               false },
+    { ID_IR_START_THR,         false },
+    { ID_IR_END_THR,           false },
     { ID_CHN_OFFSET,           false },
     { ID_PROCESS,              false },
     { -1,                      false }
   };
+  
+  bool do_audio = false;
   
   //bool b = chk_forcemono->GetValue();
   //set_enable (list_jack_wet_r, !b);
@@ -291,18 +303,37 @@ void c_mainwindow::set_mode (long int mode) {
     
     case ID_MAKESWEEP:
       wl = widget_status_makesweep;
-      init_audio ();
+      do_audio = true;
     break;
     
     case ID_ROUNDTRIP:
       wl = widget_status_roundtrip;
-      init_audio ();
+      do_audio = true;
     break;
     
     //case ID_PLAYSWEEP:  wl = widget_status_playsweep;  CP; break;
     default:
       std::cout << "invalid mode for window selected: " << mode << "\n";
     break;
+  }
+  
+  if (do_audio) {
+    init_audio (atoi (comb_samplerate->GetValue ().c_str ()), 
+                      !chk_forcemono->GetValue ());
+    if (!dec || !dec->audio) {
+      std::cerr << "Failed to initialize audio!\n";
+      return;
+    }
+    char buf [128];
+    snprintf (buf, 127, "%d", dec->audio->samplerate);
+    comb_samplerate->SetValue (buf);
+    CP
+    bool s = !chk_forcemono->GetValue ();
+    if ((!s) != (!dec->audio->is_stereo)) { // cheap xor
+      CP
+      dec->audio->init_input (s);
+      //dec->audio->init_output (false);
+    }
   }
   
   for (int i = 0; wl [i].id >= 0; i++) {

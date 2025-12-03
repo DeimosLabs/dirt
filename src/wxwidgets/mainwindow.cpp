@@ -105,7 +105,7 @@ void ui_mainwindow::Init()
     radio_makesweep = NULL;
     radio_roundtrip = NULL;
     radio_playsweep = NULL;
-    text_samplerate = NULL;
+    comb_samplerate = NULL;
     chk_forcemono = NULL;
     list_backend = NULL;
     text_dryfile = NULL;
@@ -204,8 +204,9 @@ void ui_mainwindow::CreateControls()
     wxStaticText* itemStaticText4 = new wxStaticText( tab_drysweep, wxID_STATIC, _("Sample rate:"), wxDefaultPosition, wxDefaultSize, 0 );
     itemBoxSizer4->Add(itemStaticText4, 0, wxALIGN_LEFT|wxALL, 5);
 
-    text_samplerate = new wxTextCtrl( tab_drysweep, ID_SAMPLERATE, wxEmptyString, wxDefaultPosition, wxDefaultSize, 0 );
-    itemBoxSizer4->Add(text_samplerate, 0, wxGROW|wxALL, 5);
+    wxArrayString comb_samplerateStrings;
+    comb_samplerate = new wxComboBox( tab_drysweep, ID_SAMPLERATE, wxEmptyString, wxDefaultPosition, wxDefaultSize, comb_samplerateStrings, wxCB_DROPDOWN );
+    itemBoxSizer4->Add(comb_samplerate, 0, wxGROW|wxALL, 5);
 
     chk_forcemono = new wxCheckBox( tab_drysweep, ID_FORCEMONO, _("Force mono"), wxDefaultPosition, wxDefaultSize, 0 );
     chk_forcemono->SetValue(false);
@@ -364,13 +365,13 @@ void ui_mainwindow::CreateControls()
     wxGridSizer* itemGridSizer24 = new wxGridSizer(0, 2, 0, 0);
     itemBoxSizer8->Add(itemGridSizer24, 0, wxALIGN_CENTER_VERTICAL|wxALL, 0);
     btn_inputdir_scan = new wxButton( tab_deconvolv, ID_INPUTDIR_SCAN, _("Scan"), wxDefaultPosition, wxDefaultSize, 0 );
-    itemGridSizer24->Add(btn_inputdir_scan, 0, wxGROW|wxALIGN_TOP|wxALL, 5);
+    itemGridSizer24->Add(btn_inputdir_scan, 0, wxGROW|wxALIGN_BOTTOM|wxALL, 5);
 
     btn_inputdir_browse = new wxButton( tab_deconvolv, ID_INPUTDIR_BROWSE, _("Browse..."), wxDefaultPosition, wxDefaultSize, 0 );
-    itemGridSizer24->Add(btn_inputdir_browse, 0, wxGROW|wxALIGN_TOP|wxALL, 5);
+    itemGridSizer24->Add(btn_inputdir_browse, 0, wxGROW|wxALIGN_BOTTOM|wxALL, 5);
 
     btn_inputfiles_clear = new wxButton( tab_deconvolv, ID_INPUTFILES_CLEAR, _("Clear"), wxDefaultPosition, wxDefaultSize, 0 );
-    itemGridSizer24->Add(btn_inputfiles_clear, 0, wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTER_VERTICAL|wxALL, 5);
+    itemGridSizer24->Add(btn_inputfiles_clear, 0, wxGROW|wxALIGN_BOTTOM|wxALL, 5);
 
     btn_inputfiles_add = new wxButton( tab_deconvolv, ID_INPUTFILES_ADD, _("Add files..."), wxDefaultPosition, wxDefaultSize, 0 );
     itemGridSizer24->Add(btn_inputfiles_add, 0, wxGROW|wxALIGN_BOTTOM|wxALL, 5);
@@ -477,7 +478,7 @@ void ui_mainwindow::CreateControls()
 
     itemBoxSizer92->Add(5, 5, 1, wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
-    spin_ir_start_thr = new wxSpinCtrl( tab_deconvolv, ID_IR_THR, wxT("0"), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, -200, 0, 0 );
+    spin_ir_start_thr = new wxSpinCtrl( tab_deconvolv, ID_IR_START_THR, wxT("0"), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, -200, 0, 0 );
     itemBoxSizer92->Add(spin_ir_start_thr, 0, wxALIGN_CENTER_VERTICAL|wxALL, 0);
 
     wxBoxSizer* itemBoxSizer18 = new wxBoxSizer(wxHORIZONTAL);
@@ -487,7 +488,7 @@ void ui_mainwindow::CreateControls()
 
     itemBoxSizer18->Add(5, 5, 1, wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
-    spin_ir_end_thr = new wxSpinCtrl( tab_deconvolv, ID_SPINCTRL, wxT("0"), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, -200, 0, 0 );
+    spin_ir_end_thr = new wxSpinCtrl( tab_deconvolv, ID_IR_END_THR, wxT("0"), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, -200, 0, 0 );
     itemBoxSizer18->Add(spin_ir_end_thr, 0, wxALIGN_CENTER_VERTICAL|wxALL, 0);
 
     wxBoxSizer* itemBoxSizer96 = new wxBoxSizer(wxHORIZONTAL);
