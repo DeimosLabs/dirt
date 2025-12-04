@@ -115,6 +115,7 @@ enum __dirt_ansi_colors {
 };
 
 enum audio_driver {
+  driver_none,
   driver_jack,
   num_drivers
 };
@@ -240,9 +241,14 @@ public:
   virtual bool init_input (bool stereo) = 0;
   virtual bool init_output (bool stereo) = 0;
   
+  virtual int get_input_ports (std::vector<std::string> &v) = 0;
+  virtual int get_output_ports (std::vector<std::string> &v) = 0;
+  virtual int disconnect_all (jack_port_t *port) = 0;
+  virtual bool connect (jack_port_t *port, std::string port_name) = 0;
   //virtual int get_samplerate () = 0;
   //virtual int get_bufsize () = 0;
   //virtual int get_bitdepth () = 0;
+  
   
   const std::vector<float> &get_recorded_l () const { return sig_in_l; }
   const std::vector<float> &get_recorded_r () const { return sig_in_r; }
@@ -255,6 +261,7 @@ public:
   void peak_acknowledge ();
   c_deconvolver *get_deconvolver () { return dec_; }
   
+  int backend = driver_none;
   std::string        backend_name = "default"; // or maybe "unknown"?
   std::vector<float> sig_in_l; // mono/left wet capture (mix of L/R)
   std::vector<float> sig_in_r; //

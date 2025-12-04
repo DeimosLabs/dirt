@@ -185,6 +185,33 @@ static int jack_process_cb (jack_nframes_t nframes, void *arg) {
   return 0;
 }
 
+int c_jackclient::disconnect_all (jack_port_t *port) {
+  int i;
+  const char **connected = jack_port_get_all_connections (client, port);
+  if (connected) {
+      for (i = 0; connected [i]; i++) {
+          if (jack_port_flags (port) & JackPortIsInput)
+            jack_disconnect(client,
+                            connected [i],
+                            jack_port_name (port));
+          else
+            jack_disconnect(client,
+                            jack_port_name (port),
+                            connected [i]);
+      }
+      jack_free(connected);
+  }  
+  
+  return i;
+}
+
+bool c_jackclient::connect (jack_port_t *port, std::string name) {
+  if (jack_port_flags (port) & JackPortIsInput)
+    return jack_connect (client, name.c_str (), jack_port_name (port));
+  else
+    return jack_connect (client, jack_port_name (port), name.c_str ());
+}
+
 // these two APPEND the number of system/default ports to passed vector
 int /*c_jackclient::*/j_get_playback_ports (jack_client_t *client,
                                           int howmany,
@@ -206,8 +233,8 @@ int /*c_jackclient::*/j_get_playback_ports (jack_client_t *client,
 
   int count = 0;
 
-  for (int i = 0; ports[i] && count < howmany; ++i) {
-    v.push_back (std::string(ports[i]));
+  for (int i = 0; ports [i] && count < howmany; ++i) {
+    v.push_back (std::string (ports[i]));
     ++count;
   }
 
@@ -237,8 +264,8 @@ int /*c_jackclient::*/j_get_capture_ports (jack_client_t *client,
 
   int count = 0;
 
-  for (int i = 0; ports[i] && count < howmany; ++i) {
-    v.push_back (std::string(ports[i]));
+  for (int i = 0; ports [i] && count < howmany; ++i) {
+    v.push_back (std::string (ports[i]));
     ++count;
   }
 
@@ -257,6 +284,7 @@ int j_get_default_playback (jack_client_t *c, int howmany, std::vector<std::stri
 c_jackclient::c_jackclient (c_deconvolver *dec, jack_client_t *jc)
     : c_audioclient (dec) {
   if (jc) client = jc;
+  backend = driver_jack;
   backend_name = "JACK";
 }
 
@@ -267,6 +295,22 @@ c_jackclient::~c_jackclient () {
   }
 }
 
+#define MAX_JACK_PORTS 9999
+
+int c_jackclient::get_input_ports (std::vector<std::string> &v) {
+  CP
+  int n = j_get_capture_ports (client, MAX_JACK_PORTS, v);
+  debug ("n=%d, v has %d strings", n, v.size ());
+  return n;
+}
+
+int c_jackclient::get_output_ports (std::vector<std::string> &v) {
+  CP
+  int n = j_get_playback_ports (client, MAX_JACK_PORTS, v);
+  debug ("n=%d, v has %d strings", n, v.size ());
+  return n;
+}
+
 bool c_jackclient::init (std::string clientname,      // = "",
                                int _samplerate,        // = -1, // ignored for now
                                //const char *jack_out_port,
@@ -274,17 +318,17 @@ bool c_jackclient::init (std::string clientname,      // = "",
                                bool stereo_out) {     // = true) {
   debug ("start");
   if (jack_inited) {
-    // already have a client; nothing to do
+    // already have a client, nothing to do
     return true;
   }
   
   is_stereo = stereo_out;
   jack_status_t status = JackFailure;
   
-  // Decide on a client name:
+  // choose a client name:
   const char *name = nullptr;
   if (!clientname.empty ()) {
-    // explicit from caller (e.g. formatted with argv[0])
+    // explicit from caller (e.g. formatted with argv [0])
     name = clientname.c_str ();
   } else if (prefs_ && !prefs_->jack_name.empty ()) {
     // from prefs (may literally be "%s_ir_sweep" if not formatted)

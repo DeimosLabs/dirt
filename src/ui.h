@@ -36,14 +36,20 @@ public:
   c_mainwindow (c_deconvolver *d = NULL);
   ~c_mainwindow ();
   
+  bool init_audio (int samplerate = -1, bool stereo = true);
+  void set_statustext (const char *str, ...);
+  void set_mode (long int mode);
+  void set_prefs (s_prefs *prefs);
+  void get_prefs (s_prefs *prefs);
+  void update_audio_ports ();
+  
+  // event handlers
   //void on_debug (wxCommandEvent &ev);
   void on_close (wxCloseEvent &ev);
   //void on_keydown (wxKeyEvent &ev);
   void on_resize (wxSizeEvent &ev);
-  void on_Close (wxCloseEvent &ev);
   void on_about (wxCommandEvent &ev);
-  void on_ok (wxCommandEvent &ev);
-  void on_cancel (wxCommandEvent &ev);
+  void on_quit (wxCommandEvent &ev);
   void on_radio_file (wxCommandEvent &ev);
   void on_radio_playsweep (wxCommandEvent &ev);
   void on_radio_makesweep (wxCommandEvent &ev);
@@ -53,12 +59,15 @@ public:
   //void on_quit (wxCommandEvent &ev);
   //void on_menu_highlight (wxMenuEvent &ev);
   //void on_debug_stuff_toggled (bool b);
-  void set_mode (long int mode);
-  void set_prefs (s_prefs *prefs);
-  void get_prefs (s_prefs *prefs);
-  bool init_audio (int samplerate = -1, bool stereo = true);
-  
-  void set_statustext (const char *str, ...);
+  void on_btn_dryfile_browse (wxCommandEvent &ev);
+  void on_btn_dry_save (wxCommandEvent &ev);
+  void on_btn_inputdir_scan (wxCommandEvent &ev);
+  void on_btn_inputdir_browse (wxCommandEvent &ev);
+  void on_btn_inputfiles_add (wxCommandEvent &ev);
+  void on_btn_inputfiles_clear (wxCommandEvent &ev);
+  void on_btn_play (wxCommandEvent &ev);
+  void on_btn_process (wxCommandEvent &ev);
+  void on_port_select (wxCommandEvent &ev);
   
   c_deconvolver *dec = NULL;
 

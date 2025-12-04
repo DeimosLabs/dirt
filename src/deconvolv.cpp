@@ -7,7 +7,9 @@
 
 #include "dirt.h"
 #include "deconvolv.h"
+#ifdef USE_JACK
 #include "jack.h"
+#endif
 
 #ifdef DEBUG
 #define CMDLINE_DEBUG

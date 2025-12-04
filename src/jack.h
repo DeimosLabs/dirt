@@ -38,9 +38,13 @@ public:
   virtual bool init_input (bool stereo);
   virtual bool init_output (bool stereo);
     
+  virtual int get_input_ports (std::vector<std::string> &v);
+  virtual int get_output_ports (std::vector<std::string> &v);
   //virtual int get_samplerate ();
   //virtual int get_bufsize ();
   //virtual int get_bitdepth ();
+  virtual int disconnect_all (jack_port_t *port);
+  virtual bool connect (jack_port_t *port, std::string port_name);
   
   jack_client_t *client = NULL;
   jack_port_t   *port_inL  = NULL;
@@ -54,9 +58,9 @@ private:
 
 
 int j_get_capture_ports (jack_client_t *c, int howmany,
-                            std::vector<std::string> &v, bool default_only);
+                            std::vector<std::string> &v, bool default_only = false);
 int j_get_playback_ports (jack_client_t *c, int howmany, 
-                             std::vector<std::string> &v, bool default_only);
+                             std::vector<std::string> &v, bool default_only = false);
 
 int j_get_default_capture (jack_client_t *c, int howmany, std::vector<std::string> &v);
 int j_get_default_playback (jack_client_t *c, int howmany, std::vector<std::string> &v);

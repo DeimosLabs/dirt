@@ -199,8 +199,6 @@ void ui_mainwindow::CreateControls()
     radio_playsweep->Show(false);
     itemBoxSizer6->Add(radio_playsweep, 1, wxALIGN_CENTER_VERTICAL|wxALL|wxRESERVE_SPACE_EVEN_IF_HIDDEN, 5);
 
-    itemBoxSizer4->Add(5, 5, 1, wxALIGN_CENTER_HORIZONTAL|wxALL, 5);
-
     wxStaticText* itemStaticText4 = new wxStaticText( tab_drysweep, wxID_STATIC, _("Sample rate:"), wxDefaultPosition, wxDefaultSize, 0 );
     itemBoxSizer4->Add(itemStaticText4, 0, wxALIGN_LEFT|wxALL, 5);
 
@@ -509,6 +507,20 @@ void ui_mainwindow::CreateControls()
     itemBoxSizer17->Add(btn_process, 5, wxALIGN_BOTTOM|wxALL, 5);
 
     itemNotebook1->AddPage(tab_deconvolv, _("Deconvolver"));
+
+    wxPanel* itemPanel1 = new wxPanel( itemNotebook1, ID_PANEL, wxDefaultPosition, wxDefaultSize, wxSUNKEN_BORDER|wxTAB_TRAVERSAL );
+    itemPanel1->SetExtraStyle(wxWS_EX_VALIDATE_RECURSIVELY);
+    wxBoxSizer* itemBoxSizer19 = new wxBoxSizer(wxVERTICAL);
+    itemPanel1->SetSizer(itemBoxSizer19);
+
+    itemBoxSizer19->Add(5, 5, 1, wxALIGN_CENTER_HORIZONTAL|wxALL, 5);
+
+    wxStaticText* itemStaticText8 = new wxStaticText( itemPanel1, wxID_STATIC, _("(to do)"), wxDefaultPosition, wxDefaultSize, 0 );
+    itemBoxSizer19->Add(itemStaticText8, 0, wxALIGN_CENTER_HORIZONTAL|wxALL, 5);
+
+    itemBoxSizer19->Add(5, 5, 1, wxALIGN_CENTER_HORIZONTAL|wxALL, 5);
+
+    itemNotebook1->AddPage(itemPanel1, _("Log"));
 
     itemBoxSizer1->Add(itemNotebook1, 1, wxGROW|wxALL, 5);
 

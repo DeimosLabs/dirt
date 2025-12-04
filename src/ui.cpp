@@ -2,6 +2,9 @@
 #include "dirt.h"
 #include "ui.h"
 #include "deconvolv.h"
+#ifdef USE_JACK
+#include "jack.h"
+#endif
 
 #ifdef DEBUG
 #define CMDLINE_DEBUG
@@ -19,13 +22,26 @@ wxBEGIN_EVENT_TABLE (c_mainwindow, ui_mainwindow)
   //EVT_CLOSE (c_mainwindow::on_close)
   //EVT_SIZE (c_mainwindow::on_resize)
   EVT_BUTTON (wxID_ABOUT, c_mainwindow::on_about)
-  EVT_BUTTON (wxID_OK, c_mainwindow::on_ok)
-  EVT_BUTTON (wxID_CANCEL, c_mainwindow::on_cancel)
+  EVT_BUTTON (wxID_EXIT, c_mainwindow::on_quit)
   EVT_RADIOBUTTON (ID_FILE, c_mainwindow::on_radio_file)
   EVT_RADIOBUTTON (ID_MAKESWEEP, c_mainwindow::on_radio_makesweep)
   EVT_RADIOBUTTON (ID_ROUNDTRIP, c_mainwindow::on_radio_roundtrip)
   EVT_RADIOBUTTON (ID_PLAYSWEEP, c_mainwindow::on_radio_playsweep)
   EVT_CHECKBOX (wxID_ANY, c_mainwindow::on_checkbox)
+
+  EVT_BUTTON (ID_DRYFILE_BROWSE, c_mainwindow::on_btn_dryfile_browse)
+  EVT_BUTTON (ID_DRY_SAVE, c_mainwindow::on_btn_dry_save)
+  EVT_BUTTON (ID_INPUTDIR_SCAN, c_mainwindow::on_btn_inputdir_scan)
+  EVT_BUTTON (ID_INPUTDIR_BROWSE, c_mainwindow::on_btn_inputdir_browse)
+  EVT_BUTTON (ID_INPUTFILES_ADD, c_mainwindow::on_btn_inputfiles_add)
+  EVT_BUTTON (ID_INPUTFILES_CLEAR, c_mainwindow::on_btn_inputfiles_clear)
+  EVT_BUTTON (ID_PLAY, c_mainwindow::on_btn_play)
+  EVT_BUTTON (ID_PROCESS, c_mainwindow::on_btn_process)
+  
+  EVT_COMBOBOX (ID_JACK_DRY, c_mainwindow::on_port_select)
+  EVT_COMBOBOX (ID_JACK_WET_L, c_mainwindow::on_port_select)
+  EVT_COMBOBOX (ID_JACK_WET_R, c_mainwindow::on_port_select)
+
 wxEND_EVENT_TABLE ();
 
 
@@ -38,9 +54,22 @@ c_mainwindow::c_mainwindow (c_deconvolver *d)
   
   list_backend->Append ("JACK");  
   list_backend->SetSelection (0);
+  
+  list_align->Append ("Marker detection");
+  list_align->Append ("Marker det. on dry");
+  list_align->Append ("Silence detection");
+  list_align->Append ("None/manually aligned");
+  
   if (d && d->prefs_)
     set_prefs (d->prefs_);
   CP
+  
+  Layout ();
+  Fit ();
+  SetSize (GetSize () + wxSize (0, 100));
+  SetSizeHints (GetSize ());
+  
+  
   set_mode (ID_FILE);
 }
 
@@ -87,8 +116,9 @@ bool c_mainwindow::init_audio (int samplerate, bool stereo) {
   return true;
 }
 
-void c_mainwindow::on_ok (wxCommandEvent &ev) {
+void c_mainwindow::on_quit (wxCommandEvent &ev) {
   CP
+  Close ();
 }
 
 void c_mainwindow::on_resize (wxSizeEvent &ev) {
@@ -96,11 +126,6 @@ void c_mainwindow::on_resize (wxSizeEvent &ev) {
 }
 
 void c_mainwindow::on_close (wxCloseEvent &ev) {
-  CP
-  Close ();
-}
-
-void c_mainwindow::on_cancel (wxCommandEvent &ev) {
   CP
   Close ();
 }
@@ -126,6 +151,39 @@ struct widget_status {
   bool is_on = true;
 };
 
+void c_mainwindow::on_port_select (wxCommandEvent &ev) {
+#ifdef USE_JACK
+  if (!dec || !dec->audio || dec->audio->backend != driver_jack) {
+    debug ("no JACK client");
+    return;
+  }
+  
+  // kludge, but meh who cares
+  c_jackclient *jc = (c_jackclient *) dec->audio;
+  
+  switch (ev.GetId ()) {
+    case ID_JACK_DRY: CP
+      if (!jc->port_outL) return;
+      jc->disconnect_all (jc->port_outL);
+      jc->connect (jc->port_outL, std::string (list_jack_dry->GetValue ().c_str ()));
+    break;
+    
+    case ID_JACK_WET_L: CP
+      if (!jc->port_inL) return;
+      jc->disconnect_all (jc->port_inL);
+      jc->connect (jc->port_inL,std::string (list_jack_wet_l->GetValue ().c_str ()));
+    break;
+    
+    case ID_JACK_WET_R: CP
+      if (!jc->port_inR) return;
+      jc->disconnect_all (jc->port_inR);
+      jc->connect (jc->port_inR,std::string (list_jack_wet_r->GetValue ().c_str ()));
+    break;
+  }
+#else
+  debug ("compiled without JACK support");
+#endif
+}
 
 void c_mainwindow::set_prefs (s_prefs *prefs) {
   spin_dry_length->SetValue (prefs->sweep_seconds);
@@ -150,6 +208,25 @@ void c_mainwindow::set_prefs (s_prefs *prefs) {
 }
 
 void c_mainwindow::get_prefs (s_prefs *prefs) {
+  prefs->sweep_seconds = spin_dry_length->GetValue ();
+  prefs->sweep_f1 = spin_dry_f1->GetValue ();
+  prefs->sweep_f2 = spin_dry_f2->GetValue ();
+  prefs->preroll_seconds = spin_dry_preroll->GetValue ();
+  prefs->marker_seconds = spin_dry_marker->GetValue ();
+  prefs->marker_gap_seconds = spin_dry_gap->GetValue ();
+  prefs->align = (align_method) list_align->GetSelection ();
+#ifdef HIGHPASS_F
+  prefs->hpf = spin_hpf_freq->GetValue ();
+#endif
+#ifdef LOWPASS_F
+  prefs->lpf = spin_lpf_freq->GetValue ();
+#endif
+  prefs->zeropeak = chk_zeroalign->GetValue ();
+  prefs->request_stereo = !chk_forcemono->GetValue ();
+  prefs->dump_debug = chk_debug->GetValue ();
+  prefs->sweep_silence_db = spin_sweep_thr->GetValue ();
+  prefs->ir_start_silence_db = spin_ir_start_thr->GetValue ();
+  prefs->ir_silence_db = spin_ir_end_thr->GetValue ();
 }
 
 void c_mainwindow::set_mode (long int mode) {
@@ -351,12 +428,82 @@ void c_mainwindow::set_mode (long int mode) {
     set_enable (list_jack_wet_r, false);
     set_enable (spin_chn_offset, false);
   }
+  
+  update_audio_ports ();
 }
 
 void c_mainwindow::set_enable (wxWindow *w, bool b) {
   w->Enable (b);
   w->SetTransparent (b ? 255 : 128);
 }
+
+void c_mainwindow::update_audio_ports () {
+  CP
+  int i;
+  
+  std::vector <std::string> port_list;
+  if (dec && dec->audio) {
+    dec->audio->get_output_ports (port_list);
+    for (i = 0; i < port_list.size (); i++) {
+      list_jack_dry->Append (port_list [i]);
+    }
+  }
+  
+  port_list.clear ();
+  if (dec && dec->audio) {
+    dec->audio->get_input_ports (port_list);
+    for (i = 0; i < port_list.size (); i++) {
+      list_jack_wet_l->Append (port_list [i]);
+      list_jack_wet_r->Append (port_list [i]);
+    }
+  }
+}
+
+void c_mainwindow::on_btn_dryfile_browse (wxCommandEvent &ev  ) {
+  CP
+  wxFileDialog f (this, "Choose dry sweep file",
+                  "", "", "*.[Ww][Aa][Vv]", wxFD_OPEN|wxFD_FILE_MUST_EXIST);
+  int ret = f.ShowModal ();
+  if (ret != wxID_CANCEL) {
+    text_dryfile->SetValue (f.GetPath ());
+  }
+}
+
+void c_mainwindow::on_btn_dry_save (wxCommandEvent &ev) {
+  CP
+  wxFileDialog f (this, "Save sweep as .wav file",
+                  "", "", "*.[Ww][Aa][Vv]", wxFD_SAVE);
+  int ret = f.ShowModal ();
+  if (ret != wxID_CANCEL) {
+    CP
+  }
+}
+
+void c_mainwindow::on_btn_inputdir_scan (wxCommandEvent &ev) {
+  CP
+}
+
+void c_mainwindow::on_btn_inputdir_browse (wxCommandEvent &ev) {
+  CP
+}
+
+void c_mainwindow::on_btn_inputfiles_add (wxCommandEvent &ev) {
+  CP
+}
+
+void c_mainwindow::on_btn_inputfiles_clear (wxCommandEvent &ev) {
+  CP
+}
+
+void c_mainwindow::on_btn_play (wxCommandEvent &ev) {
+  CP
+}
+
+void c_mainwindow::on_btn_process (wxCommandEvent &ev) {
+  CP
+}
+
+
 
 // c_app
 
