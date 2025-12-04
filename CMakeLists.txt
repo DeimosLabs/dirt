@@ -98,6 +98,10 @@ else()
     message(STATUS "JACK: not found")
 endif()
 
+if (GUI AND NOT wxWidgets_FOUND)
+    message(FATAL_ERROR "GUI mode enabled but wxWidgets not found!")
+endif()
+
 # Debug define
 if (DEBUG)
     message(STATUS "Debug enabled")
