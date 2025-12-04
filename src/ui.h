@@ -73,6 +73,7 @@ public:
   void on_btn_dry_save (wxCommandEvent &ev);
   void on_btn_inputdir_scan (wxCommandEvent &ev);
   void on_btn_inputdir_browse (wxCommandEvent &ev);
+  void on_btn_align_manual (wxCommandEvent &ev);
   void on_btn_inputfiles_add (wxCommandEvent &ev);
   void on_btn_inputfiles_clear (wxCommandEvent &ev);
   void on_btn_play (wxCommandEvent &ev);
@@ -92,9 +93,9 @@ private:
   
   wxTimer timer;
   bool init_audio_done = false;
-  int mode = ID_FILE;
-  int prev_mode = -1;
-  int prev_audio_state = -1;
+  long int mode = ID_FILE;
+  long int prev_mode = -1;
+  audiostate prev_audio_state = (audiostate) -1;
 };
 
 class c_deconvolver_gui : public c_deconvolver {

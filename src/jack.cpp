@@ -23,27 +23,27 @@
 
 static audiostate determine_state_from_flags (c_jackclient *j) {
   if (!j)
-    return ST_NOTREADY;
+    return audiostate::NOTREADY;
     
   if (!j->client || !j->jack_inited)
-    return ST_NOTREADY;
+    return audiostate::NOTREADY;
     
   if (!j->play_go && !j->rec_go)
-    return ST_IDLE;
+    return audiostate::IDLE;
   
   if (j->rec_go && j->monitor_only && !j->play_go)
-      return ST_MONITOR;
+      return audiostate::MONITOR;
 
   if (j->play_go && !j->rec_go && j->monitor_only)
-      return ST_PLAYMONITOR;
+      return audiostate::PLAYMONITOR;
 
   if (j->play_go && !j->rec_go)
-      return ST_PLAY;
+      return audiostate::PLAY;
 
   if (!j->monitor_only && j->rec_go && !j->play_go)
-      return ST_REC;
+      return audiostate::REC;
 
-  return (!j->monitor_only) ? ST_PLAYREC : ST_MONITOR;
+  return (!j->monitor_only) ? audiostate::PLAYREC : audiostate::MONITOR;
 }
 
 // our JACK callback, takes care of actual audio i/o buffers
@@ -62,22 +62,22 @@ static int jack_process_cb (jack_nframes_t nframes, void *arg) {
   if (new_state != prev_state) {
     // leave previous state
     switch (prev_state) {
-      case ST_PLAY:        d->on_play_stop ();     break;
-      case ST_REC:         d->on_record_stop ();   break;
-      case ST_MONITOR:     d->on_arm_rec_stop ();  break;
-      case ST_PLAYREC:     d->on_playrec_stop ();  break;
-      case ST_PLAYMONITOR: d->on_play_stop ();     break;
+      case audiostate::PLAY:        d->on_play_stop ();     break;
+      case audiostate::REC:         d->on_record_stop ();   break;
+      case audiostate::MONITOR:     d->on_arm_rec_stop ();  break;
+      case audiostate::PLAYREC:     d->on_playrec_stop ();  break;
+      case audiostate::PLAYMONITOR: d->on_play_stop ();     break;
       default: break;
     }
 
     // enter new state
     switch (new_state) {
-      case ST_PLAY:        if (prev_state != ST_REC) d->on_play_start();
+      case audiostate::PLAY:        if (prev_state != audiostate::REC) d->on_play_start();
                                                       break;
-      case ST_REC:         d->on_record_start ();     break;
-      case ST_MONITOR:     d->on_arm_rec_start ();    break;
-      case ST_PLAYREC:     d->on_playrec_start ();    break;
-      case ST_PLAYMONITOR: d->on_play_start ();       break;
+      case audiostate::REC:         d->on_record_start ();     break;
+      case audiostate::MONITOR:     d->on_arm_rec_start ();    break;
+      case audiostate::PLAYREC:     d->on_playrec_start ();    break;
+      case audiostate::PLAYMONITOR: d->on_play_start ();       break;
       default: break;
     }
 
@@ -86,13 +86,13 @@ static int jack_process_cb (jack_nframes_t nframes, void *arg) {
 
   // state loop hooks
   switch (j->state) {
-    case ST_NOTREADY:                            break;
-    case ST_IDLE:        d->on_audio_idle ();    break;
-    case ST_PLAY:        d->on_play_loop ();     break;
-    case ST_REC:         d->on_record_loop ();   break;
-    case ST_MONITOR:     d->on_arm_rec_loop ();  break;
-    case ST_PLAYREC:     d->on_playrec_loop ();  break;
-    case ST_PLAYMONITOR: d->on_play_loop ();     break;
+    case audiostate::NOTREADY:                            break;
+    case audiostate::IDLE:        d->on_audio_idle ();    break;
+    case audiostate::PLAY:        d->on_play_loop ();     break;
+    case audiostate::REC:         d->on_record_loop ();   break;
+    case audiostate::MONITOR:     d->on_arm_rec_loop ();  break;
+    case audiostate::PLAYREC:     d->on_playrec_loop ();  break;
+    case audiostate::PLAYMONITOR: d->on_play_loop ();     break;
     default: CP break;
   }
 
@@ -297,13 +297,15 @@ int j_get_default_playback (jack_client_t *c, int howmany, std::vector<std::stri
 c_jackclient::c_jackclient (c_deconvolver *dec, jack_client_t *jc)
     : c_audioclient (dec) {
   if (jc) client = jc;
-  backend = driver_jack;
+  backend = audio_driver::JACK;
   backend_name = "JACK";
 }
 
-c_jackclient::~c_jackclient () {
+c_jackclient::~c_jackclient () { CP
   if (client) {
-    jack_client_close (client); 
+    CP
+    shutdown ();
+    //jack_client_close (client); 
     client = NULL;
   }
 }
@@ -445,7 +447,7 @@ bool c_jackclient::init (std::string clientname,      // = "",
     if (err) std::cerr << "warning: failed to connect to JACK input port "
                        << prefs_->portname_dry << std::endl;
   } else {
-    if (prefs_->mode == deconv_mode::mode_playsweep && !prefs_->sweepwait) {
+    if (prefs_->mode == opmode::PLAYSWEEP && !prefs_->sweepwait) {
       // connect to system default
       std::vector<std::string> strv;
       int n = j_get_default_playback (client, 1, strv);
@@ -485,7 +487,7 @@ bool c_jackclient::init (std::string clientname,      // = "",
                             
   }
   
-  state = ST_IDLE;
+  state = audiostate::IDLE;
   jack_inited = true;
   
   // ...wuh duh fuuuh?
@@ -566,17 +568,21 @@ bool c_jackclient::init_input (bool st) {
 bool c_jackclient::shutdown () {
   if (!jack_inited)
     return false;
+  CP
+  if (port_outL) jack_port_unregister (client, port_outL);
+  if (port_inL) jack_port_unregister (client, port_inL);
+  if (port_inR) jack_port_unregister (client, port_inR);
   jack_deactivate (client);
   jack_client_close (client);
   client = nullptr;
   jack_inited = false;
-  state = ST_NOTREADY;
+  state = audiostate::NOTREADY;
   
   return true;
 }
 
 bool c_jackclient::ready () {
-  return jack_inited && state != ST_NOTREADY;
+  return jack_inited && state != audiostate::NOTREADY;
 }
 
 bool c_jackclient::arm_record () {

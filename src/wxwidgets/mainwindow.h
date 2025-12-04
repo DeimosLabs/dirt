@@ -65,10 +65,10 @@ class wxSpinCtrl;
 #define ID_TAB2 10040
 #define ID_INPUTDIR_RECURSIVE 10006
 #define ID_INPUTDIR 10007
-#define ID_INPUTDIR_SCAN 10005
 #define ID_INPUTDIR_BROWSE 10008
-#define ID_INPUTFILES_CLEAR 10030
+#define ID_INPUTDIR_SCAN 10005
 #define ID_INPUTFILES_ADD 10001
+#define ID_INPUTFILES_CLEAR 10030
 #define ID_INPUTFILES 10002
 #define ID_OUTPUTDIR 10010
 #define ID_OUTPUTDIR_BROWSE 10011
@@ -77,6 +77,7 @@ class wxSpinCtrl;
 #define ID_HPF_FREQ 10033
 #define ID_LPF_MODE 10029
 #define ID_LPF_FREQ 10034
+#define ID_ALIGN_MANUAL 10050
 #define ID_ZEROALIGN 10004
 #define ID_OVERWRITE 10036
 #define ID_DEBUG 10027
@@ -165,10 +166,10 @@ public:
     wxBoxSizer* staticbox_deconvolv;
     wxCheckBox* chk_inputdir_recursive;
     wxTextCtrl* text_inputdir;
-    wxButton* btn_inputdir_scan;
     wxButton* btn_inputdir_browse;
-    wxButton* btn_inputfiles_clear;
+    wxButton* btn_inputdir_scan;
     wxButton* btn_inputfiles_add;
+    wxButton* btn_inputfiles_clear;
     wxListBox* list_inputfiles;
     wxTextCtrl* text_outputdir;
     wxButton* btn_outputdir_browse;
@@ -177,6 +178,7 @@ public:
     wxSpinCtrl* spin_hpf_freq;
     wxChoice* list_lpf_mode;
     wxSpinCtrl* spin_lpf_freq;
+    wxButton* btn_align_manual;
     wxCheckBox* chk_zeroalign;
     wxCheckBox* chk_overwrite;
     wxCheckBox* chk_debug;

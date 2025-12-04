@@ -72,14 +72,14 @@ void c_audioclient::clear_recording () {
 }
 
 bool c_audioclient::has_recording () const {
-  return (sig_in_l.size () > 0 || sig_in_r.size () > 0) && state == ST_IDLE;
+  return (sig_in_l.size () > 0 || sig_in_r.size () > 0) && state == audiostate::IDLE;
 }
 
 size_t c_audioclient::get_rec_left () {
   if (rec_index <= 0)
     return 0;
     
-  if (state == ST_REC || state == ST_PLAYREC) {
+  if (state == audiostate::REC || state == audiostate::PLAYREC) {
     return rec_total - rec_index;
   }
   
@@ -90,7 +90,7 @@ size_t c_audioclient::get_play_left () {
   if (index <= 0)
     return 0;
     
-  if (state == ST_PLAY || state == ST_PLAYREC) {
+  if (state == audiostate::PLAY || state == audiostate::PLAYREC) {
     /*size_t a = sig_in_l.size ();
     size_t b = sig_in_r.size ();
     size_t c = sig_out.size ();*/
@@ -335,18 +335,18 @@ static bool resolve_sources (s_prefs &opt, int paths_bf) {
 #else
     if (0) {
 #endif
-      opt.dry_source = src_jack;
+      opt.dry_source = sig_source::JACK;
       // if only dry was specified, assume playsweep to default
       if (!(paths_bf & 2)) {
         opt.jack_autoconnect_dry        = true;
         opt.jack_autoconnect_to_default = true;
       }
     } else if (looks_like_jack_port (opt.dry_path)) {
-      opt.dry_source          = src_jack;
+      opt.dry_source          = sig_source::JACK;
       opt.jack_autoconnect_dry = true;  // explicit jack port -> autoconnect
       opt.portname_dry = opt.dry_path;
-    } else if (file_exists (opt.dry_path) || opt.mode != mode_deconvolve) {
-      opt.dry_source = src_file;
+    } else if (file_exists (opt.dry_path) || opt.mode != opmode::DECONVOLVE) {
+      opt.dry_source = sig_source::FILE;
     } else {
       std::cerr << "Dry source \"" << opt.dry_path
 #ifdef USE_JACK
@@ -365,7 +365,7 @@ static bool resolve_sources (s_prefs &opt, int paths_bf) {
 #else
     if (0) {
 #endif
-      opt.wet_source = src_jack;
+      opt.wet_source = sig_source::JACK;
       // no default autoconnect here; user should patch or give explicit port
 
     } else {
@@ -384,13 +384,13 @@ static bool resolve_sources (s_prefs &opt, int paths_bf) {
         }
 
         if (looks_like_jack_port(left) && looks_like_jack_port (right)) {
-          opt.wet_source           = src_jack;
+          opt.wet_source           = sig_source::JACK;
           opt.jack_autoconnect_wet = true;
           opt.portname_wetL        = left;
           opt.portname_wetR        = right;
-        } else if (file_exists (opt.wet_path) || opt.mode != mode_deconvolve) {
+        } else if (file_exists (opt.wet_path) || opt.mode != opmode::DECONVOLVE) {
           // treat whole thing as file name if not a JACK pair
-          opt.wet_source = src_file;
+          opt.wet_source = sig_source::FILE;
         } else {
           std::cerr << "Wet source \"" << opt.wet_path
 #ifdef USE_JACK
@@ -403,13 +403,13 @@ static bool resolve_sources (s_prefs &opt, int paths_bf) {
 
       } else if (looks_like_jack_port (opt.wet_path)) {
         // mono JACK wet port
-        opt.wet_source           = src_jack;
+        opt.wet_source           = sig_source::JACK;
         opt.jack_autoconnect_wet = true;
         opt.portname_wetL        = opt.wet_path;
         opt.portname_wetR.clear ();
 
-      } else if (file_exists (opt.wet_path) || opt.mode != mode_deconvolve) {
-        opt.wet_source = src_file;
+      } else if (file_exists (opt.wet_path) || opt.mode != opmode::DECONVOLVE) {
+        opt.wet_source = sig_source::FILE;
 
       } else {
         std::cerr << "Wet source \"" << opt.wet_path
@@ -426,17 +426,17 @@ static bool resolve_sources (s_prefs &opt, int paths_bf) {
   // --- output file/port ---
   if (paths_bf & 4) {
     if (opt.out_path == "jack" || looks_like_jack_port (opt.out_path)) {
-      if (opt.mode == mode_deconvolve) {
+      if (opt.mode == opmode::DECONVOLVE) {
         std::cerr << "Can't write IR directly to a JACK port\n\n";
         return false;
       }
     }
-  } else if (opt.mode == mode_deconvolve) {
+  } else if (opt.mode == opmode::DECONVOLVE) {
     std::cerr << "No output file specified\n";
     return false;
   }
   
-  if (opt.dry_source == src_jack && opt.wet_source == src_jack) {
+  if (opt.dry_source == sig_source::JACK && opt.wet_source == sig_source::JACK) {
     opt.preroll_seconds = 0.1;
     opt.marker_seconds = 0;
     opt.marker_gap_seconds = 0;
@@ -486,13 +486,13 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
       if (++i >= argc) { std::cerr << "Missing value for " << arg << "\n"; return ret_err; }
       std::string method = argv [i];
       struct { align_method num; std::string name; } methods [] = {
-        { align_marker,       "marker" },
-        { align_marker_dry,   "dry" },
-        { align_silence,      "silence" },
-        { align_none,         "none" }
+        { align_method::MARKER,       "marker" },
+        { align_method::MARKER_DRY,   "dry" },
+        { align_method::SILENCE,      "silence" },
+        { align_method::NONE,         "none" }
       };
       bool valid = false;
-      for (int j = 0; j < align_method_max; j++)
+      for (int j = 0; j < (int) align_method::MAX; j++)
         if (argv [i] == methods [j].name) {
           valid = true;
           opt.align = methods [j].num;
@@ -540,12 +540,12 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
       opt.sweepwait = true;
     } else if (arg == "-s" || arg == "--makesweep") {
       //if (++i >= argc) { std::cerr << "Missing value for " << arg << "\n"; return ret_err; }
-      opt.mode = deconv_mode::mode_makesweep;
+      opt.mode = opmode::MAKESWEEP;
       //opt.sweep_seconds = std::atof (argv [i]);
     } else if (arg == "-S" || arg == "--playsweep") {
 #ifdef USE_JACK
       //if (++i >= argc) { std::cerr << "Missing value for " << arg << "\n"; return ret_err; }
-      opt.mode = deconv_mode::mode_playsweep;
+      opt.mode = opmode::PLAYSWEEP;
       //opt.sweep_seconds = std::atof (argv [i]);
 #else
        std::cerr << "Error: this version of " << argv [0] << " was built without JACK support.";
@@ -636,7 +636,7 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
   // Map positionals depending on mode
   //   - makesweep: use first positional as out.wav (if -o not given)
   //   - others (deconvolve): dry wet out [len]
-  if (opt.mode == deconv_mode::mode_makesweep) {
+  if (opt.mode == opmode::MAKESWEEP) {
       // makesweep: we only need an output path
       // allow either:
       //   dirt -s -o sweep.wav
@@ -670,7 +670,7 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
   if (!opt.out_path.empty()) bf |= 4;
 
   // --- Non-deconvolution modes: handle simply and bail out early ---
-  if (opt.mode == deconv_mode::mode_makesweep) {
+  if (opt.mode == opmode::MAKESWEEP) {
       if (opt.out_path.empty()) {
           std::cerr << "No output file specified for makesweep mode\n";
           return ret_err;
@@ -681,12 +681,12 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
   }
 
 #ifdef USE_JACK
-  if (opt.mode == deconv_mode::mode_playsweep) {
+  if (opt.mode == opmode::PLAYSWEEP) {
       // playsweep: need a dry destination (JACK port or "jack")
       if (opt.dry_path.empty()) {
           // default to "jack" and autoconnect to default ports
           opt.dry_path = "jack";
-          opt.dry_source = src_jack;
+          opt.dry_source = sig_source::JACK;
           opt.jack_autoconnect_dry = true;
           bf |= 1;
       }
@@ -694,14 +694,14 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
       return bf;
   }
 #else
-  if (opt.mode == deconv_mode::mode_playsweep) {
+  if (opt.mode == opmode::PLAYSWEEP) {
       std::cerr << "Error: playsweep mode requested but DIRT was built without JACK support.\n";
       return ret_err;
   }
 #endif
   
   // --- Deconvolution mode: original bitfield logic ---
-  if (opt.mode != deconv_mode::mode_deconvolve) {
+  if (opt.mode != opmode::DECONVOLVE) {
       // Shouldn't happen, but just in case
       debug ("end");
       return bf;
@@ -718,11 +718,11 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
 
     case 1: // only dry path given
       if (looks_like_jack_port (opt.dry_path)) {
-        opt.mode = mode_playsweep;
+        opt.mode = opmode::PLAYSWEEP;
         opt.jack_autoconnect_dry = true;
       } else if (opt.dry_path == "jack") {
         opt.dry_path.clear();
-        opt.mode = mode_playsweep;
+        opt.mode = opmode::PLAYSWEEP;
         opt.jack_autoconnect_to_default = true;
         opt.jack_autoconnect_dry = true;
       } else {
@@ -752,13 +752,13 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
       break;
 
     case 6: // wet, out
-      opt.mode = deconv_mode::mode_deconvolve;
-      opt.dry_source = src_generate;
+      opt.mode = opmode::DECONVOLVE;
+      opt.dry_source = sig_source::GENERATE;
       break;
 
     case 7: // dry, wet, out
-      opt.mode = deconv_mode::mode_deconvolve;
-      opt.dry_source = src_file;
+      opt.mode = opmode::DECONVOLVE;
+      opt.dry_source = sig_source::FILE;
       break;
 
     default:
@@ -785,7 +785,7 @@ int main (int argc, char **argv) {
   int paths_bf = parse_args (argc, argv, p);
   
   if (!p.gui) {
-    if (paths_bf == -1 || p.mode == deconv_mode::mode_error) {
+    if (paths_bf == -1 || p.mode == opmode::ERROR) {
       print_usage (argv [0]);
       debug ("return");
       return 1;
@@ -817,13 +817,14 @@ int main (int argc, char **argv) {
     CP
     retval = wx_main (1, argv, dec);
     CP
-    exit (retval);
-    //return retval; // TODO: why does this sometimes segfault?
+    if (dec) delete dec;
+    //exit (retval);
+    return retval; // TODO: why does this sometimes segfault?
   }
 #endif
   
 #ifdef USE_JACK
-  if (p.dry_source == src_jack || p.wet_source == src_jack || p.gui) {
+  if (p.dry_source == sig_source::JACK || p.wet_source == sig_source::JACK || p.gui) {
     snprintf (realjackname, 255, p.jack_name.c_str (), argv [0]);
     
     if (!dec->audio_init (realjackname, p.sweep_sr, p.request_stereo) || !dec->audio_ready ()) {
@@ -839,11 +840,11 @@ int main (int argc, char **argv) {
   // or jack, make sure we don't sweep past 95% of nyquist frequency
   // only relevant when we are going to *generate* a sweep
   bool will_generate_sweep =
-      (p.mode == deconv_mode::mode_makesweep)  ||
-      (p.mode == deconv_mode::mode_playsweep)  ||
-      (p.dry_source == src_generate)           ||
-      (p.dry_source == src_jack)               ||  // live JACK playrec
-      (p.wet_source == src_jack);
+      (p.mode == opmode::MAKESWEEP)  ||
+      (p.mode == opmode::PLAYSWEEP)  ||
+      (p.dry_source == sig_source::GENERATE)           ||
+      (p.dry_source == sig_source::JACK)               ||  // live JACK playrec
+      (p.wet_source == sig_source::JACK);
       
   if (will_generate_sweep) {
     float sweep_max = (p.sweep_sr / 2.0f) * 0.95f;
@@ -862,7 +863,7 @@ int main (int argc, char **argv) {
   std::vector<float> sweep;
 
   // --makesweep: available even if compiled without JACK
-  if (p.mode == deconv_mode::mode_makesweep) {
+  if (p.mode == opmode::MAKESWEEP) {
     generate_log_sweep(p.sweep_seconds,
                        p.preroll_seconds,
                        p.marker_seconds,
@@ -888,7 +889,7 @@ int main (int argc, char **argv) {
 
 #ifdef USE_JACK
   // playsweep: only when JACK is enabled
-  if (p.mode == deconv_mode::mode_playsweep) {
+  if (p.mode == opmode::PLAYSWEEP) {
     generate_log_sweep(p.sweep_seconds,
                        p.preroll_seconds,
                        p.marker_seconds,
@@ -915,7 +916,7 @@ int main (int argc, char **argv) {
 
   // normal deconvolution path (with or without JACK)
   // Special "live" JACK->IR mode: dry=JACK, wet=JACK
-  if (p.dry_source == src_jack && p.wet_source == src_jack) {
+  if (p.dry_source == sig_source::JACK && p.wet_source == sig_source::JACK) {
     generate_log_sweep(p.sweep_seconds,
                        p.preroll_seconds,
                        p.marker_seconds,
@@ -961,9 +962,9 @@ int main (int argc, char **argv) {
 
   // file / generated dry + file wet deconvolution
 
-  if (p.dry_source == src_file) {
+  if (p.dry_source == sig_source::FILE) {
       if (!dec->load_sweep_dry (p.dry_path.c_str())) return 1;
-  } else if (p.dry_source == src_generate) {
+  } else if (p.dry_source == sig_source::GENERATE) {
       std::vector<float> sweep_local;
       generate_log_sweep(p.sweep_seconds,
                          p.preroll_seconds,
@@ -986,7 +987,7 @@ int main (int argc, char **argv) {
     return 1;
   }
 
-  if (p.wet_source == src_file) {
+  if (p.wet_source == sig_source::FILE) {
       if (!dec->load_sweep_wet (p.wet_path.c_str())) { if (dec) delete dec; return 1; }
   } else {
 #ifdef USE_JACK

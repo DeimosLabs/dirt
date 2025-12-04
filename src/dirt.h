@@ -114,24 +114,26 @@ enum __dirt_ansi_colors {
   COLOR_RESET
 };
 
-enum audio_driver {
-  driver_none,
-  driver_jack,
-  num_drivers
+enum class audio_driver {
+  NONE,
+  JACK,
+  MAX
 };
 
-enum deconv_mode {
-  mode_deconvolve,
-  mode_makesweep,
-  mode_playsweep,
-  mode_error // maybe extend this for diff. error types?
+enum class opmode {
+  DECONVOLVE,
+  MAKESWEEP,
+  PLAYSWEEP,
+  ERROR, // maybe extend this for diff. error types?
+  MAX
 };
 
-enum sig_source {
-  src_none,
-  src_file,
-  src_jack,
-  src_generate
+enum class sig_source {
+  NONE,
+  FILE,
+  JACK,
+  GENERATE,
+  MAX
 };
 
 /*enum sig_channels {
@@ -140,22 +142,24 @@ enum sig_source {
   chn_stereo
 };*/
 
-enum align_method {
-  align_marker,
-  align_marker_dry,
-  align_silence,
-  align_none,
-  align_method_max
+enum class align_method {
+  MARKER,
+  MARKER_DRY,
+  SILENCE,
+  MANUAL,
+  NONE,
+  MAX
 };
 
-enum audiostate {
-  ST_NOTREADY,
-  ST_IDLE,
-  ST_MONITOR,
-  ST_PLAY,
-  ST_REC,
-  ST_PLAYREC,
-  ST_PLAYMONITOR
+enum class audiostate {
+  NOTREADY,
+  IDLE,
+  MONITOR,
+  PLAY,
+  REC,
+  PLAYREC,
+  PLAYMONITOR,
+  MAX
 };
 
 void generate_log_sweep (double seconds,
@@ -273,7 +277,7 @@ public:
   void peak_acknowledge ();
   c_deconvolver *get_deconvolver () { return dec_; }
   
-  int                backend = driver_none;
+  audio_driver       backend = audio_driver::NONE;
   std::string        backend_name = "default"; // or maybe "unknown"?
   std::vector<float> sig_in_l; // mono/left wet capture (mix of L/R)
   std::vector<float> sig_in_r; //
@@ -308,7 +312,7 @@ public:
   int samplerate = 0;
   int bufsize = 256; // sensible default in case we can't determine
   //bool play_done = false;
-  audiostate state = ST_NOTREADY;
+  audiostate state = audiostate::NOTREADY;
 
 protected:
   c_deconvolver *dec_;

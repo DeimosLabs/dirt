@@ -127,10 +127,10 @@ void ui_mainwindow::Init()
     staticbox_deconvolv = NULL;
     chk_inputdir_recursive = NULL;
     text_inputdir = NULL;
-    btn_inputdir_scan = NULL;
     btn_inputdir_browse = NULL;
-    btn_inputfiles_clear = NULL;
+    btn_inputdir_scan = NULL;
     btn_inputfiles_add = NULL;
+    btn_inputfiles_clear = NULL;
     list_inputfiles = NULL;
     text_outputdir = NULL;
     btn_outputdir_browse = NULL;
@@ -139,6 +139,7 @@ void ui_mainwindow::Init()
     spin_hpf_freq = NULL;
     list_lpf_mode = NULL;
     spin_lpf_freq = NULL;
+    btn_align_manual = NULL;
     chk_zeroalign = NULL;
     chk_overwrite = NULL;
     chk_debug = NULL;
@@ -371,17 +372,17 @@ void ui_mainwindow::CreateControls()
 
     wxGridSizer* itemGridSizer24 = new wxGridSizer(0, 2, 0, 0);
     itemBoxSizer8->Add(itemGridSizer24, 0, wxALIGN_CENTER_VERTICAL|wxALL, 0);
-    btn_inputdir_scan = new wxButton( tab_deconvolv, ID_INPUTDIR_SCAN, _("Scan"), wxDefaultPosition, wxDefaultSize, 0 );
-    itemGridSizer24->Add(btn_inputdir_scan, 0, wxGROW|wxALIGN_BOTTOM|wxALL, 5);
-
     btn_inputdir_browse = new wxButton( tab_deconvolv, ID_INPUTDIR_BROWSE, _("Browse..."), wxDefaultPosition, wxDefaultSize, 0 );
     itemGridSizer24->Add(btn_inputdir_browse, 0, wxGROW|wxALIGN_BOTTOM|wxALL, 5);
 
-    btn_inputfiles_clear = new wxButton( tab_deconvolv, ID_INPUTFILES_CLEAR, _("Clear"), wxDefaultPosition, wxDefaultSize, 0 );
-    itemGridSizer24->Add(btn_inputfiles_clear, 0, wxGROW|wxALIGN_BOTTOM|wxALL, 5);
+    btn_inputdir_scan = new wxButton( tab_deconvolv, ID_INPUTDIR_SCAN, _("Scan"), wxDefaultPosition, wxDefaultSize, 0 );
+    itemGridSizer24->Add(btn_inputdir_scan, 0, wxGROW|wxALIGN_BOTTOM|wxALL, 5);
 
     btn_inputfiles_add = new wxButton( tab_deconvolv, ID_INPUTFILES_ADD, _("Add files..."), wxDefaultPosition, wxDefaultSize, 0 );
     itemGridSizer24->Add(btn_inputfiles_add, 0, wxGROW|wxALIGN_BOTTOM|wxALL, 5);
+
+    btn_inputfiles_clear = new wxButton( tab_deconvolv, ID_INPUTFILES_CLEAR, _("Clear"), wxDefaultPosition, wxDefaultSize, 0 );
+    itemGridSizer24->Add(btn_inputfiles_clear, 0, wxGROW|wxALIGN_BOTTOM|wxALL, 5);
 
     wxFlexGridSizer* itemFlexGridSizer49 = new wxFlexGridSizer(0, 3, 0, 0);
     staticbox_deconvolv->Add(itemFlexGridSizer49, 0, wxGROW|wxALL, 0);
@@ -414,7 +415,7 @@ void ui_mainwindow::CreateControls()
     wxBoxSizer* itemBoxSizer67 = new wxBoxSizer(wxHORIZONTAL);
     staticbox_deconvolv->Add(itemBoxSizer67, 0, wxGROW|wxALL, 5);
     wxBoxSizer* itemBoxSizer68 = new wxBoxSizer(wxVERTICAL);
-    itemBoxSizer67->Add(itemBoxSizer68, 0, wxALIGN_CENTER_VERTICAL|wxALL, 0);
+    itemBoxSizer67->Add(itemBoxSizer68, 0, wxALIGN_TOP|wxALL, 0);
     wxBoxSizer* itemBoxSizer69 = new wxBoxSizer(wxHORIZONTAL);
     itemBoxSizer68->Add(itemBoxSizer69, 0, wxGROW|wxALL, 0);
     wxStaticText* itemStaticText70 = new wxStaticText( tab_deconvolv, wxID_STATIC, _("Sweep alignment method:"), wxDefaultPosition, wxDefaultSize, 0 );
@@ -454,6 +455,9 @@ void ui_mainwindow::CreateControls()
 
     wxBoxSizer* itemBoxSizer82 = new wxBoxSizer(wxVERTICAL);
     itemBoxSizer67->Add(itemBoxSizer82, 0, wxALIGN_CENTER_VERTICAL|wxALL, 0);
+    btn_align_manual = new wxButton( tab_deconvolv, ID_ALIGN_MANUAL, _("Manual align..."), wxDefaultPosition, wxDefaultSize, 0 );
+    itemBoxSizer82->Add(btn_align_manual, 0, wxALIGN_LEFT|wxALL, 5);
+
     chk_zeroalign = new wxCheckBox( tab_deconvolv, ID_ZEROALIGN, _("Zero-align IR peak"), wxDefaultPosition, wxDefaultSize, 0 );
     chk_zeroalign->SetValue(false);
     itemBoxSizer82->Add(chk_zeroalign, 1, wxALIGN_LEFT|wxALL, 5);

@@ -12,7 +12,7 @@
 #include "dirt.h"
 
 struct s_prefs {
-  deconv_mode mode = deconv_mode::mode_deconvolve;
+  opmode mode = opmode::DECONVOLVE;
 
   std::string dry_path; // file, JACK port, or empty (generate one)
   std::string wet_path; // file, or JACK port
@@ -30,8 +30,8 @@ struct s_prefs {
   bool thresh_relative = false;
 #endif
   bool zeropeak = DEFAULT_ZEROPEAK;
-  sig_source dry_source             = sig_source::src_file;
-  sig_source wet_source             = sig_source::src_file;
+  sig_source dry_source             = sig_source::FILE;
+  sig_source wet_source             = sig_source::FILE;
   bool jack_autoconnect_dry         = false;
   bool jack_autoconnect_wet         = false;
   bool jack_autoconnect_to_default  = false;
@@ -46,7 +46,7 @@ struct s_prefs {
   bool dump_debug                   = false;
   std::string dump_prefix           = "dirt-debug";
   bool sweepwait                    = false;
-  align_method align                = align_marker_dry;
+  align_method align                = align_method::MARKER_DRY;
 
   double sweep_seconds         = DEFAULT_SWEEP_SEC;   // default value not really used
   double preroll_seconds       = DEFAULT_PREROLL_SEC;
@@ -63,7 +63,7 @@ struct s_prefs {
   float  ir_silence_db         = DEFAULT_IR_SILENCE_THRESH_DB;
   float  ir_start_silence_db   = DEFAULT_IR_SILENCE_THRESH_DB;
   float  headroom_seconds      = 0.0f;
-  float  normalize_amp         = DEFAULT_NORMALIZE_AMP; // TODO: command opt line for this 
+  float  normalize_amp         = DEFAULT_NORMALIZE_AMP; // TODO: command line opt for this 
 #ifdef HIGHPASS_F
   int    hpf                   = HIGHPASS_F;
 #endif

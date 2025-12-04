@@ -482,12 +482,12 @@ size_t detect_sweep_start (const std::vector<float> &buf,
     size_t start      = 0;
   
     align_method align =
-        (ignore_marker && prefs.align == align_marker_dry)
-            ? align_marker   // for wet: treat it like plain marker align
+        (ignore_marker && prefs.align == align_method::MARKER_DRY)
+            ? align_method::MARKER   // for wet: same as plain marker align
             : prefs.align;
   
     switch (align) {
-      case align_marker:
+      case align_method::MARKER:
         start = detect_sweep_start_with_marker (
                     buf,
                     samplerate,
@@ -501,7 +501,7 @@ size_t detect_sweep_start (const std::vector<float> &buf,
                     &gap_len);
         break;
 
-      case align_marker_dry:
+      case align_method::MARKER_DRY:
         // only called for DRY, because for wet we’ll handle this separately
         start = detect_sweep_start_with_marker (
                     buf,
@@ -519,11 +519,11 @@ size_t detect_sweep_start (const std::vector<float> &buf,
         prefs.cache_dry_gap_len    = gap_len;
         break;
   
-      case align_silence:
+      case align_method::SILENCE:
         start = find_first_nonsilent (buf, prefs.sweep_silence_db);
         break;
   
-      case align_none:
+      case align_method::NONE:
         start = 0;
         break;
     }
@@ -545,7 +545,7 @@ size_t detect_dry_sweep_start (const std::vector<float> &dry,
     return detect_sweep_start (dry, samplerate, prefs, /*ignore_marker=*/false);
 }
 
-// WET: if align_marker_dry, reuse cached dry preroll;
+// WET: if align_method::MARKER_DRY, reuse cached dry preroll;
 // otherwise just use normal logic on wet
 size_t detect_wet_sweep_start (const std::vector<float> &wet,
                                       int samplerate,
@@ -554,7 +554,7 @@ size_t detect_wet_sweep_start (const std::vector<float> &wet,
 
     size_t start = 0;
 
-    if (prefs.align == align_marker_dry) {
+    if (prefs.align == align_method::MARKER_DRY) {
         // 1) where does wet actually start?
         size_t wet_first = find_first_nonsilent (wet, prefs.sweep_silence_db);
 
@@ -1130,7 +1130,7 @@ int c_deconvolver::on_playrec_loop (void *data) {
     }*/
     }
     ansi_clear_to_endl ();
-    if (audio->state == ST_PLAYREC) {
+    if (audio->state == audiostate::PLAYREC) {
       int timeleft = audio->get_play_left () / audio->samplerate;
       move_up++;
       std::cout << "Recording, " << timeleft << " seconds left\n";
@@ -1180,12 +1180,13 @@ bool c_deconvolver::has_dry () {
 
 // other c_deconvolver member functions
  
-c_deconvolver::c_deconvolver (struct s_prefs *prefs, std::string name) {  CP
+c_deconvolver::c_deconvolver (struct s_prefs *prefs, std::string name) { CP
   set_prefs (prefs);
   set_name (name);
 }
 
 c_deconvolver::~c_deconvolver () { CP
+  if (audio) delete audio;
 }
 
 void c_deconvolver::set_name (std::string name) {
@@ -1216,7 +1217,7 @@ bool c_deconvolver::load_sweep_dry (const char *in_filename) {
   dry_ = std::move (tmp);
   have_dry_ = true;
 
-  if (prefs_->align != align_none) {
+  if (prefs_->align != align_method::NONE) {
     // NEW: detect sweep start using marker+gap, also caches marker/gap in prefs_
     dry_offset_ = detect_dry_sweep_start (dry_, samplerate_, *prefs_);
     if (prefs_->verbose) {
@@ -1254,7 +1255,7 @@ bool c_deconvolver::load_sweep_wet (const char *in_filename) {
     // --- MONO WET: only L channel is used ---
     wet_L_ = std::move (left);
 
-    if (prefs_->align != align_none) {
+    if (prefs_->align != align_method::NONE) {
       wet_offset_ = detect_wet_sweep_start (wet_L_, samplerate_, *prefs_);
       if (prefs_->verbose) {
         std::cerr << "Wet sweep (mono) start offset: "
@@ -1266,7 +1267,7 @@ bool c_deconvolver::load_sweep_wet (const char *in_filename) {
     wet_L_ = std::move (left);
     wet_R_ = std::move (right);
 
-    if (prefs_->align != align_none) {
+    if (prefs_->align != align_method::NONE) {
       // for detection, use a mono mix so we get a single start index
       // kind of hackish, but meh
       const sf_count_t frames = std::min (wet_L_.size (), wet_R_.size ());
@@ -1303,7 +1304,7 @@ bool c_deconvolver::set_dry_from_buffer (const std::vector<float>& buf, int sr) 
   dry_ = buf;
   have_dry_ = true;
 
-  if (prefs_->align != align_none) {
+  if (prefs_->align != align_method::NONE) {
     dry_offset_ = detect_dry_sweep_start (dry_, samplerate_, *prefs_);
     if (prefs_->verbose) {
       std::cerr << "Dry sweep start offset (buffer): "
@@ -1332,7 +1333,7 @@ bool c_deconvolver::set_wet_from_buffer (const std::vector<float>& bufL,
   wet_L_ = bufL;
   wet_R_ = bufR;
 
-  if (prefs_->align != align_none) {
+  if (prefs_->align != align_method::NONE) {
     if (!wet_R_.empty ()) {
       const size_t n = std::min(wet_L_.size (), wet_R_.size ());
       std::vector<float> mix (n);
@@ -1360,7 +1361,7 @@ bool c_deconvolver::output_ir (const char *out_filename, long ir_length_samples)
   std::vector<float> irL;
   std::vector<float> irR;
   
-  if (prefs_->align == align_none) {
+  if (prefs_->align == align_method::NONE) {
     dry_offset_ = 0;
     wet_offset_ = 0;
   }
@@ -1372,12 +1373,12 @@ bool c_deconvolver::output_ir (const char *out_filename, long ir_length_samples)
     "no alignment"
   };
   
-  if (prefs_->align < 0 || prefs_->align >= align_method_max) {
-    std::cerr << "Error: invalid alignment method id: " << prefs_->align;
+  if ((int) prefs_->align < 0 || prefs_->align >= align_method::MAX) {
+    std::cerr << "Error: invalid alignment method id: " << (int) prefs_->align;
     return false;
   } else {
-    std::cerr << "Alignment method: " << align_names [prefs_->align] << " (id "
-              << prefs_->align << ")\n";
+    std::cerr << "Alignment method: " << align_names [(int) prefs_->align] << " (id "
+              << (int) prefs_->align << ")\n";
   }
   
   std::cerr << "\nDry offset: " << dry_offset_

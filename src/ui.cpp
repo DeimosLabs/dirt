@@ -1,4 +1,11 @@
 
+/* DIRT - Delt's Impulse Response Tool
+ * Version 0.1
+ *
+ * Licensed under the GPL. See dirt.h and dirt.cpp for more info.
+ */
+
+
 #ifdef USE_WXWIDGETS
 
 #include "dirt.h"
@@ -39,7 +46,7 @@ wxBEGIN_EVENT_TABLE (c_mainwindow, ui_mainwindow)
   EVT_RADIOBUTTON (ID_MAKESWEEP, c_mainwindow::on_radio_makesweep)
   EVT_RADIOBUTTON (ID_ROUNDTRIP, c_mainwindow::on_radio_roundtrip)
   EVT_RADIOBUTTON (ID_PLAYSWEEP, c_mainwindow::on_radio_playsweep)
-  EVT_CHECKBOX (wxID_ANY, c_mainwindow::on_checkbox)
+  EVT_CHECKBOX (ID_FORCEMONO, c_mainwindow::on_checkbox)
 
   EVT_BUTTON (ID_DRYFILE_BROWSE, c_mainwindow::on_btn_dryfile_browse)
   EVT_BUTTON (ID_GENERATE, c_mainwindow::on_btn_generate)
@@ -48,6 +55,7 @@ wxBEGIN_EVENT_TABLE (c_mainwindow, ui_mainwindow)
   EVT_BUTTON (ID_INPUTDIR_BROWSE, c_mainwindow::on_btn_inputdir_browse)
   EVT_BUTTON (ID_INPUTFILES_ADD, c_mainwindow::on_btn_inputfiles_add)
   EVT_BUTTON (ID_INPUTFILES_CLEAR, c_mainwindow::on_btn_inputfiles_clear)
+  EVT_BUTTON (ID_ALIGN_MANUAL, c_mainwindow::on_btn_align_manual)
   EVT_BUTTON (ID_AUDIO, c_mainwindow::on_btn_audio)
   EVT_BUTTON (ID_PLAY, c_mainwindow::on_btn_play)
   EVT_BUTTON (ID_PROCESS, c_mainwindow::on_btn_process)
@@ -72,7 +80,8 @@ c_mainwindow::c_mainwindow (c_deconvolver *d)
   list_align->Append ("Marker detection");
   list_align->Append ("Marker det. on dry");
   list_align->Append ("Silence detection");
-  list_align->Append ("None/manually aligned");
+  list_align->Append ("Manual");
+  list_align->Append ("None/already aligned");
   
   if (d && d->prefs_)
     set_prefs (d->prefs_);
@@ -98,7 +107,7 @@ void c_mainwindow::on_timer (wxTimerEvent &ev) {
   if (!dec || !dec->audio) return;
   
   bool do_full_update = false;
-  int s = dec->audio->state;
+  audiostate s = dec->audio->state;
   
   if (s != prev_audio_state) {
     prev_audio_state = s;
@@ -109,13 +118,13 @@ void c_mainwindow::on_timer (wxTimerEvent &ev) {
     do_full_update = true;
   }
   
-  if (s == ST_NOTREADY) {
+  if (s == audiostate::NOTREADY) {
     disable (btn_play);
     btn_audio->SetLabel ("Connect");
-  } else if (s == ST_IDLE) {
-    if (!dec->has_dry ()) { CP
+  } else if (s == audiostate::IDLE) {
+    if (!dec->has_dry ()) {
       disable (btn_play);
-    } else { CP
+    } else {
       enable (btn_play);
     }
     btn_play->SetLabel ((mode == ID_ROUNDTRIP) ? "Process" : "Play");
@@ -149,7 +158,7 @@ bool c_mainwindow::audio_ready () {
     //debug ("deconvolver has no audio client");
     return false;
   }
-  if (dec->audio->state == ST_NOTREADY) {
+  if (dec->audio->state == audiostate::NOTREADY) {
     //debug ("deconvolver audio not ready");
     return false;
   }
@@ -203,7 +212,7 @@ bool c_mainwindow::init_audio (int samplerate, bool stereo) {
 
 bool c_mainwindow::shutdown_audio () { CP
   if (!dec || !dec->audio) return false;
-  if (dec->audio->state == ST_NOTREADY) return false;
+  if (dec->audio->state == audiostate::NOTREADY) return false;
   
   list_jack_dry->Clear ();
   list_jack_wet_l->Clear ();
@@ -253,7 +262,7 @@ struct widget_status {
 
 void c_mainwindow::on_port_select (wxCommandEvent &ev) {
 #ifdef USE_JACK
-  if (!audio_ready () || dec->audio->backend != driver_jack) {
+  if (!audio_ready () || dec->audio->backend != audio_driver::JACK) {
     debug ("no JACK client");
     return;
   }
@@ -292,7 +301,7 @@ void c_mainwindow::set_prefs (s_prefs *prefs) {
   spin_dry_preroll->SetValue (prefs->preroll_seconds * 1000.0);
   spin_dry_marker->SetValue (prefs->marker_seconds * 1000.0);
   spin_dry_gap->SetValue (prefs->marker_gap_seconds * 1000.0);
-  list_align->SetSelection (prefs->align);
+  list_align->SetSelection ((int) prefs->align);
 #ifdef HIGHPASS_F
   spin_hpf_freq->SetValue (prefs->hpf);
 #endif
@@ -673,15 +682,20 @@ void c_mainwindow::on_btn_inputfiles_clear (wxCommandEvent &ev) {
   CP
 }
 
+void c_mainwindow::on_btn_align_manual (wxCommandEvent &ev) {
+  CP
+  list_align->SetSelection ((int) align_method::MANUAL);
+}
+
 void c_mainwindow::on_btn_audio (wxCommandEvent &ev) { CP
   if (!dec || !dec->audio) return;
   
-  if (dec->audio->state == ST_NOTREADY) {
+  if (dec->audio->state == audiostate::NOTREADY) {
     if (init_audio ()) {
       update_audio_ports ();
     } else {
       show_error ("Failed to initialize " + 
-                    g_backend_names [dec->audio->backend] +
+                    g_backend_names [(int) dec->audio->backend] +
                     "\n...is audio device available?\n");
     }
   } else {
@@ -693,7 +707,7 @@ void c_mainwindow::on_btn_play (wxCommandEvent &ev) {
   if (!audio_ready ()) return;
   CP
   init_audio ();
-  if (dec->audio->state == ST_IDLE)
+  if (dec->audio->state == audiostate::IDLE)
     dec->audio->play (dec->dry_, false);
   else
     dec->audio->stop ();
