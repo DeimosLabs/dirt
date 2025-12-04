@@ -46,6 +46,7 @@ public:
   void set_prefs (s_prefs *prefs);
   void get_prefs (s_prefs *prefs);
   void update_audio_ports ();
+  bool make_dry_sweep ();
   
   // event handlers
   //void on_debug (wxCommandEvent &ev);
@@ -77,6 +78,7 @@ public:
   void on_timer (wxTimerEvent &ev);
   
   c_deconvolver *dec = NULL;
+  std::vector <float> drysweep;
 
 private:
   wxDECLARE_EVENT_TABLE ();

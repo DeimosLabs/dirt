@@ -97,7 +97,7 @@ void c_mainwindow::on_timer (wxTimerEvent &ev) {
     do_full_update = true;
   }
   
-  if (s == ST_NOTREADY) {
+  if (s == ST_NOTREADY || !dec->has_dry ()) {
     set_enable (btn_play, false);
     btn_audio->SetLabel ("Connect");
   } else if (s == ST_IDLE) {
@@ -266,9 +266,9 @@ void c_mainwindow::set_prefs (s_prefs *prefs) {
   spin_dry_length->SetValue (prefs->sweep_seconds);
   spin_dry_f1->SetValue (prefs->sweep_f1);
   spin_dry_f2->SetValue (prefs->sweep_f2);
-  spin_dry_preroll->SetValue (prefs->preroll_seconds * 1000);
-  spin_dry_marker->SetValue (prefs->marker_seconds * 1000);
-  spin_dry_gap->SetValue (prefs->marker_gap_seconds * 1000);
+  spin_dry_preroll->SetValue (prefs->preroll_seconds * 1000.0);
+  spin_dry_marker->SetValue (prefs->marker_seconds * 1000.0);
+  spin_dry_gap->SetValue (prefs->marker_gap_seconds * 1000.0);
   list_align->SetSelection (prefs->align);
 #ifdef HIGHPASS_F
   spin_hpf_freq->SetValue (prefs->hpf);
@@ -288,9 +288,9 @@ void c_mainwindow::get_prefs (s_prefs *prefs) {
   prefs->sweep_seconds = spin_dry_length->GetValue ();
   prefs->sweep_f1 = spin_dry_f1->GetValue ();
   prefs->sweep_f2 = spin_dry_f2->GetValue ();
-  prefs->preroll_seconds = spin_dry_preroll->GetValue ();
-  prefs->marker_seconds = spin_dry_marker->GetValue ();
-  prefs->marker_gap_seconds = spin_dry_gap->GetValue ();
+  prefs->preroll_seconds = (float) spin_dry_preroll->GetValue () / 1000.0;
+  prefs->marker_seconds = (float) spin_dry_marker->GetValue () / 1000.0;
+  prefs->marker_gap_seconds = (float) spin_dry_gap->GetValue () / 1000.0;
   prefs->align = (align_method) list_align->GetSelection ();
 #ifdef HIGHPASS_F
   prefs->hpf = spin_hpf_freq->GetValue ();
@@ -576,6 +576,33 @@ void c_mainwindow::on_btn_dryfile_browse (wxCommandEvent &ev  ) {
 }
 
 void c_mainwindow::on_btn_generate (wxCommandEvent &ev) { CP
+  make_dry_sweep ();
+}
+
+bool c_mainwindow::make_dry_sweep () {
+  debug ("start");
+  if (!dec) return false;
+  struct s_prefs *p = dec->prefs_;
+  
+  get_prefs (dec->prefs_);
+  
+  generate_log_sweep(p->sweep_seconds,
+                     p->preroll_seconds,
+                     p->marker_seconds,
+                     p->marker_gap_seconds,
+                     p->sweep_sr,
+                     p->sweep_amp_db,
+                     p->sweep_f1,
+                     p->sweep_f2,
+                     drysweep);
+
+  if (!dec->set_dry_from_buffer (drysweep, p->sweep_sr)) {
+    CP
+    return false;
+  }
+  CP
+  debug ("end");
+  return true;
 }
 
 void c_mainwindow::on_btn_dry_save (wxCommandEvent &ev) {
@@ -585,6 +612,13 @@ void c_mainwindow::on_btn_dry_save (wxCommandEvent &ev) {
   int ret = f.ShowModal ();
   if (ret != wxID_CANCEL) {
     CP
+    if (!make_dry_sweep ()) {
+      std::string msg = "Deconvolver failed to load our dry sweep\n";
+      std::cerr << msg;
+      wxMessageBox (msg);
+    }
+      
+    std::string dest = std::string (f.GetPath ());
   }
 }
 
@@ -607,6 +641,7 @@ void c_mainwindow::on_btn_inputfiles_clear (wxCommandEvent &ev) {
 void c_mainwindow::on_btn_audio (wxCommandEvent &ev) { CP
   if (dec->audio->state == ST_NOTREADY) {
     init_audio ();
+    update_audio_ports ();
   } else {
     shutdown_audio ();
   }

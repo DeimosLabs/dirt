@@ -95,6 +95,8 @@ public:
   bool load_sweep_wet (const char *in_filename);
   bool output_ir (const char *out_filename, long int ir_length_samples = 0);
   int samplerate ();
+  bool has_dry ();
+  bool has_wet ();
   
   // passthrough functions for c_audioclient & derived
   // these just call hooks and corresponding c_audioclient functions 

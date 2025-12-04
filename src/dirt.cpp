@@ -141,15 +141,14 @@ static bool looks_like_jack_port (const std::string &s) {
 }
 
 // new: marker_gap_seconds, preroll_seconds
-static void generate_log_sweep (double seconds,
-                                double preroll_seconds,
-                                double start_marker_seconds,
-                                double marker_gap_seconds,
-                                int samplerate,
-                                float sweep_amp_db,
-                                float f1, float f2,
-                                std::vector<float> &out)
-{
+void generate_log_sweep (double seconds,
+                          double preroll_seconds,
+                          double start_marker_seconds,
+                          double marker_gap_seconds,
+                          int samplerate,
+                          float sweep_amp_db,
+                          float f1, float f2,
+                          std::vector<float> &out) {
   const size_t N      = (size_t) (seconds * samplerate);          // sweep
   const size_t NPRE   = (size_t) (preroll_seconds * samplerate);  // NEW
   const size_t NM     = (size_t) (start_marker_seconds * samplerate);

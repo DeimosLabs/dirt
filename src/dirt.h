@@ -158,6 +158,15 @@ enum audiostate {
   ST_PLAYMONITOR
 };
 
+void generate_log_sweep (double seconds,
+                          double preroll_seconds,
+                          double start_marker_seconds,
+                          double marker_gap_seconds,
+                          int samplerate,
+                          float sweep_amp_db,
+                          float f1, float f2,
+                          std::vector<float> &out);
+
 // our random number generator, entirely inline/header
 class c_randomgen {
 public:

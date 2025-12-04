@@ -1174,6 +1174,10 @@ int c_deconvolver::on_arm_rec_loop (void *data) {
   return on_playrec_loop (data);
 }
 
+bool c_deconvolver::has_dry () {
+  return have_dry_ && (dry_.size () > 0);
+}
+
 // other c_deconvolver member functions
  
 c_deconvolver::c_deconvolver (struct s_prefs *prefs, std::string name) {  CP
