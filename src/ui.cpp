@@ -227,9 +227,9 @@ void c_mainwindow::on_close (wxCloseEvent &ev) {
 
 void c_mainwindow::on_about (wxCommandEvent &ev) {
   CP
-  std::string str = "Delt's Impulse Response Tool\n\nVersion " + 
+  std::string str = "\nDelt's Impulse Response Tool\n\nVersion " + 
                     std::string (g_dirt_version) + "\nBuild timestamp: " + 
-                    std::string (g_dirt_build_timestamp);
+                    std::string (g_dirt_build_timestamp) + "\n";
   show_message (str);
 }
 
@@ -680,7 +680,7 @@ void c_mainwindow::on_btn_audio (wxCommandEvent &ev) { CP
     } else {
       show_error ("Failed to initialize " + 
                     g_backend_names [dec->audio->backend] +
-                    "\n...is audio device available?");
+                    "\n...is audio device available?\n");
     }
   } else {
     shutdown_audio ();
