@@ -22,7 +22,14 @@
 // ...more callback red tape...
 
 static audiostate determine_state_from_flags (c_jackclient *j) {
-  if (!j->play_go && !j->rec_go) return ST_IDLE;
+  if (!j)
+    return ST_NOTREADY;
+    
+  if (!j->client || !j->jack_inited)
+    return ST_NOTREADY;
+    
+  if (!j->play_go && !j->rec_go)
+    return ST_IDLE;
   
   if (j->rec_go && j->monitor_only && !j->play_go)
       return ST_MONITOR;
@@ -79,22 +86,23 @@ static int jack_process_cb (jack_nframes_t nframes, void *arg) {
 
   // state loop hooks
   switch (j->state) {
+    case ST_NOTREADY:                            break;
     case ST_IDLE:        d->on_audio_idle ();    break;
     case ST_PLAY:        d->on_play_loop ();     break;
     case ST_REC:         d->on_record_loop ();   break;
     case ST_MONITOR:     d->on_arm_rec_loop ();  break;
     case ST_PLAYREC:     d->on_playrec_loop ();  break;
     case ST_PLAYMONITOR: d->on_play_loop ();     break;
-    default: break;
+    default: CP break;
   }
 
   bool stereo = (j->is_stereo && j->port_inR != NULL);
-
+  
   // PLAYBACK
   if (j->port_outL) {
     auto *port_outL =
         (jack_default_audio_sample_t*) jack_port_get_buffer(j->port_outL, nframes);
-    // auto *port_outR = ... if you add it later
+    // auto *port_outR = ... in case we add it later?
 
     if (j->play_go && !j->sig_out_l.empty ()) {
       size_t limit = j->sig_out_l.size ();
@@ -121,11 +129,16 @@ static int jack_process_cb (jack_nframes_t nframes, void *arg) {
         j->play_go = false;   // edge for state machine
       }
     } else {
+      j->play_go = false;
+      j->index = 0;
       // not playing: output silence
       for (jack_nframes_t i = 0; i < nframes; ++i) {
         port_outL [i] = 0.0f;
       }
     }
+  } else {
+    j->play_go = false;
+    j->index = 0;
   }
 
   // RECORDING
@@ -472,6 +485,7 @@ bool c_jackclient::init (std::string clientname,      // = "",
                             
   }
   
+  state = ST_IDLE;
   jack_inited = true;
   
   // ...wuh duh fuuuh?
@@ -556,12 +570,13 @@ bool c_jackclient::shutdown () {
   jack_client_close (client);
   client = nullptr;
   jack_inited = false;
+  state = ST_NOTREADY;
   
   return true;
 }
 
 bool c_jackclient::ready () {
-  return jack_inited;
+  return jack_inited && state != ST_NOTREADY;
 }
 
 bool c_jackclient::arm_record () {
@@ -590,8 +605,9 @@ bool c_jackclient::rec () {
 }
 
 bool c_jackclient::play (const std::vector<float> &sig_l,
-                         const std::vector<float> &sig_r) {
-  debug ("start");
+                         const std::vector<float> &sig_r,
+                         bool block) {
+  debug ("start, %s", block ? "block" : "!block");
   if (!jack_inited || !client) {
     return false;
   }
@@ -608,11 +624,12 @@ bool c_jackclient::play (const std::vector<float> &sig_l,
     limit = std::min (sig_out_l.size (), sig_out_r.size ());
   */
   play_go = true;
-
-  while (index < sig_out_l.size () && ((!is_stereo) || index < sig_out_r.size ())) {
-    usleep (10 * 1000); // 10 ms
-    //dec_->on_play_loop ();
-  }
+  CP
+  if (block)                         // TODO: fix
+    while (index < sig_out_l.size () /*&& ((!is_stereo) || index < sig_out_r.size ())*/) {
+      usleep (10 * 1000); // 10 ms
+      //dec_->on_play_loop ();
+    }
   
   //dec_->on_play_stop ();
 
@@ -621,9 +638,9 @@ bool c_jackclient::play (const std::vector<float> &sig_l,
 }
 
 // for just 1 channel... do we play it in 1 channel or in both?
-bool c_jackclient::play (const std::vector<float> &sig) {
+bool c_jackclient::play (const std::vector<float> &sig, bool block) {
   std::vector<float> dummy_r;
-  return play (sig, dummy_r);
+  return play (sig, dummy_r, block);
 }
 
 bool c_jackclient::playrec (const std::vector<float> &out_l,

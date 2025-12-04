@@ -63,7 +63,7 @@ class c_jackclient;
 #define DEFAULT_SAMPLE_RATE             48000
 #define DEFAULT_F1                      20
 #define DEFAULT_F2                      22000
-#define DEFAULT_JACK_NAME               "%s_IR_sweep" // %s becomes argv [0]
+#define DEFAULT_JACK_NAME               "Dirt_IR_sweep" // %s becomes argv [0]
 #define DEFAULT_IR_SILENCE_THRESH_DB    -72.0
 #define DEFAULT_SWEEP_SILENCE_THRESH_DB -60.0
 #define DEFAULT_SWEEP_SEC               30
@@ -149,12 +149,13 @@ enum align_method {
 };
 
 enum audiostate {
-    ST_IDLE,
-    ST_MONITOR,
-    ST_PLAY,
-    ST_REC,
-    ST_PLAYREC,
-    ST_PLAYMONITOR
+  ST_NOTREADY,
+  ST_IDLE,
+  ST_MONITOR,
+  ST_PLAY,
+  ST_REC,
+  ST_PLAYREC,
+  ST_PLAYMONITOR
 };
 
 // our random number generator, entirely inline/header
@@ -227,9 +228,11 @@ public:
                      bool stereo_out = true) = 0;
   virtual bool shutdown () = 0;
   virtual bool ready () = 0;
-  virtual bool play (const std::vector<float> &out) = 0;
+  virtual bool play (const std::vector<float> &out,
+                     bool block = true) = 0;
   virtual bool play (const std::vector<float> &out_l,
-                     const std::vector<float> &out_r) = 0;
+                     const std::vector<float> &out_r,
+                     bool block = true) = 0;
   virtual bool arm_record () = 0;
   virtual bool rec () = 0;
   virtual bool playrec (const std::vector<float> &out_l,
@@ -261,7 +264,7 @@ public:
   void peak_acknowledge ();
   c_deconvolver *get_deconvolver () { return dec_; }
   
-  int backend = driver_none;
+  int                backend = driver_none;
   std::string        backend_name = "default"; // or maybe "unknown"?
   std::vector<float> sig_in_l; // mono/left wet capture (mix of L/R)
   std::vector<float> sig_in_r; //
@@ -285,7 +288,7 @@ public:
   bool rec_go  = false;
   bool monitor_only = false;
   bool xrun = false;
-  audio_driver driver = driver_jack;
+  //audio_driver driver = driver_jack;
   
   
   /*std::string portname_dry = "";
@@ -296,7 +299,7 @@ public:
   int samplerate = 0;
   int bufsize = 256; // sensible default in case we can't determine
   //bool play_done = false;
-  audiostate state = ST_IDLE;
+  audiostate state = ST_NOTREADY;
 
 protected:
   c_deconvolver *dec_;

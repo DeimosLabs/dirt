@@ -1176,12 +1176,12 @@ int c_deconvolver::on_arm_rec_loop (void *data) {
 
 // other c_deconvolver member functions
  
-c_deconvolver::c_deconvolver (struct s_prefs *prefs, std::string name) {
+c_deconvolver::c_deconvolver (struct s_prefs *prefs, std::string name) {  CP
   set_prefs (prefs);
   set_name (name);
 }
 
-c_deconvolver::~c_deconvolver () {
+c_deconvolver::~c_deconvolver () { CP
 }
 
 void c_deconvolver::set_name (std::string name) {

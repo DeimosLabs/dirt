@@ -47,11 +47,13 @@ class wxSpinCtrl;
 #define ID_SAMPLERATE 10044
 #define ID_FORCEMONO 10009
 #define ID_BACKEND 10023
+#define ID_AUDIO 10048
 #define ID_DRYFILE 10014
 #define ID_DRYFILE_BROWSE 10015
 #define ID_DRY_LENGTH 10017
 #define ID_DRY_F1 10018
 #define ID_DRY_F2 10019
+#define ID_GENERATE 10049
 #define ID_DRY_PREROLL 10020
 #define ID_DRY_MARKER 10021
 #define ID_DRY_GAP 10022
@@ -83,6 +85,7 @@ class wxSpinCtrl;
 #define ID_IR_END_THR 10043
 #define ID_CHN_OFFSET 10041
 #define ID_PROCESS 10045
+#define ID_PANEL1 10047
 #define ID_PANEL 10032
 #define SYMBOL_UI_MAINWINDOW_STYLE wxCAPTION|wxRESIZE_BORDER|wxSYSTEM_MENU|wxCLOSE_BOX
 #define SYMBOL_UI_MAINWINDOW_TITLE _("DIRT")
@@ -143,11 +146,13 @@ public:
     wxComboBox* comb_samplerate;
     wxCheckBox* chk_forcemono;
     wxChoice* list_backend;
+    wxButton* btn_audio;
     wxTextCtrl* text_dryfile;
     wxButton* btn_dryfile_browse;
     wxSpinCtrl* spin_dry_length;
     wxSpinCtrl* spin_dry_f1;
     wxSpinCtrl* spin_dry_f2;
+    wxButton* btn_generate;
     wxSpinCtrl* spin_dry_preroll;
     wxSpinCtrl* spin_dry_marker;
     wxSpinCtrl* spin_dry_gap;

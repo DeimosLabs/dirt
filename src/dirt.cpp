@@ -27,6 +27,7 @@
 #include "timestamp.h"
 #include "deconvolv.h"
 #include "jack.h"
+#include "ui.h"
 
 #ifdef DEBUG
 #define CMDLINE_IMPLEMENTATION
@@ -39,7 +40,6 @@
 #define BP
 #endif
 
-int wx_main (int argc, char **argv, c_deconvolver *p);
 
 c_audioclient::c_audioclient (c_deconvolver *dec) {
   debug ("start");
@@ -74,14 +74,33 @@ bool c_audioclient::has_recording () const {
 }
 
 size_t c_audioclient::get_rec_left () {
-  return rec_total - rec_index;
+  if (rec_index <= 0)
+    return 0;
+    
+  if (state == ST_REC || state == ST_PLAYREC) {
+    return rec_total - rec_index;
+  }
+  
+  return 0;
 }
 
 size_t c_audioclient::get_play_left () {
-  return std::max (sig_in_l.size (), sig_in_r.size ()) - index;
+  if (index <= 0)
+    return 0;
+    
+  if (state == ST_PLAY || state == ST_PLAYREC) {
+    /*size_t a = sig_in_l.size ();
+    size_t b = sig_in_r.size ();
+    size_t c = sig_out.size ();*/
+    //debug ("a=%ld, b=%ld, index=%ld", (long int) a, (long int) b, (long int) index);
+    //return std::max (a, b) - index;
+    return std::max (sig_out_l.size (), sig_out_r.size ()) - index;
+  }
+  
+  return 0;
 }
 
-static bool stdin_has_enter()   /* 100% copy-pasted from chatgpt */
+static bool stdin_has_enter()   /* totally not copy-pasted from chatgpt */
 {
     fd_set rfds;
     FD_ZERO(&rfds);
@@ -780,13 +799,21 @@ int main (int argc, char **argv) {
   
   // our main deconvolver object
   // this needs to be created after we parse args but before wx_main
-  c_deconvolver dec (&p);
+  
+  c_deconvolver *dec = NULL;
+  
+  if (p.gui)
+    dec = new c_deconvolver (&p);
+  else
+    dec = new c_deconvolver_gui (&p);
+  
+  //c_deconvolver dec (&p);
   
   // start gui BEFORE init audio
   if (p.gui) {
     //char **argv_dummy = { NULL };
     CP
-    retval = wx_main (1, argv, &dec);
+    retval = wx_main (1, argv, dec);
     CP
     exit (retval);
     //return retval; // TODO: why does this sometimes segfault?
@@ -796,8 +823,9 @@ int main (int argc, char **argv) {
   if (p.dry_source == src_jack || p.wet_source == src_jack || p.gui) {
     snprintf (realjackname, 255, p.jack_name.c_str (), argv [0]);
     
-    if (!dec.audio_init (realjackname, p.sweep_sr, p.request_stereo) || !dec.audio_ready ()) {
+    if (!dec->audio_init (realjackname, p.sweep_sr, p.request_stereo) || !dec->audio_ready ()) {
       std::cout << "Error initializing audio\n";
+      if (dec) delete dec;
       return 1;
     }
   }
@@ -842,6 +870,7 @@ int main (int argc, char **argv) {
                        p.sweep_f2,
                        sweep);
     if (!write_mono_wav (p.out_path.c_str (), sweep, p.sweep_sr)) {
+      if (dec) delete dec;
       return 1;
     }
     if (!p.quiet) {
@@ -850,6 +879,7 @@ int main (int argc, char **argv) {
                   << p.sweep_sr << " Hz)\n";
     }
     debug ("return");
+    if (dec) delete dec;
     return 0;
   }
 
@@ -872,10 +902,11 @@ int main (int argc, char **argv) {
       std::getline(std::cin, str);
     }
     
-    int play_ok = dec.audio->play (sweep);
-    dec.audio->shutdown();
+    int play_ok = dec->audio->play (sweep, true);
+    dec->audio->shutdown();
     
     debug ("return");
+    if (dec) delete dec;
     return play_ok ? 0 : 1;
   }
 
@@ -897,28 +928,30 @@ int main (int argc, char **argv) {
     
     if (p.sweepwait) {
       CP
-      dec.audio_arm_record ();
+      dec->audio_arm_record ();
       std::cout << "Press enter to play and record sinewave sweep... \n";
       std::string str;
       std::getline(std::cin, str);
     }
     
     std::vector<float> dummy_r_out;
-    if (!dec.audio_playrec (sweep, dummy_r_out)) {
+    if (!dec->audio_playrec (sweep, dummy_r_out)) {
       debug ("return");
+      if (dec) delete dec;
       return 1;
     }
     CP
-    while (!dec.audio_playback_done ()){
+    while (!dec->audio_playback_done ()){
       usleep (10 * 1000);
     }
     CP
-    if (!dec.set_dry_from_buffer (sweep, p.sweep_sr)) return 1;
-    if (!dec.set_wet_from_buffer (dec.audio->get_recorded_l (),
-                                  dec.audio->get_recorded_r (), p.sweep_sr)) return 1;
-    if (!dec.output_ir (p.out_path.c_str(), p.ir_length_samples)) return 1;
+    if (!dec->set_dry_from_buffer (sweep, p.sweep_sr)) return 1;
+    if (!dec->set_wet_from_buffer (dec->audio->get_recorded_l (),
+                                  dec->audio->get_recorded_r (), p.sweep_sr)) return 1;
+    if (!dec->output_ir (p.out_path.c_str(), p.ir_length_samples)) return 1;
     
     debug ("return");
+    if (dec) delete dec;
     return 0;
   }
 #endif
@@ -926,7 +959,7 @@ int main (int argc, char **argv) {
   // file / generated dry + file wet deconvolution
 
   if (p.dry_source == src_file) {
-      if (!dec.load_sweep_dry (p.dry_path.c_str())) return 1;
+      if (!dec->load_sweep_dry (p.dry_path.c_str())) return 1;
   } else if (p.dry_source == src_generate) {
       std::vector<float> sweep_local;
       generate_log_sweep(p.sweep_seconds,
@@ -938,7 +971,7 @@ int main (int argc, char **argv) {
                          p.sweep_f1,
                          p.sweep_f2,
                          sweep_local);
-      if (!dec.set_dry_from_buffer (sweep_local, p.sweep_sr)) return 1;
+      if (!dec->set_dry_from_buffer (sweep_local, p.sweep_sr)) return 1;
   } else {
 #ifdef USE_JACK
     std::cerr << "Error: Dry JACK only supported when wet is JACK.\n";
@@ -946,11 +979,12 @@ int main (int argc, char **argv) {
     std::cerr << "Error: Dry JACK not supported (built without JACK).\n";
 #endif
     debug ("return");
+    if (dec) delete dec;
     return 1;
   }
 
   if (p.wet_source == src_file) {
-      if (!dec.load_sweep_wet (p.wet_path.c_str())) return 1;
+      if (!dec->load_sweep_wet (p.wet_path.c_str())) { if (dec) delete dec; return 1; }
   } else {
 #ifdef USE_JACK
     std::cerr << "Error: Wet JACK only supported when dry is JACK.\n";
@@ -958,16 +992,19 @@ int main (int argc, char **argv) {
     std::cerr << "Error: Wet JACK not supported (built without JACK).\n";
 #endif
     debug ("return");
+    if (dec) delete dec;
     return 1;
   }
   
-  std::cout << "Detected sample rate: " << dec.samplerate () << std::endl;
-  if (!dec.output_ir (p.out_path.c_str (), p.ir_length_samples)) {
+  std::cout << "Detected sample rate: " << dec->samplerate () << std::endl;
+  if (!dec->output_ir (p.out_path.c_str (), p.ir_length_samples)) {
     debug ("return");
+    if (dec) delete dec;
     return 1;
   }
 
   debug ("end");
+  if (dec) delete dec;
   return 0;
 }
 

@@ -30,13 +30,17 @@
 
 #include "wx/wx.h"
 #include "wxwidgets/mainwindow.h"
+#include "deconvolv.h"
 
 class c_mainwindow : public ui_mainwindow {
 public:
   c_mainwindow (c_deconvolver *d = NULL);
   ~c_mainwindow ();
   
-  bool init_audio (int samplerate = -1, bool stereo = true);
+  bool init_audio ();
+  bool init_audio (int samplerate, bool stereo);
+  bool shutdown_audio ();
+  bool audio_ready ();
   void set_statustext (const char *str, ...);
   void set_mode (long int mode);
   void set_prefs (s_prefs *prefs);
@@ -60,14 +64,17 @@ public:
   //void on_menu_highlight (wxMenuEvent &ev);
   //void on_debug_stuff_toggled (bool b);
   void on_btn_dryfile_browse (wxCommandEvent &ev);
+  void on_btn_generate (wxCommandEvent &ev);
   void on_btn_dry_save (wxCommandEvent &ev);
   void on_btn_inputdir_scan (wxCommandEvent &ev);
   void on_btn_inputdir_browse (wxCommandEvent &ev);
   void on_btn_inputfiles_add (wxCommandEvent &ev);
   void on_btn_inputfiles_clear (wxCommandEvent &ev);
   void on_btn_play (wxCommandEvent &ev);
+  void on_btn_audio (wxCommandEvent &ev);
   void on_btn_process (wxCommandEvent &ev);
   void on_port_select (wxCommandEvent &ev);
+  void on_timer (wxTimerEvent &ev);
   
   c_deconvolver *dec = NULL;
 
@@ -77,7 +84,17 @@ private:
   void disable (wxWindow *w) { set_enable (w, false); }
   void enable (wxWindow *w) { set_enable (w, true); }
   
+  wxTimer timer;
   bool init_audio_done = false;
+  int mode = ID_FILE;
+  int prev_mode = -1;
+  int prev_audio_state = -1;
+};
+
+class c_deconvolver_gui : public c_deconvolver {
+public:
+  c_deconvolver_gui (struct s_prefs *prefs = NULL, std::string name = "")
+    : c_deconvolver (prefs, name) {}
 };
 
 class c_app : public wxApp {
@@ -98,6 +115,8 @@ private:
 };
 
 wxDECLARE_APP (c_app);
+
+int wx_main (int argc, char **argv, c_deconvolver *p);
 
 extern c_app *g_app;
 

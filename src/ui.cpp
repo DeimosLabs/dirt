@@ -30,11 +30,13 @@ wxBEGIN_EVENT_TABLE (c_mainwindow, ui_mainwindow)
   EVT_CHECKBOX (wxID_ANY, c_mainwindow::on_checkbox)
 
   EVT_BUTTON (ID_DRYFILE_BROWSE, c_mainwindow::on_btn_dryfile_browse)
+  EVT_BUTTON (ID_GENERATE, c_mainwindow::on_btn_generate)
   EVT_BUTTON (ID_DRY_SAVE, c_mainwindow::on_btn_dry_save)
   EVT_BUTTON (ID_INPUTDIR_SCAN, c_mainwindow::on_btn_inputdir_scan)
   EVT_BUTTON (ID_INPUTDIR_BROWSE, c_mainwindow::on_btn_inputdir_browse)
   EVT_BUTTON (ID_INPUTFILES_ADD, c_mainwindow::on_btn_inputfiles_add)
   EVT_BUTTON (ID_INPUTFILES_CLEAR, c_mainwindow::on_btn_inputfiles_clear)
+  EVT_BUTTON (ID_AUDIO, c_mainwindow::on_btn_audio)
   EVT_BUTTON (ID_PLAY, c_mainwindow::on_btn_play)
   EVT_BUTTON (ID_PROCESS, c_mainwindow::on_btn_process)
   
@@ -69,12 +71,75 @@ c_mainwindow::c_mainwindow (c_deconvolver *d)
   SetSize (GetSize () + wxSize (0, 100));
   SetSizeHints (GetSize ());
   
-  
   set_mode (ID_FILE);
+  
+  init_audio ();
+  timer.Bind (wxEVT_TIMER, &c_mainwindow::on_timer, this);
+  timer.Start (32);
 }
 
 c_mainwindow::~c_mainwindow () {
   CP
+}
+
+void c_mainwindow::on_timer (wxTimerEvent &ev) {
+  if (!dec || !dec->audio) return;
+  
+  bool do_full_update = false;
+  int s = dec->audio->state;
+  
+  if (s != prev_audio_state) {
+    prev_audio_state = s;
+    do_full_update = true;
+  }
+  if (mode != prev_mode) {
+    prev_mode = mode;
+    do_full_update = true;
+  }
+  
+  if (s == ST_NOTREADY) {
+    set_enable (btn_play, false);
+    btn_audio->SetLabel ("Connect");
+  } else if (s == ST_IDLE) {
+    set_enable (btn_play, true);
+    btn_play->SetLabel ((mode == ID_ROUNDTRIP) ? "Process" : "Play");
+    btn_audio->SetLabel ("Disconnect");
+  } else {
+    set_enable (btn_play, true);
+    int sr = dec->prefs_ ? dec->prefs_->sweep_sr : 
+                           atoi (comb_samplerate->GetValue ().c_str ());
+    size_t sec_left = dec->audio->get_play_left () / (size_t) sr;
+    char buf [32];
+    snprintf (buf, 31, "Stop (%ld)", sec_left);
+    //debug ("sr=%d, sec_left=%d", sr, sec_left);
+    btn_play->SetLabel (buf);
+    btn_audio->SetLabel ("Disconnect");
+  }
+  
+  /*if (do_full_update)
+    set_mode (mode);*/
+}
+
+bool c_mainwindow::audio_ready () {
+  if (!dec) {
+    //debug ("no deconvolver");
+    return false;
+  }
+  if (!dec->audio) {
+    //debug ("deconvolver has no audio client");
+    return false;
+  }
+  if (dec->audio->state == ST_NOTREADY) {
+    //debug ("deconvolver audio not ready");
+    return false;
+  }
+  
+  return true;
+}
+
+bool c_mainwindow::init_audio () { CP
+  return init_audio (atoi (comb_samplerate->GetValue ().c_str ()), 
+                      !chk_forcemono->GetValue ());
 }
 
 bool c_mainwindow::init_audio (int samplerate, bool stereo) {
@@ -116,6 +181,18 @@ bool c_mainwindow::init_audio (int samplerate, bool stereo) {
   return true;
 }
 
+bool c_mainwindow::shutdown_audio () { CP
+  if (!dec || !dec->audio) return false;
+  if (dec->audio->state == ST_NOTREADY) return false;
+  
+  list_jack_dry->Clear ();
+  list_jack_wet_l->Clear ();
+  list_jack_wet_r->Clear ();
+  init_audio_done = false;
+  
+  return dec->audio->shutdown ();
+}
+
 void c_mainwindow::on_quit (wxCommandEvent &ev) {
   CP
   Close ();
@@ -153,7 +230,7 @@ struct widget_status {
 
 void c_mainwindow::on_port_select (wxCommandEvent &ev) {
 #ifdef USE_JACK
-  if (!dec || !dec->audio || dec->audio->backend != driver_jack) {
+  if (!audio_ready () || dec->audio->backend != driver_jack) {
     debug ("no JACK client");
     return;
   }
@@ -229,12 +306,13 @@ void c_mainwindow::get_prefs (s_prefs *prefs) {
   prefs->ir_silence_db = spin_ir_end_thr->GetValue ();
 }
 
-void c_mainwindow::set_mode (long int mode) {
+void c_mainwindow::set_mode (long int _mode) {
   struct widget_status *wl;
+  mode = _mode;
   
   static struct widget_status widget_status_file [] = {
     // dry sweep tab
-    { ID_BACKEND,              false  },
+    { ID_BACKEND,              true  },
     { ID_FORCEMONO,            true  },
     { ID_SAMPLERATE,           true  },
     { ID_DRYFILE,              true  },
@@ -245,6 +323,7 @@ void c_mainwindow::set_mode (long int mode) {
     { ID_DRY_PREROLL,          false },
     { ID_DRY_MARKER,           false },
     { ID_DRY_GAP,              false },
+    { ID_GENERATE,             false },
     { ID_DRY_SAVE,             false },
     { ID_JACK_DRY,             true },
     { ID_JACK_WET_L,           false },
@@ -289,6 +368,7 @@ void c_mainwindow::set_mode (long int mode) {
     { ID_DRY_PREROLL,          true  },
     { ID_DRY_MARKER,           true  },
     { ID_DRY_GAP,              true  },
+    { ID_GENERATE,             true },
     { ID_DRY_SAVE,             true },
     { ID_JACK_DRY,             true },
     { ID_JACK_WET_L,           false },
@@ -333,6 +413,7 @@ void c_mainwindow::set_mode (long int mode) {
     { ID_DRY_PREROLL,          false },
     { ID_DRY_MARKER,           false },
     { ID_DRY_GAP,              false },
+    { ID_GENERATE,             false },
     { ID_DRY_SAVE,             false },
     { ID_JACK_DRY,             true  },
     { ID_JACK_WET_L,           true  },
@@ -364,14 +445,18 @@ void c_mainwindow::set_mode (long int mode) {
     { -1,                      false }
   };
   
+#ifdef USE_JACK
+  bool do_audio = true;
+#else
   bool do_audio = false;
+#endif
   
   //bool b = chk_forcemono->GetValue();
   //set_enable (list_jack_wet_r, !b);
   //set_enable (spin_chn_offset, !b);
   
-  if (mode == ID_ROUNDTRIP) btn_play->SetLabel ("Process");
-  else                      btn_play->SetLabel ("Play");
+  /*if (mode == ID_ROUNDTRIP) btn_play->SetLabel ("Process");
+  else                      btn_play->SetLabel ("Play");*/
   
   switch (mode) {
     case ID_FILE:
@@ -394,10 +479,20 @@ void c_mainwindow::set_mode (long int mode) {
     break;
   }
   
+  for (int i = 0; wl [i].id >= 0; i++) {
+    wxWindow *w = tab_drysweep->FindWindow (wl [i].id);
+    if (!w)   w = tab_deconvolv->FindWindow (wl [i].id);
+    if (w) {
+      //debug ("widget %ld %s", wl [i].id, wl [i].is_on ? "on" : "off");
+      //w->Enable (wl [i].is_on);
+      //w->SetTransparent (wl [i].is_on ? opac_on : opac_off);
+      set_enable (w, wl [i].is_on);
+    }
+  }
+  
   if (do_audio) {
-    init_audio (atoi (comb_samplerate->GetValue ().c_str ()), 
-                      !chk_forcemono->GetValue ());
-    if (!dec || !dec->audio) {
+    init_audio ();
+    if (!audio_ready ()) {
       std::cerr << "Failed to initialize audio!\n";
       return;
     }
@@ -412,21 +507,23 @@ void c_mainwindow::set_mode (long int mode) {
       //dec->audio->init_output (false);
     }
   }
+  update_audio_ports ();
   
-  for (int i = 0; wl [i].id >= 0; i++) {
-    wxWindow *w = tab_drysweep->FindWindow (wl [i].id);
-    if (!w)   w = tab_deconvolv->FindWindow (wl [i].id);
-    if (w) {
-      //debug ("widget %ld %s", wl [i].id, wl [i].is_on ? "on" : "off");
-      //w->Enable (wl [i].is_on);
-      //w->SetTransparent (wl [i].is_on ? opac_on : opac_off);
-      set_enable (w, wl [i].is_on);
-    }
-  }
+  if (!audio_ready ()) {
+    set_enable (list_jack_dry, false);
+    set_enable (list_jack_wet_l, false);
+    set_enable (list_jack_wet_r, false);
+  } /*else {
+    set_enable (list_jack_dry, true);
+    set_enable (list_jack_wet_l, true);
+    set_enable (list_jack_wet_r, true);
+  }*/
   
   if (chk_forcemono->GetValue()) {
     set_enable (list_jack_wet_r, false);
     set_enable (spin_chn_offset, false);
+  } else {
+    set_enable (spin_chn_offset, true);
   }
   
   update_audio_ports ();
@@ -438,25 +535,31 @@ void c_mainwindow::set_enable (wxWindow *w, bool b) {
 }
 
 void c_mainwindow::update_audio_ports () {
-  CP
+    list_jack_dry->Clear ();
+    list_jack_wet_l->Clear ();
+    list_jack_wet_r->Clear ();
+  if (!audio_ready ()) {
+    set_enable (list_jack_dry, false);
+    set_enable (list_jack_wet_l, false);
+    set_enable (list_jack_wet_r, false);
+    return;
+  }
   int i;
+  bool s = !chk_forcemono->GetValue ();
   
   std::vector <std::string> port_list;
-  if (dec && dec->audio) {
-    dec->audio->get_output_ports (port_list);
-    for (i = 0; i < port_list.size (); i++) {
-      list_jack_dry->Append (port_list [i]);
-    }
+  dec->audio->get_output_ports (port_list);
+  for (i = 0; i < port_list.size (); i++) {
+    list_jack_dry->Append (port_list [i]);
   }
   
   port_list.clear ();
-  if (dec && dec->audio) {
-    dec->audio->get_input_ports (port_list);
-    for (i = 0; i < port_list.size (); i++) {
-      list_jack_wet_l->Append (port_list [i]);
-      list_jack_wet_r->Append (port_list [i]);
-    }
+  dec->audio->get_input_ports (port_list);
+  for (i = 0; i < port_list.size (); i++) {
+    list_jack_wet_l->Append (port_list [i]);
+    if (s) list_jack_wet_r->Append (port_list [i]);
   }
+  if (!s) set_enable (list_jack_wet_r, false);
 }
 
 void c_mainwindow::on_btn_dryfile_browse (wxCommandEvent &ev  ) {
@@ -465,8 +568,14 @@ void c_mainwindow::on_btn_dryfile_browse (wxCommandEvent &ev  ) {
                   "", "", "*.[Ww][Aa][Vv]", wxFD_OPEN|wxFD_FILE_MUST_EXIST);
   int ret = f.ShowModal ();
   if (ret != wxID_CANCEL) {
-    text_dryfile->SetValue (f.GetPath ());
+    std::string fn = std::string (f.GetPath ());
+    text_dryfile->SetValue (fn);
+    if (!dec) return;
+    dec->load_sweep_dry (fn.c_str ());
   }
+}
+
+void c_mainwindow::on_btn_generate (wxCommandEvent &ev) { CP
 }
 
 void c_mainwindow::on_btn_dry_save (wxCommandEvent &ev) {
@@ -495,14 +604,27 @@ void c_mainwindow::on_btn_inputfiles_clear (wxCommandEvent &ev) {
   CP
 }
 
+void c_mainwindow::on_btn_audio (wxCommandEvent &ev) { CP
+  if (dec->audio->state == ST_NOTREADY) {
+    init_audio ();
+  } else {
+    shutdown_audio ();
+  }
+}
+
 void c_mainwindow::on_btn_play (wxCommandEvent &ev) {
+  if (!audio_ready ()) return;
   CP
+  init_audio ();
+  if (dec->audio->state == ST_IDLE)
+    dec->audio->play (dec->dry_, false);
+  else
+    dec->audio->stop ();
 }
 
 void c_mainwindow::on_btn_process (wxCommandEvent &ev) {
   CP
 }
-
 
 
 // c_app

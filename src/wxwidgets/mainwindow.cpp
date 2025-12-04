@@ -108,11 +108,13 @@ void ui_mainwindow::Init()
     comb_samplerate = NULL;
     chk_forcemono = NULL;
     list_backend = NULL;
+    btn_audio = NULL;
     text_dryfile = NULL;
     btn_dryfile_browse = NULL;
     spin_dry_length = NULL;
     spin_dry_f1 = NULL;
     spin_dry_f2 = NULL;
+    btn_generate = NULL;
     spin_dry_preroll = NULL;
     spin_dry_marker = NULL;
     spin_dry_gap = NULL;
@@ -218,6 +220,9 @@ void ui_mainwindow::CreateControls()
     list_backend->SetStringSelection(_("0"));
     itemBoxSizer4->Add(list_backend, 0, wxGROW|wxBOTTOM, 5);
 
+    btn_audio = new wxButton( tab_drysweep, ID_AUDIO, wxEmptyString, wxDefaultPosition, wxDefaultSize, 0 );
+    itemBoxSizer4->Add(btn_audio, 0, wxGROW|wxALL, 5);
+
     wxBoxSizer* itemBoxSizer14 = new wxBoxSizer(wxVERTICAL);
     staticbox_drysweep->Add(itemBoxSizer14, 5, wxGROW|wxALL, 5);
     wxBoxSizer* itemBoxSizer15 = new wxBoxSizer(wxHORIZONTAL);
@@ -250,7 +255,8 @@ void ui_mainwindow::CreateControls()
     spin_dry_f2 = new wxSpinCtrl( tab_drysweep, ID_DRY_F2, wxT("0"), wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 0, 48000, 0 );
     itemFlexGridSizer19->Add(spin_dry_f2, 0, wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
-    itemFlexGridSizer19->Add(5, 5, 0, wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTER_VERTICAL|wxALL, 5);
+    btn_generate = new wxButton( tab_drysweep, ID_GENERATE, _("Generate"), wxDefaultPosition, wxDefaultSize, 0 );
+    itemFlexGridSizer19->Add(btn_generate, 0, wxALIGN_RIGHT|wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
     wxStaticText* itemStaticText26 = new wxStaticText( tab_drysweep, wxID_STATIC, _("Preroll (ms):"), wxDefaultPosition, wxDefaultSize, 0 );
     itemFlexGridSizer19->Add(itemStaticText26, 0, wxALIGN_RIGHT|wxALIGN_CENTER_VERTICAL|wxALL, 5);
@@ -323,7 +329,7 @@ void ui_mainwindow::CreateControls()
 
     itemBoxSizer14->Add(5, 5, 1, wxALIGN_CENTER_HORIZONTAL|wxALL, 5);
 
-    btn_play = new wxButton( tab_drysweep, ID_PLAY, _("Play"), wxDefaultPosition, wxDefaultSize, 0 );
+    btn_play = new wxButton( tab_drysweep, ID_PLAY, wxEmptyString, wxDefaultPosition, wxDefaultSize, 0 );
     itemBoxSizer14->Add(btn_play, 0, wxGROW|wxALL, 5);
 
     itemNotebook1->AddPage(tab_drysweep, _("Dry sweep"));
@@ -507,6 +513,20 @@ void ui_mainwindow::CreateControls()
     itemBoxSizer17->Add(btn_process, 5, wxALIGN_BOTTOM|wxALL, 5);
 
     itemNotebook1->AddPage(tab_deconvolv, _("Deconvolver"));
+
+    wxPanel* itemPanel3 = new wxPanel( itemNotebook1, ID_PANEL1, wxDefaultPosition, wxDefaultSize, wxSUNKEN_BORDER|wxTAB_TRAVERSAL );
+    itemPanel3->SetExtraStyle(wxWS_EX_VALIDATE_RECURSIVELY);
+    wxBoxSizer* itemBoxSizer20 = new wxBoxSizer(wxVERTICAL);
+    itemPanel3->SetSizer(itemBoxSizer20);
+
+    itemBoxSizer20->Add(5, 5, 1, wxALIGN_CENTER_HORIZONTAL|wxALL, 5);
+
+    wxStaticText* itemStaticText25 = new wxStaticText( itemPanel3, wxID_STATIC, _("No IR file has been generated yet."), wxDefaultPosition, wxDefaultSize, 0 );
+    itemBoxSizer20->Add(itemStaticText25, 0, wxALIGN_CENTER_HORIZONTAL|wxALL, 5);
+
+    itemBoxSizer20->Add(5, 5, 1, wxALIGN_CENTER_HORIZONTAL|wxALL, 5);
+
+    itemNotebook1->AddPage(itemPanel3, _("IR file"));
 
     wxPanel* itemPanel1 = new wxPanel( itemNotebook1, ID_PANEL, wxDefaultPosition, wxDefaultSize, wxSUNKEN_BORDER|wxTAB_TRAVERSAL );
     itemPanel1->SetExtraStyle(wxWS_EX_VALIDATE_RECURSIVELY);

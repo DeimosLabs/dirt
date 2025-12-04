@@ -24,9 +24,11 @@ public:
                      bool stereo = true);
   virtual bool shutdown ();
   virtual bool ready ();
-  virtual bool play (const std::vector<float> &out);
+  virtual bool play (const std::vector<float> &out,
+                     bool block);
   virtual bool play (const std::vector<float> &out_l,
-                     const std::vector<float> &out_r);
+                     const std::vector<float> &out_r,
+                     bool block);
   virtual bool arm_record ();
   virtual bool rec ();
   virtual bool playrec (const std::vector<float> &out_l,
@@ -52,7 +54,7 @@ public:
   jack_port_t   *port_outL = NULL;
   //jack_port_t   *port_outR = NULL; // not used for now
   
-private:
+//private:
   bool jack_inited = false;
 };
 

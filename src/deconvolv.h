@@ -172,7 +172,7 @@ public:
 
   c_audioclient *audio = NULL;
   
-protected:
+//protected:
   
   uint64_t playrec_loop_passes = 0;
   int vu_meter_size = ANSI_VU_METER_MIN_SIZE;
