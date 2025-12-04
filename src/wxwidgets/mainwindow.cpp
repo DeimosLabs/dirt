@@ -174,11 +174,14 @@ void ui_mainwindow::CreateControls()
 
     wxBoxSizer* itemBoxSizer4 = new wxBoxSizer(wxVERTICAL);
     staticbox_drysweep->Add(itemBoxSizer4, 1, wxGROW|wxALL, 5);
+    wxStaticText* itemStaticText5 = new wxStaticText( tab_drysweep, wxID_STATIC, _("Dry sweep source:"), wxDefaultPosition, wxDefaultSize, 0 );
+    itemBoxSizer4->Add(itemStaticText5, 0, wxALIGN_LEFT|wxALL, 5);
+
     wxGridSizer* itemGridSizer1 = new wxGridSizer(0, 1, 0, 0);
     itemBoxSizer4->Add(itemGridSizer1, 3, wxGROW|wxALL, 0);
     wxBoxSizer* itemBoxSizer7 = new wxBoxSizer(wxHORIZONTAL);
     itemGridSizer1->Add(itemBoxSizer7, 1, wxGROW|wxALL, 5);
-    radio_file = new wxRadioButton( tab_drysweep, ID_FILE, _("File"), wxDefaultPosition, wxDefaultSize, 0 );
+    radio_file = new wxRadioButton( tab_drysweep, ID_FILE, _("Load file"), wxDefaultPosition, wxDefaultSize, 0 );
     radio_file->SetValue(false);
     itemBoxSizer7->Add(radio_file, 1, wxALIGN_CENTER_VERTICAL|wxALL, 5);
 

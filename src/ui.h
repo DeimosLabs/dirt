@@ -46,7 +46,9 @@ public:
   void set_prefs (s_prefs *prefs);
   void get_prefs (s_prefs *prefs);
   void update_audio_ports ();
-  bool make_dry_sweep ();
+  bool make_dry_sweep (bool load_it = true);
+  void show_error (std::string str);
+  void show_message (std::string str);
   
   // event handlers
   //void on_debug (wxCommandEvent &ev);

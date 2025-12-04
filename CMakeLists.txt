@@ -43,6 +43,7 @@ target_sources(dirt PRIVATE
     src/dirt.cpp
     src/deconvolv.cpp
     src/jack.cpp
+    src/miscjunk.cpp
 )
 
 # GUI sources (only when enabled)
@@ -56,21 +57,14 @@ endif()
 
 # Timestamp header
 set(TIMESTAMP_FILE ${CMAKE_CURRENT_BINARY_DIR}/timestamp.h)
-target_include_directories(dirt PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
-
-add_custom_command(
-    OUTPUT ${TIMESTAMP_FILE}
-    COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/timestamp.sh" ${TIMESTAMP_FILE}
+set_source_files_properties(${TIMESTAMP_FILE} PROPERTIES GENERATED TRUE)
+add_custom_target(timestamp ALL
+    COMMAND sh "${CMAKE_CURRENT_SOURCE_DIR}/timestamp.sh" "${TIMESTAMP_FILE}"
+    WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
     COMMENT "Updating build timestamp"
 )
-
-add_custom_target(update_timestamp ALL
-    DEPENDS ${TIMESTAMP_FILE}
-)
-
-add_dependencies(dirt update_timestamp)
-
-# Version macro
+add_dependencies(dirt timestamp)
+target_include_directories(dirt PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 target_compile_definitions(dirt PRIVATE DIRT_VERSION="${PROJECT_VERSION}")
 
 # Includes

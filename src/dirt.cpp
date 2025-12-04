@@ -24,10 +24,10 @@
  */
 
 #include "dirt.h"
-#include "timestamp.h"
 #include "deconvolv.h"
 #include "jack.h"
 #include "ui.h"
+//#include "timestamp.h" nope - causes full recompile at each build
 
 #ifdef DEBUG
 #define CMDLINE_IMPLEMENTATION
@@ -40,6 +40,8 @@
 #define BP
 #endif
 
+extern char *g_dirt_build_timestamp;
+extern char *g_dirt_version;
 
 c_audioclient::c_audioclient (c_deconvolver *dec) {
   debug ("start");
@@ -214,7 +216,7 @@ static void print_usage (const char *prog, bool full = false) {
   
   if (full) {
     out << "\nDIRT - Delt's Impulse Response Tool\n"
-           "Version " << DIRT_VERSION << " build " << BUILD_TIMESTAMP <<
+           "Version " << g_dirt_version << " build " << g_dirt_build_timestamp <<
 #ifdef USE_JACK
     //"\nJACK support: enabled\n"
     "\n"

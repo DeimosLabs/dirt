@@ -5,6 +5,7 @@
 #ifdef USE_JACK
 #include "jack.h"
 #endif
+//#include "timestamp.h" causes full recompile at each build
 
 #ifdef DEBUG
 #define CMDLINE_DEBUG
@@ -15,6 +16,15 @@
 #define CP
 #define BP
 #endif
+
+extern char *g_dirt_version;
+extern char *g_dirt_build_timestamp;
+
+static std::string g_backend_names [] = {
+  "none",
+  "JACK",
+  "unknown"
+};
 
 // c_mainwindow
 
@@ -97,23 +107,31 @@ void c_mainwindow::on_timer (wxTimerEvent &ev) {
     do_full_update = true;
   }
   
-  if (s == ST_NOTREADY || !dec->has_dry ()) {
-    set_enable (btn_play, false);
+  if (s == ST_NOTREADY) {
+    disable (btn_play);
     btn_audio->SetLabel ("Connect");
   } else if (s == ST_IDLE) {
-    set_enable (btn_play, true);
+    if (!dec->has_dry ()) { CP
+      disable (btn_play);
+    } else { CP
+      enable (btn_play);
+    }
     btn_play->SetLabel ((mode == ID_ROUNDTRIP) ? "Process" : "Play");
     btn_audio->SetLabel ("Disconnect");
   } else {
-    set_enable (btn_play, true);
-    int sr = dec->prefs_ ? dec->prefs_->sweep_sr : 
-                           atoi (comb_samplerate->GetValue ().c_str ());
-    size_t sec_left = dec->audio->get_play_left () / (size_t) sr;
-    char buf [32];
-    snprintf (buf, 31, "Stop (%ld)", sec_left);
-    //debug ("sr=%d, sec_left=%d", sr, sec_left);
-    btn_play->SetLabel (buf);
-    btn_audio->SetLabel ("Disconnect");
+    if (!dec->has_dry ()) {
+      disable (btn_play);
+    } else {
+      enable (btn_play);
+      int sr = dec->prefs_ ? dec->prefs_->sweep_sr : 
+                             atoi (comb_samplerate->GetValue ().c_str ());
+      size_t sec_left = dec->audio->get_play_left () / (size_t) sr;
+      char buf [32];
+      snprintf (buf, 31, "Stop (%ld)", sec_left);
+      //debug ("sr=%d, sec_left=%d", sr, sec_left);
+      btn_play->SetLabel (buf);
+      btn_audio->SetLabel ("Disconnect");
+    }
   }
   
   /*if (do_full_update)
@@ -209,7 +227,10 @@ void c_mainwindow::on_close (wxCloseEvent &ev) {
 
 void c_mainwindow::on_about (wxCommandEvent &ev) {
   CP
-  wxMessageBox ("dirt");
+  std::string str = "Delt's Impulse Response Tool\n\nVersion " + 
+                    std::string (g_dirt_version) + "\nBuild timestamp: " + 
+                    std::string (g_dirt_build_timestamp);
+  show_message (str);
 }
 
 void c_mainwindow::on_checkbox (wxCommandEvent &ev) {
@@ -510,20 +531,20 @@ void c_mainwindow::set_mode (long int _mode) {
   update_audio_ports ();
   
   if (!audio_ready ()) {
-    set_enable (list_jack_dry, false);
-    set_enable (list_jack_wet_l, false);
-    set_enable (list_jack_wet_r, false);
+    disable (list_jack_dry);
+    disable (list_jack_wet_l);
+    disable (list_jack_wet_r);
   } /*else {
-    set_enable (list_jack_dry, true);
-    set_enable (list_jack_wet_l, true);
-    set_enable (list_jack_wet_r, true);
+    enable (list_jack_dry);
+    enable (list_jack_wet_l);
+    enable (list_jack_wet_r);
   }*/
   
   if (chk_forcemono->GetValue()) {
-    set_enable (list_jack_wet_r, false);
-    set_enable (spin_chn_offset, false);
+    disable (list_jack_wet_r);
+    disable (spin_chn_offset);
   } else {
-    set_enable (spin_chn_offset, true);
+    enable (spin_chn_offset);
   }
   
   update_audio_ports ();
@@ -539,9 +560,9 @@ void c_mainwindow::update_audio_ports () {
     list_jack_wet_l->Clear ();
     list_jack_wet_r->Clear ();
   if (!audio_ready ()) {
-    set_enable (list_jack_dry, false);
-    set_enable (list_jack_wet_l, false);
-    set_enable (list_jack_wet_r, false);
+    disable (list_jack_dry);
+    disable (list_jack_wet_l);
+    disable (list_jack_wet_r);
     return;
   }
   int i;
@@ -559,7 +580,7 @@ void c_mainwindow::update_audio_ports () {
     list_jack_wet_l->Append (port_list [i]);
     if (s) list_jack_wet_r->Append (port_list [i]);
   }
-  if (!s) set_enable (list_jack_wet_r, false);
+  if (!s) disable (list_jack_wet_r);
 }
 
 void c_mainwindow::on_btn_dryfile_browse (wxCommandEvent &ev  ) {
@@ -579,7 +600,7 @@ void c_mainwindow::on_btn_generate (wxCommandEvent &ev) { CP
   make_dry_sweep ();
 }
 
-bool c_mainwindow::make_dry_sweep () {
+bool c_mainwindow::make_dry_sweep (bool load_it) {
   debug ("start");
   if (!dec) return false;
   struct s_prefs *p = dec->prefs_;
@@ -596,13 +617,27 @@ bool c_mainwindow::make_dry_sweep () {
                      p->sweep_f2,
                      drysweep);
 
-  if (!dec->set_dry_from_buffer (drysweep, p->sweep_sr)) {
-    CP
-    return false;
+  if (load_it) {
+    if (!dec->set_dry_from_buffer (drysweep, p->sweep_sr)) {
+      CP
+      return false;
+    }
   }
   CP
   debug ("end");
   return true;
+}
+
+void c_mainwindow::show_message (std::string msg) {
+  std::cout << msg;
+  // TODO: log_widget->add (msg);
+  wxMessageBox ("\n" + msg + "\n", "DIRT");
+}
+
+void c_mainwindow::show_error (std::string msg) {
+  std::cerr << msg;
+  // TODO: log_widget->add ("Error: " + msg);
+  wxMessageBox ("\n" + msg + " \n", "DIRT error");
 }
 
 void c_mainwindow::on_btn_dry_save (wxCommandEvent &ev) {
@@ -613,9 +648,7 @@ void c_mainwindow::on_btn_dry_save (wxCommandEvent &ev) {
   if (ret != wxID_CANCEL) {
     CP
     if (!make_dry_sweep ()) {
-      std::string msg = "Deconvolver failed to load our dry sweep\n";
-      std::cerr << msg;
-      wxMessageBox (msg);
+      show_error ("Deconvolver failed to load our dry sweep\n");
     }
       
     std::string dest = std::string (f.GetPath ());
@@ -639,9 +672,16 @@ void c_mainwindow::on_btn_inputfiles_clear (wxCommandEvent &ev) {
 }
 
 void c_mainwindow::on_btn_audio (wxCommandEvent &ev) { CP
+  if (!dec || !dec->audio) return;
+  
   if (dec->audio->state == ST_NOTREADY) {
-    init_audio ();
-    update_audio_ports ();
+    if (init_audio ()) {
+      update_audio_ports ();
+    } else {
+      show_error ("Failed to initialize " + 
+                    g_backend_names [dec->audio->backend] +
+                    "\n...is audio device available?");
+    }
   } else {
     shutdown_audio ();
   }
@@ -684,7 +724,6 @@ bool c_app::OnInit () {
     std::cerr << "can't create main window\n";
     exit (1);
   }
-  //wxMessageBox("OnInit!");
   debug ("end");
   return true;
 }
