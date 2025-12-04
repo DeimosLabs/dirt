@@ -1,4 +1,6 @@
 
+#ifdef USE_WXWIDGETS
+
 #include "dirt.h"
 #include "ui.h"
 #include "deconvolv.h"
@@ -761,3 +763,5 @@ int wx_main (int argc, char **argv, c_deconvolver *dec) {
   debug ("end, retval=%d", retval);
   return retval;
 }
+
+#endif // USE_WXWIDGETS

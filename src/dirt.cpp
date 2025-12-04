@@ -803,6 +803,7 @@ int main (int argc, char **argv) {
   
   c_deconvolver *dec = NULL;
   
+#ifdef USE_WXWIDGETS
   if (p.gui)
     dec = new c_deconvolver (&p);
   else
@@ -819,6 +820,7 @@ int main (int argc, char **argv) {
     exit (retval);
     //return retval; // TODO: why does this sometimes segfault?
   }
+#endif
   
 #ifdef USE_JACK
   if (p.dry_source == src_jack || p.wet_source == src_jack || p.gui) {

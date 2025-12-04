@@ -28,6 +28,8 @@
 #define    __DIRT_UI_H
 #define __IN_DIRT_UI_H
 
+#ifdef USE_WXWIDGETS
+
 #include "wx/wx.h"
 #include "wxwidgets/mainwindow.h"
 #include "deconvolv.h"
@@ -123,6 +125,8 @@ wxDECLARE_APP (c_app);
 int wx_main (int argc, char **argv, c_deconvolver *p);
 
 extern c_app *g_app;
+
+#endif  // USE_WXWIDGETS
 
 #undef  __IN_DIRT_UI_H
 #endif  // __DIRT_UI_H
