@@ -17,6 +17,14 @@ dirt <out_jack_port> <in_jack_port> -o <output_ir.wav>
 ```
 See --help text for more info/options
 
+## Supported systems
+
+Should compile and work fine on any POSIX compliant OS including Linux, MacOS, FreeBSD, etc.
+
+Tested on: As of now, only Linux Mint.
+
+Running this on windows: Short answer, you're on your own. I don't do microsuck malware - at least as little as reasonably possible - and you shouldn't either.
+
 ## License
 
 DIRT is licensed under the GNU General Public License v3.0 (GPL-3.0-or-later).
