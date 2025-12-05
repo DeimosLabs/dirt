@@ -23,7 +23,7 @@ Should compile and work fine on any POSIX compliant OS including Linux, MacOS, F
 
 Tested on: As of now, only Linux Mint.
 
-Running this on windows: Short answer, you're on your own. I don't do microsuck malware - at least as little as reasonably possible - and you shouldn't either.
+Running this on W**dows: Short answer, you're on your own. I don't do microsuck malware garbage - at least as little as reasonably possible - and you shouldn't either.
 
 ## License
 
