@@ -3,7 +3,7 @@ tmpfile="$1-new"
 outfile="$1"
 
 echo "#define BUILD_TIMESTAMP \"$(date +%Y%m%d_%H%M%S)\"" > "$tmpfile"
-if diff "$tmpfile" "$outfile" 2>/dev/null || ! [ -a "$tmpfile" ]; then
+if diff "$tmpfile" "$outfile" 2>/dev/null || ! [ -f "$tmpfile" ]; then
   mv -f "$tmpfile" "$outfile"
 else
   rm -f "$tmpfile"
