@@ -34,6 +34,9 @@
 #include "wxwidgets/mainwindow.h"
 #include "deconvolv.h"
 
+class c_customwidget;
+class c_meterwidget;
+
 class c_mainwindow : public ui_mainwindow {
 public:
   c_mainwindow (c_deconvolver *d = NULL);
@@ -90,12 +93,15 @@ private:
   void set_enable (wxWindow *w, bool b);
   void disable (wxWindow *w) { set_enable (w, false); }
   void enable (wxWindow *w) { set_enable (w, true); }
+  int add_files (std::vector<std::string> list);
+  int add_dir (std::string dir, bool recurs);
   
   wxTimer timer;
   bool init_audio_done = false;
   long int mode = ID_FILE;
   long int prev_mode = -1;
   audiostate prev_audio_state = (audiostate) -1;
+  //c_meterwidget *testwidget = NULL;
 };
 
 class c_deconvolver_gui : public c_deconvolver {
@@ -116,10 +122,143 @@ public:
   c_deconvolver *dec = NULL;
   
 protected:
-  //virtual int FilterEvent (wxEvent &ev);
+  virtual int FilterEvent (wxEvent &ev);
   
 private:
 };
+
+
+/*
+ * Custom widget example/template - (usually) base class.
+ *
+ * Widget class derived directly from wxPanel, where we override/bind
+ * paint events etc. to implement our own appearance and behaviour.
+ *
+ * NOTE TO SELF: New custom widgets should derive from this class, or (if
+ * absolutely necessary) copy/paste it and change the name to something
+ * else/descriptive/meaningful.
+ *
+ */
+
+//comment this out for actual use
+//#define SHOW_CUSTOMWIDGET_TEST_STUFF
+
+class c_customwidget : public wxPanel/*, public has_slots <>*/ {
+public:
+  c_customwidget (wxWindow *parent = NULL,
+                  int id = -1,//ID_FOREIGN,
+                  wxPoint pos = wxDefaultPosition,
+                  wxSize size = wxDefaultSize,
+                  wxBorder border = wxSIMPLE_BORDER);
+  ~c_customwidget ();
+  virtual void set_opacity (int opacity);
+  virtual void inspect ();
+  int width, height;
+  
+  //signal1 <c_customwidget *> sig_left_clicked;
+  //signal1 <c_customwidget *> sig_middle_clicked;
+  //signal1 <c_customwidget *> sig_right_clicked;
+  //signal3 <c_customwidget *, int, int> sig_mouse_move;
+  //signal1 <c_customwidget *> sig_mouse_enter;
+  //signal1 <c_customwidget *> sig_mouse_leave;
+  
+  virtual void render_base_image ();
+  //virtual void render_base_image (wxMemoryDC *dc);
+  virtual void update ();
+  virtual void update (wxWindowDC &dc);
+  //void schedule_deletion ();
+  
+  static wxBitmap render_text_label (char *text, wxFont &font, const wxColour &fg, const wxColour &bg, 
+                                    int max_width, int max_height, int align, int gradient_h, int gradient_v,
+                                    char **r_last_visible_char = NULL);
+                                    
+protected:
+  // event handler boilerplate - might be more to come if needed
+  virtual void on_paint_event (wxPaintEvent &evt);
+  virtual void on_resize_event (wxSizeEvent &evt);
+  virtual void on_mousemove (wxMouseEvent &event);
+  virtual void on_mousedown_left (wxMouseEvent &event);
+  virtual void on_mouseup_left (wxMouseEvent &event);
+  virtual void on_mousedown_middle (wxMouseEvent &event);
+  virtual void on_mouseup_middle (wxMouseEvent &event);
+  virtual void on_mousedown_right (wxMouseEvent &event);
+  virtual void on_mouseup_right (wxMouseEvent &event);
+  virtual void on_mouseleave (wxMouseEvent &event);
+  virtual void on_mousewheel (wxMouseEvent &event);
+  //void onkeypress (wxKeyEvent &event);
+  //void onkeyrelease (wxKeyEvent&event);
+  //void onidle_callback (wxIdleEvent &event);
+  virtual void on_visible_callback (wxShowEvent &ev);
+  
+  inline void get_xy (wxMouseEvent &ev) { mouse_x = ev.GetX (); mouse_y = ev.GetY (); }
+  bool check_click_distance (int which_button);
+  
+#ifdef SHOW_CUSTOMWIDGET_TEST_STUFF
+  virtual char *get_example_label_text ();
+#endif
+
+  bool visible;
+  int opacity;
+  int mouse_x;
+  int mouse_y;
+  int mousedown_x [8];
+  int mousedown_y [8];
+  int mouse_buttons;
+  bool in_paintevent;
+  bool base_image_valid;
+  bool deleted;
+  int click_distance;
+  wxWindow *parent;
+  wxBitmap base_image;
+  wxBitmap img_overlay;
+  wxBitmap image;
+  wxColour col_default_bg;
+  wxColour col_default_fg;
+  wxColour col_bg;
+  wxColour col_fg;
+  wxColour col_bezel1;
+  wxColour col_bezel2;
+  wxFont font;
+  wxFont smallboldfont;
+  wxFontMetrics fm;
+  
+  DECLARE_EVENT_TABLE ();
+};
+
+class c_meterwidget : public c_customwidget {
+public:
+  c_meterwidget (wxWindow *parent = NULL,
+                  int id = -1,//ID_FOREIGN,
+                  wxPoint pos = wxDefaultPosition,
+                  wxSize size = wxDefaultSize,
+                  int wtfisthis = -1);
+  ~c_meterwidget () {}
+  
+  virtual void render_base_image ();
+  virtual void update ();
+  virtual void update (wxWindowDC &dc);
+protected:
+private:
+};
+
+class c_waveformwidget : public c_customwidget {
+public:
+  c_waveformwidget (wxWindow *parent = NULL,
+                    int id = -1,//ID_FOREIGN,
+                    wxPoint pos = wxDefaultPosition,
+                    wxSize size = wxDefaultSize,
+                    int wtfisthis = -1);
+  ~c_waveformwidget () {}
+  
+  virtual void render_base_image ();
+  virtual void update ();
+  virtual void update (wxWindowDC &dc);
+  
+protected:
+private:
+  std::vector<float> *wavdata = NULL;
+};
+
 
 wxDECLARE_APP (c_app);
 

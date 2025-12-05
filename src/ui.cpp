@@ -76,7 +76,6 @@ c_mainwindow::c_mainwindow (c_deconvolver *d)
   
   list_backend->Append ("JACK");  
   list_backend->SetSelection (0);
-  
   list_align->Append ("Marker detection");
   list_align->Append ("Marker det. on dry");
   list_align->Append ("Silence detection");
@@ -91,6 +90,8 @@ c_mainwindow::c_mainwindow (c_deconvolver *d)
   Fit ();
   SetSize (GetSize () + wxSize (0, 100));
   SetSizeHints (GetSize ());
+  
+  //testwidget = new c_meterwidget (pn_meter);
   
   set_mode (ID_FILE);
   
@@ -296,6 +297,9 @@ void c_mainwindow::on_port_select (wxCommandEvent &ev) {
 
 void c_mainwindow::set_prefs (s_prefs *prefs) {
   spin_dry_length->SetValue (prefs->sweep_seconds);
+  char buf [32];
+  snprintf (buf, 32, "%d", (int) prefs->sweep_sr);
+  comb_samplerate->SetValue (std::string (buf));
   spin_dry_f1->SetValue (prefs->sweep_f1);
   spin_dry_f2->SetValue (prefs->sweep_f2);
   spin_dry_preroll->SetValue (prefs->preroll_seconds * 1000.0);
@@ -318,6 +322,9 @@ void c_mainwindow::set_prefs (s_prefs *prefs) {
 
 void c_mainwindow::get_prefs (s_prefs *prefs) {
   prefs->sweep_seconds = spin_dry_length->GetValue ();
+  int sr = atoi (comb_samplerate->GetValue ().c_str ());
+  if (sr > 0 && sr < 192000)
+    prefs->sweep_sr = sr;
   prefs->sweep_f1 = spin_dry_f1->GetValue ();
   prefs->sweep_f2 = spin_dry_f2->GetValue ();
   prefs->preroll_seconds = (float) spin_dry_preroll->GetValue () / 1000.0;
@@ -653,8 +660,13 @@ void c_mainwindow::show_error (std::string msg) {
 
 void c_mainwindow::on_btn_dry_save (wxCommandEvent &ev) {
   CP
+  std::string srtext = std::string (comb_samplerate->GetValue ());
+  if (srtext.size () == 0) {
+    srtext = "48000"; 
+    comb_samplerate->SetValue (srtext);
+  }
   wxFileDialog f (this, "Save sweep as .wav file",
-                  "", "", "*.[Ww][Aa][Vv]", wxFD_SAVE);
+                  "", "", "*.[Ww][Aa][Vv]", wxFD_SAVE|wxFD_OVERWRITE_PROMPT);
   int ret = f.ShowModal ();
   if (ret != wxID_CANCEL) {
     CP
@@ -663,6 +675,23 @@ void c_mainwindow::on_btn_dry_save (wxCommandEvent &ev) {
     }
       
     std::string dest = std::string (f.GetPath ());
+    // wxWidgets does this for us with wxFD_OVERWRITE_PROMPT flag
+    /*bool ok = true;
+    if (file_exists (dest.c_str ())) {
+      
+    } else {
+      CP
+      ok = true;
+    }*/
+    int sr = atoi (srtext.c_str ());
+    if (sr < 0 || sr > 192000) {
+      show_error ("Invalid sample rate:\n" + srtext);
+    } else {
+      if (!write_mono_wav (dest.c_str (), drysweep, sr)) {
+        show_error ("Writing failed:\n" + dest);
+      } else {
+      }
+    }
   }
 }
 
@@ -760,6 +789,10 @@ int c_app::OnExit () {
   return 0;
 }
 
+int c_app::FilterEvent (wxEvent &ev) {
+  return wxApp::FilterEvent (ev);
+}
+
 c_app *g_app = NULL;
 //wxIMPLEMENT_APP_NO_MAIN (c_app);
 
@@ -778,4 +811,525 @@ int wx_main (int argc, char **argv, c_deconvolver *dec) {
   return retval;
 }
 
+
+/*
+ * Custom widget example/template - (usually) base class.
+ *
+ * Widget class derived directly from wxPanel, where we override/bind
+ * paint events etc. to implement our own appearance and behaviour.
+ */
+
+
+enum {
+  ASKYESNO_NO = 0,
+  ASKYESNO_YES,
+  ASKYESNO_CANCEL
+};
+
+enum {
+  KEY_LEFT,
+  KEY_RIGHT,
+  KEY_UP,
+  KEY_DOWN,
+  KEY_SPACE,
+  KEY_ENTER,
+  KEY_ESCAPE
+};
+
+enum {
+  DATETIME_NONE,
+  DATETIME_NANOSECONDS,
+  DATETIME_MILLISECONDS,
+  DATETIME_SECONDS,
+  DATETIME_MINUTES,
+  DATETIME_HOURS,
+  DATETIME_DAYS,
+  DATETIME_WEEKS,
+  DATETIME_MONTHS,
+  DATETIME_YEARS,
+  DATETIME_CENTURIES,
+  DATETIME_MILLENIA,
+  DATETIME_INFINITY
+};
+
+enum {
+  LABEL_ALIGN_LEFT,
+  LABEL_ALIGN_CENTER,
+  LABEL_ALIGN_RIGHT
+};
+
+ 
+ 
+BEGIN_EVENT_TABLE (c_customwidget, wxPanel)
+  EVT_PAINT (c_customwidget::on_paint_event)
+  EVT_SIZE (c_customwidget::on_resize_event)
+  EVT_MOTION (c_customwidget::on_mousemove)
+  EVT_LEFT_DOWN (c_customwidget::on_mousedown_left)
+  EVT_LEFT_UP (c_customwidget::on_mouseup_left)
+  EVT_MIDDLE_DOWN (c_customwidget::on_mousedown_middle)
+  EVT_MIDDLE_UP (c_customwidget::on_mouseup_middle)
+  EVT_RIGHT_DOWN (c_customwidget::on_mousedown_right)
+  EVT_RIGHT_UP (c_customwidget::on_mouseup_right)
+  EVT_LEAVE_WINDOW (c_customwidget::on_mouseleave)
+  EVT_MOUSEWHEEL (c_customwidget::on_mousewheel)
+  /*EVT_KEY_DOWN (c_customwidget::keypress)
+  EVT_KEY_UP (c_customwidget::keyrelease)*/
+  //EVT_IDLE (c_customwidget::idle_callback)
+  EVT_SHOW (c_customwidget::on_visible_callback)
+END_EVENT_TABLE ()
+
+c_customwidget::c_customwidget (wxWindow *p_parent,
+                                int p_id,
+                                wxPoint pos, 
+                                wxSize p_size,
+                                wxBorder border)
+: wxPanel (p_parent, p_id, pos, p_size, border) {
+  debug ("begin");
+  
+  visible = true;
+  parent = p_parent;
+  int font_height = 16;//fm.height ();
+  debug ("font_height=%d", font_height);
+  
+  //SetMinClientSize (wxSize (128, (int) (font_height * 2.8)));
+  //SetMaxClientSize (wxSize (16384, 16384));
+  //SetClientSize (p_size);
+  
+  //col_bg = wxTransparentColour;
+  col_default_bg = wxSystemSettings::GetColour (wxSYS_COLOUR_WINDOW);
+  col_default_fg = wxSystemSettings::GetColour (wxSYS_COLOUR_WINDOWTEXT);
+  col_bg = col_default_bg;
+  col_fg = col_default_fg;
+
+  //font = wxSystemSettings::GetFont (wxSYS_SYSTEM_FONT);
+  font = GetFont ();
+  smallboldfont = font;//.MakeSmaller ().MakeBold (); uhh, this function changes fonts inplace
+  smallboldfont.MakeSmaller ().MakeBold ();
+  
+  mouse_buttons = 0;
+  mouse_x = -1;
+  mouse_y = -1;
+  click_distance = 5; // arbitrary, TODO: get reasonable default from OS/gfx system
+  for (int i = 0; i < 8; i++)
+    mousedown_x [i] = mousedown_y [i] = -16384; // again arbitrary, but umm... yeah :)
+  
+  in_paintevent = false;
+  
+  set_opacity (255);
+  debug ("end");
+}
+
+
+c_customwidget::~c_customwidget () {
+  debug ("start");
+  debug ("end");
+}
+
+
+void c_customwidget::set_opacity (int p_opacity) {
+  //char buf [256];
+  
+  opacity = p_opacity;
+  /*sprintf (buf, "* { background-color: rgba(%d,%d,%d,%d); border-width: 0px; }", r, g, b, opacity);
+  debug ("buf='%s'", buf);
+  setStyleSheet (buf);*/
+  
+  base_image_valid = false;
+  update ();
+}
+
+
+void c_customwidget::inspect () {
+  debug ("start");
+  debug ("end");
+}
+
+
+#ifdef SHOW_CUSTOMWIDGET_TEST_STUFF
+char *c_customwidget::get_example_label_text () {
+  return "This is an instance of c_customwidget.";
+}
+#endif
+
+
+/* Typically, this funciton would react on resize, or other event that
+ * invalidates the base image. */
+void c_customwidget::render_base_image () {
+  int i, j, k, x, y;
+  //unsigned char *pix, *pixeldata;
+  //int rowstride;
+  int cr, cg, cb;
+  int timeunit, timevalue;
+  float alpha;
+  wxBitmap /*dummy_bitmap,*/ text_image;
+  wxMemoryDC dc;
+  
+  GetClientSize (&width, &height);
+  //debug ("start, width=%d, height=%d", width, height);
+  
+  /*int w = width - 1;
+  int h = height - 1;*/
+  int gradwidth = width / 5;
+  base_image = wxBitmap (width, height, 32);
+  
+  dc.SelectObject (base_image);
+  dc.SetBackground (col_bg);
+  dc.Clear ();
+  dc.SelectObject (wxNullBitmap);
+  
+  //c_misc::clear_bitmap (&img_overlay, 255, 255, 255, 32);
+  
+#ifdef SHOW_CUSTOMWIDGET_TEST_STUFF
+  
+  /*wxBitmap img_line1 = c_misc::render_text_label ("Custom widget",
+                                                  smallboldfont,
+                                                  col_fg,
+                                                  col_bg,
+                                                  width,
+                                                  height,
+                                                  LABEL_ALIGN_LEFT,
+                                                  gradwidth,
+                                                  0);
+  wxBitmap img_line2 = c_misc::render_text_label (get_example_label_text (),
+                                                  font,
+                                                  col_fg,
+                                                  col_bg,
+                                                  width,
+                                                  height,
+                                                  LABEL_ALIGN_LEFT,
+                                                  gradwidth,
+                                                  0);
+
+  dc.SelectObject (base_image);
+  dc.DrawBitmap (img_line1, (width / 2) - (img_line1.GetWidth () / 2), 0);
+  dc.DrawBitmap (img_line2, (width / 2) - (img_line2.GetWidth () / 2), 
+                            (height / 2) - (img_line1.GetHeight () / 2));*/
+  
+  /* now the lines around the border*/
+  //dc.SelectObject (base_image);
+  dc.SetPen (wxPen (col_fg));
+  dc.DrawLine (0, 0, width, 0);
+  dc.DrawLine (0, 0, 0, height);
+  dc.DrawLine (0, height - 1, width - 1, height - 1);
+  dc.DrawLine (width - 1, 0, width - 1, height - 1);
+  dc.SelectObject (wxNullBitmap);
+  
+#endif
+  
+  base_image_valid = true;
+  
+  //debug ("end");
+}
+
+
+/* Typically, this function would react to minor appearance changes, such
+ * as visual feedback of mouse events and so on. */
+void c_customwidget::update (wxWindowDC &dc) {
+  int x, y, w, h, i, m, c;
+  unsigned char new_md5 [16];
+  int new_width, new_height;
+  
+  //debug ("start");
+  
+  GetClientSize (&new_width, &new_height);
+  
+  if (!base_image_valid || new_width != width || new_height != height) {
+    render_base_image ();
+    img_overlay = wxBitmap (width, height, 32);
+  }
+  
+  // ??? keeping this for reference
+  //wxGraphicsContext *gc = wxGraphicsContext::Create (dc);
+  
+  dc.DrawBitmap (base_image, 0, 0);
+  
+  /* Add overlay/highlight indicators etc.
+   * we would need to do this AFTER render_base_image () */
+  
+  //debug ("end");
+}
+
+
+void c_customwidget::update () {
+  wxClientDC dc (this);
+  update (dc);
+}
+
+
+/*void c_customwidget::schedule_deletion () {
+  debug ("start");
+  Hide ();
+  deleted = true;
+  debug ("end");
+}
+
+
+void c_customwidget::idle_callback (wxIdleEvent &ev) {
+  //debug ("start");
+  if (deleted) {
+    debug ("deleted");
+    Destroy ();
+    deleted = false;
+  }
+  //debug ("end");
+}*/
+
+
+void c_customwidget::on_visible_callback (wxShowEvent &ev) {
+  base_image_valid = false;
+  update ();
+}
+
+
+void c_customwidget::on_paint_event (wxPaintEvent &ev) {
+  //debug ("start");
+  wxPaintDC dc (this);
+  update (dc);
+  //debug ("end");
+}
+
+
+// TODO: find out in which cases (if any) this x,y < 0 differs from
+// mapping EVT_ENTER_WINDOW - see $DOC/classwx_mouse_event.html
+void c_customwidget::on_mousemove (wxMouseEvent &ev) {
+  //debug ("start");
+  
+  if (mouse_x < 0 && mouse_y < 0) {
+    //debug ("Mouse enter");
+    //emit sig_mouse_enter (this);
+  }
+  //emit sig_mouse_move (this, mouse_x, mouse_y);
+
+  mouse_x = ev.GetX ();
+  mouse_y = ev.GetY ();
+  //debug ("mouse=%d,%d, buttons=%d", mouse_x, mouse_y, mouse_buttons);
+  
+  // we do this in derived class before/after calling this function
+  //update ();
+  
+  //debug ("end");
+}
+
+
+bool c_customwidget::check_click_distance (int which) {
+  if (which < 0 || which >= 8)
+    return false;
+  
+  if (abs (mouse_x - mousedown_x [which]) > click_distance)
+    return false;
+  
+  if (abs (mouse_y - mousedown_y [which]) > click_distance)
+    return false;
+  
+  return true;
+}
+
+
+void c_customwidget::on_mousedown_left (wxMouseEvent &ev) {
+  debug ("start");
+  get_xy (ev);
+  mousedown_x [0] = mouse_x;
+  mousedown_y [0] = mouse_y;
+  mouse_buttons |= 1;
+  
+  /*wxPaintDC dc (this);
+  update (dc);*/
+  update ();
+  debug ("end");
+}
+
+
+void c_customwidget::on_mouseup_left (wxMouseEvent &ev) {
+  debug ("start");
+  get_xy (ev);
+  mouse_buttons &= ~1;
+  update ();
+  /*if (check_click_distance (0)) {
+    debug ("emitting sig_left_clicked");
+    emit sig_left_clicked (this);
+  }*/
+  debug ("end");
+}
+
+
+void c_customwidget::on_mousedown_middle (wxMouseEvent &ev) {
+  debug ("start");
+  get_xy (ev);
+  mousedown_x [1] = mouse_x;
+  mousedown_y [1] = mouse_y;
+  mouse_buttons |= 2;
+  update ();
+  debug ("end");
+}
+
+
+void c_customwidget::on_mouseup_middle (wxMouseEvent &ev) {
+  debug ("start");
+  get_xy (ev);
+  mouse_buttons &= ~2;
+  update ();
+  /*if (check_click_distance (1)) {
+    debug ("emitting sig_middle_clicked");
+    emit sig_middle_clicked (this);
+  }*/
+  debug ("end");
+}
+
+
+void c_customwidget::on_mousedown_right (wxMouseEvent &ev) {
+  debug ("start");
+  get_xy (ev);
+  mousedown_x [2] = mouse_x;
+  mousedown_y [2] = mouse_y;
+  mouse_buttons |= 4;
+  update ();
+  debug ("end");
+}
+
+
+void c_customwidget::on_mouseup_right (wxMouseEvent &ev) {
+  debug ("start");
+  get_xy (ev);
+  mouse_buttons &= ~4;
+  update ();  
+  /*if (check_click_distance (2)) {
+    debug ("emitting sig_right_clicked");
+    emit sig_right_clicked (this);
+  }*/
+  debug ("end");
+}
+
+
+void c_customwidget::on_mousewheel (wxMouseEvent &ev) {
+  //debug ("start");
+  update ();
+  //debug ("end");
+}
+
+
+void c_customwidget::on_mouseleave (wxMouseEvent &ev) {
+  //debug ("start");
+  
+  mouse_x = -1;
+  mouse_y = -1;
+  update ();
+  //emit sig_mouse_leave (this);
+  
+  //debug ("end");
+}
+
+
+void c_customwidget::on_resize_event (wxSizeEvent &ev) { CP
+  //debug ("start");
+  
+  base_image_valid = false;
+  update ();
+  
+  //debug ("end");
+}
+
+c_meterwidget::c_meterwidget (wxWindow *parent,
+                              int id,
+                              wxPoint pos,
+                              wxSize size,
+                              int wtf)
+: c_customwidget (parent, id, pos, size, (wxBorder) wtf) {
+  CP
+}
+
+// c_meterwidget
+
+void c_meterwidget::render_base_image () { CP
+  //debug ("start");
+  c_customwidget::render_base_image ();
+
+  // draw grid
+  int w2 = width / 2;
+  int h2 = height / 2;
+  
+  wxColour col_grid (255, 0, 0);
+  
+  wxMemoryDC dc; 
+  dc.SelectObject (base_image);
+  dc.SetPen (wxPen (col_grid));
+  
+  dc.DrawLine (w2, 0, w2, height);
+  dc.DrawLine (0, h2, width, h2);
+  
+  //debug ("end");
+}
+
+void c_meterwidget::update () { CP
+  c_customwidget::update ();
+}
+
+void c_meterwidget::update (wxWindowDC &dc) {
+  c_customwidget::update (dc);
+}
+
+// c_waveformwidget
+
+c_waveformwidget::c_waveformwidget (wxWindow *parent,
+                              int id,
+                              wxPoint pos,
+                              wxSize size,
+                              int wtf)
+: c_customwidget (parent, id, pos, size, (wxBorder) wtf) {
+  CP
+  col_bezel1 = wxColour (0, 0, 0, 128);
+  col_bezel2 = wxColour (255, 255, 255, 128);
+  col_bg = wxColour (24, 24, 24);
+  col_fg = wxColour (0, 128, 32);
+}
+
+void c_waveformwidget::render_base_image () { CP
+  c_customwidget::render_base_image ();
+
+  // draw grid
+  int w2 = width / 2;
+  int h2 = height / 2;
+  wxMemoryDC dc;
+  dc.SelectObject (base_image);
+  
+  if (0&&!wavdata) {
+    dc.SetPen (wxPen (wxTransparentColor));
+    dc.SetBrush (wxBrush (col_default_bg));
+    dc.DrawRectangle (0, 0, width, height);
+    dc.SetPen (col_default_fg);
+    dc.SetTextForeground (col_default_fg);
+        
+    wxFont font = GetFont ();
+    std::string msg = "No impulse response file has been generated.";
+    wxSize sz = dc.GetTextExtent (msg);
+    dc.DrawText (msg, w2 - sz.x / 2, h2 - sz.y / 2);
+    return;
+  }
+  
+  // background, bezel
+  dc.SetBrush (wxBrush (col_bg));
+  dc.SetPen (wxPen ());
+  dc.DrawRectangle (0, 0, width, height);
+  dc.SetPen (wxPen (col_bezel1));
+  dc.DrawLine (0, 0, width * 2, -1);
+  dc.DrawLine (0, 1, -1, height * 2);
+  dc.SetPen (wxPen (col_bezel2));
+  dc.DrawLine (width, height * -3 / 2, width - 1, height - 1);
+  dc.DrawLine (width - 2, height - 1, width * -3 / 2, height);
+  
+  // baseline
+  dc.SetPen (wxPen (col_fg));
+  dc.DrawLine (2, height / 2, width - 4, height / 2);
+  
+}
+
+void c_waveformwidget::update () { CP
+  c_customwidget::update ();
+}
+
+void c_waveformwidget::update (wxWindowDC &dc) {
+  c_customwidget::update (dc);
+}
+
+
 #endif // USE_WXWIDGETS
+

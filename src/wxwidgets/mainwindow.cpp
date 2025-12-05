@@ -25,6 +25,7 @@
 ////@end includes
 
 #include "mainwindow.h"
+#include "../ui.h"
 
 ////@begin XPM images
 ////@end XPM images
@@ -120,6 +121,7 @@ void ui_mainwindow::Init()
     spin_dry_gap = NULL;
     list_jack_dry = NULL;
     list_jack_wet_l = NULL;
+    pn_meter = NULL;
     list_jack_wet_r = NULL;
     sizer_meters = NULL;
     btn_play = NULL;
@@ -148,6 +150,7 @@ void ui_mainwindow::Init()
     spin_ir_end_thr = NULL;
     spin_chn_offset = NULL;
     btn_process = NULL;
+    m_waveform = NULL;
     btn_about = NULL;
     btn_ok = NULL;
 ////@end ui_mainwindow member initialisation
@@ -314,7 +317,9 @@ void ui_mainwindow::CreateControls()
 
     itemFlexGridSizer36->Add(5, 5, 0, wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
-    itemFlexGridSizer36->Add(5, 5, 0, wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTER_VERTICAL|wxALL, 5);
+    pn_meter = new c_meterwidget( tab_drysweep, ID_METER, wxDefaultPosition, wxDefaultSize, wxNO_BORDER|wxTAB_TRAVERSAL );
+    pn_meter->SetExtraStyle(wxWS_EX_VALIDATE_RECURSIVELY);
+    itemFlexGridSizer36->Add(pn_meter, 1, wxGROW|wxALL, 5);
 
     itemFlexGridSizer36->Add(5, 5, 0, wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
@@ -526,12 +531,9 @@ void ui_mainwindow::CreateControls()
     wxBoxSizer* itemBoxSizer20 = new wxBoxSizer(wxVERTICAL);
     itemPanel3->SetSizer(itemBoxSizer20);
 
-    itemBoxSizer20->Add(5, 5, 1, wxALIGN_CENTER_HORIZONTAL|wxALL, 5);
-
-    wxStaticText* itemStaticText25 = new wxStaticText( itemPanel3, wxID_STATIC, _("No IR file has been generated yet."), wxDefaultPosition, wxDefaultSize, 0 );
-    itemBoxSizer20->Add(itemStaticText25, 0, wxALIGN_CENTER_HORIZONTAL|wxALL, 5);
-
-    itemBoxSizer20->Add(5, 5, 1, wxALIGN_CENTER_HORIZONTAL|wxALL, 5);
+    m_waveform = new c_waveformwidget( itemPanel3, ID_WAVEFORM, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL );
+    m_waveform->SetExtraStyle(wxWS_EX_VALIDATE_RECURSIVELY);
+    itemBoxSizer20->Add(m_waveform, 1, wxGROW|wxALL, 5);
 
     itemNotebook1->AddPage(itemPanel3, _("IR file"));
 

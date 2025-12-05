@@ -191,5 +191,14 @@ public:
   std::string audio_clientname;
 };
 
+bool write_mono_wav (const char *path,
+                      const std::vector<float> &data,
+                      int samplerate);
+                            
+bool write_stereo_wav (const char *path,
+                        const std::vector<float> &L,
+                        const std::vector<float> &R,
+                        int samplerate);
+
 #undef  __IN_DIRT_DECONVOLV_H
 #endif  // __DIRT_DECONVOLV_H

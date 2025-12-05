@@ -30,6 +30,8 @@
 ////@begin forward declarations
 class wxBoxSizer;
 class wxSpinCtrl;
+class c_meterwidget;
+class c_waveformwidget;
 ////@end forward declarations
 
 /*!
@@ -60,6 +62,7 @@ class wxSpinCtrl;
 #define ID_DRY_SAVE 10046
 #define ID_JACK_DRY 10024
 #define ID_JACK_WET_L 10025
+#define ID_METER 10051
 #define ID_JACK_WET_R 10026
 #define ID_PLAY 10031
 #define ID_TAB2 10040
@@ -87,6 +90,7 @@ class wxSpinCtrl;
 #define ID_CHN_OFFSET 10041
 #define ID_PROCESS 10045
 #define ID_PANEL1 10047
+#define ID_WAVEFORM 10052
 #define ID_PANEL 10032
 #define SYMBOL_UI_MAINWINDOW_STYLE wxCAPTION|wxRESIZE_BORDER|wxSYSTEM_MENU|wxCLOSE_BOX
 #define SYMBOL_UI_MAINWINDOW_TITLE _("DIRT")
@@ -159,6 +163,7 @@ public:
     wxSpinCtrl* spin_dry_gap;
     wxComboBox* list_jack_dry;
     wxComboBox* list_jack_wet_l;
+    c_meterwidget* pn_meter;
     wxComboBox* list_jack_wet_r;
     wxBoxSizer* sizer_meters;
     wxButton* btn_play;
@@ -187,6 +192,7 @@ public:
     wxSpinCtrl* spin_ir_end_thr;
     wxSpinCtrl* spin_chn_offset;
     wxButton* btn_process;
+    c_waveformwidget* m_waveform;
     wxButton* btn_about;
     wxButton* btn_ok;
 ////@end ui_mainwindow member variables

@@ -1329,10 +1329,10 @@ bool c_deconvolver::set_wet_from_buffer (const std::vector<float>& bufL,
     std::cerr << "Samplerate mismatch for wet buffer.\n";
     return false;
   }
-
+  
   wet_L_ = bufL;
   wet_R_ = bufR;
-
+  
   if (prefs_->align != align_method::NONE) {
     if (!wet_R_.empty ()) {
       const size_t n = std::min(wet_L_.size (), wet_R_.size ());
