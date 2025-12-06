@@ -251,7 +251,6 @@ public:
   ~c_meterwidget () {}
   
   virtual void render_base_image ();
-  virtual void redraw ();
   virtual void update (wxWindowDC &dc);
   virtual void on_resize_event (wxSizeEvent &ev);
   
@@ -268,8 +267,9 @@ public:
   float hold_r = 0.0;
   bool  clip_l = false;
   bool  clip_r = false;
-  bool  xrun_l = false;
-  bool  xrun_r = false;
+  bool  xrun   = false;
+
+  wxFont tinyfont;
 
 protected:
 private:
@@ -284,7 +284,9 @@ private:
   float pos_bar1     = 0.0;
   float pos_bar2     = 0.0;
   float size_bar     = 0.0;*/
-  int   clip_size    = 32;  // for "clip" indicator on right
+  int   clip_width   = -1;  // for "clip" indicator on right
+  int   clip_height  = -1;
+  bool last_stereo   = false;
 };
 
 class c_waveformwidget : public c_customwidget {
@@ -300,12 +302,12 @@ public:
   //virtual void update ();
   virtual void update (wxWindowDC &dc);
   
+  wxFont tinyfont;
   
 protected:
 private:
   void draw_frame (wxDC &dc);
   std::vector<float> *wavdata = NULL;
-  wxFont tinyfont;
 };
 
 

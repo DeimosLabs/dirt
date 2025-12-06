@@ -3462,7 +3462,7 @@
                         <string name="proxy-type">"wbSpacerProxy"</string>
                         <string name="filename">""</string>
                         <string name="icon-name">"spacer"</string>
-                        <string name="identifier">"itemSpacer21"</string>
+                        <string name="identifier">"itemSpacer22"</string>
                         <long name="is-transient">0</long>
                         <long name="locked">0</long>
                         <long name="owns-file">1</long>
