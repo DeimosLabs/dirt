@@ -255,26 +255,30 @@ public:
   virtual void on_resize_event (wxSizeEvent &ev);
   
   //void set_audio_client (c_audioclient *cli);
-  void set_l (float level, float hold, bool clip = false, bool xrun = false);
-  void set_r (float level, float hold, bool clip = false, bool xrun = false);
-  void draw_bar (wxDC &dc, int t, int h, bool is_right, float level, float hold, 
-                   bool clip, bool xrun);
-  
-  bool stereo   = true; // TODO: eventually arbitrary num. of channels?
+  void set_stereo (bool b);
+  void set_l (float level, float hold, bool clip = false, 
+              bool xrun = false, bool rec = false);
+  void set_r (float level, float hold, bool clip = false,
+              bool xrun = false, bool rec = false);
+
   bool vertical = false;
   float l       = 0.0;
   float r       = 0.0;
 
   wxFont tinyfont;
-  bool show_rec   = true;   // enable red circle / recording indicator
-  bool show_clip  = true;    // show when clipping
-  bool show_xrun  = true;    // show when xruns detected
+  bool show_rec   = false;   // enable red circle / recording indicator
+  bool show_clip  = true;    // warn when clipping
+  bool show_xrun  = true;    // warn when xruns detected
 
 protected:
 private:
   
+  void draw_bar (wxDC &dc, int t, int h, bool is_right, float level, float hold, 
+                   bool clip = false, bool xrun = false, bool show_rec = false);
+  
   // drawing related stuff
   // floats for math precision, but these are in pixels
+  bool stereo   = true; // TODO: eventually arbitrary num. of channels?
   wxBitmap img_bar;
   wxBitmap img_bar_sub;
   /*float center_line  = 0.0;

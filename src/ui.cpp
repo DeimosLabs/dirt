@@ -99,7 +99,6 @@ c_mainwindow::c_mainwindow (c_deconvolver *d)
   init_audio ();
   timer.Bind (wxEVT_TIMER, &c_mainwindow::on_timer, this);
   timer.Start (32);
-  pn_meter2->vertical = true;
 }
 
 c_mainwindow::~c_mainwindow () {
@@ -250,7 +249,7 @@ bool c_mainwindow::shutdown_audio () { CP
   list_jack_wet_r->Clear ();
   init_audio_done = false;
   
-  return dec->audio->shutdown ();
+  return dec->audio->unregister ();
 }
 
 void c_mainwindow::on_quit (wxCommandEvent &ev) {
@@ -282,10 +281,10 @@ void c_mainwindow::on_chk_forcemono (wxCommandEvent &ev) {
   
   if (chk_forcemono->GetValue ()) {
     debug ("force mono");
-    dec->audio->is_stereo = false;
+    dec->set_stereo (true);
   } else {
     debug ("stereo");
-    dec->audio->is_stereo = true;
+    dec->set_stereo (false);
   }
 }
 
@@ -535,7 +534,6 @@ void c_mainwindow::set_mode (long int _mode) {
 #endif
   bool fm = chk_forcemono->GetValue ();
   if (last_forcemono != fm) {
-    pn_meter->stereo = pn_meter2->stereo = !fm;
     last_forcemono = fm;
   }
   
@@ -578,6 +576,9 @@ void c_mainwindow::set_mode (long int _mode) {
     }
   }
   
+  if (dec && dec->audio)
+    pn_meter->set_stereo (dec->audio->is_stereo);
+  
   if (do_audio) {
     init_audio ();
     if (!audio_ready ()) {
@@ -591,7 +592,7 @@ void c_mainwindow::set_mode (long int _mode) {
     bool s = !chk_forcemono->GetValue ();
     if ((!s) != (!dec->audio->is_stereo)) { // cheap xor
       CP
-      dec->audio->init_input (s);
+      dec->audio->register_input (s);
       //dec->audio->init_output (false);
     }
   }
@@ -907,12 +908,10 @@ int c_mainwindow::add_dir (std::string dirname, bool recurs) {
 }
 
 void c_mainwindow::set_vu_l (float level, float hold, bool clip, bool xrun) 
-  { pn_meter->set_l (level, hold, clip, xrun);
-    pn_meter2->set_l (level, hold, clip, xrun); }
+  { pn_meter->set_l (level, hold, clip, xrun); }
   
 void c_mainwindow::set_vu_r (float level, float hold, bool clip, bool xrun)
-  { pn_meter->set_r (level, hold, clip, xrun); 
-    pn_meter2->set_r (level, hold, clip, xrun); }  
+  { pn_meter->set_r (level, hold, clip, xrun); }
 
 // c_deconvolver_gui
 
@@ -1439,6 +1438,12 @@ void c_meterwidget::render_base_image () {
   
   GetSize (&width, &height);
   debug ("w/h=%d,%d", width, height);
+  
+  if (height > width)
+    vertical = true;
+  else
+    vertical = false;
+  
   if (vertical) {
     clip_width = width;
     clip_height = std::min (width / 2, height * 9 / 10);;
@@ -1610,7 +1615,7 @@ void c_meterwidget::render_base_image () {
 }
 
 void c_meterwidget::draw_bar (wxDC &dc, int t, int o, bool is_r,
-                                float level, float hold, bool clip, bool xrun) {
+                 float level, float hold, bool clip, bool xrun, bool rec) {
   //dc.Clear ();
   dc.SetPen (wxPen (wxColour ()));
   dc.SetBrush (wxBrush (wxColour (255, 0, 0)));
@@ -1643,11 +1648,17 @@ void c_meterwidget::draw_bar (wxDC &dc, int t, int o, bool is_r,
   if (holdpos > 0 && holdpos < m) {
     dc.SetPen (wxColour (192, 192, 128));
     if (vertical)
-      dc.DrawLine (t, m + clip_height - holdpos,
-               t + o, m + clip_height - holdpos);
+      dc.DrawLine (t, m + clip_height - holdpos - 2,
+               t + o, m + clip_height - holdpos - 2);
     else
       dc.DrawLine (holdpos + rec_width, t, holdpos + rec_width, t + o - 1);
   }
+}
+
+void c_meterwidget::set_stereo (bool b) {
+  stereo = b;
+  base_image_valid = false;
+  Refresh ();
 }
 
 void c_meterwidget::update (wxWindowDC &dc) {
@@ -1747,7 +1758,8 @@ void c_meterwidget::update (wxWindowDC &dc) {
 }
 
 
-void c_meterwidget::set_l (float level, float hold, bool clip, bool xr) {
+void c_meterwidget::set_l (float level, float hold,
+                           bool clip, bool xr, bool rec) {
   //debug ("lev:%f, hold=%f, clip=%s, xrun=%s", level, hold,
   //       clip ? "true" : "false", xrun ? "true": "false");
   bool needs_update = false;
@@ -1759,7 +1771,8 @@ void c_meterwidget::set_l (float level, float hold, bool clip, bool xr) {
   if (needs_update) Refresh ();
 }
 
-void c_meterwidget::set_r (float level, float hold, bool clip, bool xr) {
+void c_meterwidget::set_r (float level, float hold,
+                           bool clip, bool xr, bool rec) {
   //debug ("lev:%f, hold=%f, clip=%s, xrun=%s", level, hold,
   //       clip ? "true" : "false", xrun ? "true": "false");
   bool needs_update = false;

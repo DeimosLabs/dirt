@@ -110,7 +110,6 @@ void ui_mainwindow::Init()
     chk_forcemono = NULL;
     list_backend = NULL;
     btn_audio = NULL;
-    pn_meter2 = NULL;
     text_dryfile = NULL;
     btn_dryfile_browse = NULL;
     spin_dry_length = NULL;
@@ -235,11 +234,7 @@ void ui_mainwindow::CreateControls()
     itemBoxSizer4->Add(btn_audio, 0, wxGROW|wxALL, 5);
 
     wxBoxSizer* itemBoxSizer26 = new wxBoxSizer(wxVERTICAL);
-    itemBoxSizer4->Add(itemBoxSizer26, 0, wxALIGN_CENTER_HORIZONTAL|wxALL, 5);
-
-    pn_meter2 = new c_meterwidget( tab_drysweep, ID_C_METERWIDGET, wxDefaultPosition, wxSize(16, -1), wxNO_BORDER|wxTAB_TRAVERSAL );
-    pn_meter2->SetExtraStyle(wxWS_EX_VALIDATE_RECURSIVELY);
-    staticbox_drysweep->Add(pn_meter2, 0, wxGROW|wxALL, 5);
+    itemBoxSizer4->Add(itemBoxSizer26, 0, wxALIGN_CENTER_HORIZONTAL|wxALL, 0);
 
     wxBoxSizer* itemBoxSizer14 = new wxBoxSizer(wxVERTICAL);
     staticbox_drysweep->Add(itemBoxSizer14, 5, wxGROW|wxALL, 5);

@@ -240,7 +240,11 @@ public:
   virtual bool init (std::string clientname = "",
                      int samplerate = -1,
                      bool stereo_out = true) = 0;
-  virtual bool shutdown () = 0;
+  
+  virtual bool register_input (bool stereo) = 0;
+  virtual bool register_output (bool stereo) = 0;
+  
+  virtual bool unregister () = 0;
   virtual bool ready () = 0;
   virtual bool play (const std::vector<float> &out,
                      bool block = true) = 0;
@@ -254,9 +258,6 @@ public:
   virtual bool stop () = 0;
   virtual bool stop_playback () = 0;
   virtual bool stop_record () = 0;
-  
-  virtual bool init_input (bool stereo) = 0;
-  virtual bool init_output (bool stereo) = 0;
   
   virtual int get_input_ports (std::vector<std::string> &v) = 0;
   virtual int get_output_ports (std::vector<std::string> &v) = 0;

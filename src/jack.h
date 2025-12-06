@@ -16,13 +16,19 @@
 
 class c_jackclient : public c_audioclient {
 public:
-  c_jackclient (c_deconvolver *dec, jack_client_t *jc = NULL);
+  c_jackclient (c_deconvolver *dec);
   ~c_jackclient ();
 
   virtual bool init (std::string clientname = "",
                      int samplerate = -1,
                      bool stereo = true);
-  virtual bool shutdown ();
+  
+  virtual bool register_input (bool stereo);
+  virtual bool register_output (bool stereo);
+  virtual bool connect_ports ();
+  
+  virtual bool unregister ();
+  //virtual bool shutdown ();
   virtual bool ready ();
   virtual bool play (const std::vector<float> &out,
                      bool block);
@@ -37,9 +43,6 @@ public:
   virtual bool stop_playback ();
   virtual bool stop_record ();
   
-  virtual bool init_input (bool stereo);
-  virtual bool init_output (bool stereo);
-    
   virtual int get_input_ports (std::vector<std::string> &v);
   virtual int get_output_ports (std::vector<std::string> &v);
   //virtual int get_samplerate ();
@@ -55,7 +58,6 @@ public:
   //jack_port_t   *port_outR = NULL; // not used for now
   
 //private:
-  bool jack_inited = false;
 };
 
 

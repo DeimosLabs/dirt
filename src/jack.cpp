@@ -25,7 +25,7 @@ static audiostate determine_state_from_flags (c_jackclient *j) {
   if (!j)
     return audiostate::NOTREADY;
     
-  if (!j->client || !j->jack_inited)
+  if (!j->client)
     return audiostate::NOTREADY;
     
   if (!j->play_go && !j->rec_go)
@@ -198,6 +198,24 @@ static int jack_process_cb (jack_nframes_t nframes, void *arg) {
   return 0;
 }
 
+c_jackclient::c_jackclient (c_deconvolver *dec)
+    : c_audioclient (dec) {
+  backend = audio_driver::JACK;
+  backend_name = "JACK";
+}
+
+c_jackclient::~c_jackclient () { CP
+  debug ("start");
+  if (client) {
+    CP
+    unregister ();
+    debug ("CLOSING JACK CLIENT\n");    
+    jack_client_close (client);
+    client = NULL;
+  }
+  debug ("end");
+}
+
 int c_jackclient::disconnect_all (jack_port_t *port) {
   int i;
   const char **connected = jack_port_get_all_connections (client, port);
@@ -294,24 +312,6 @@ int j_get_default_playback (jack_client_t *c, int howmany, std::vector<std::stri
     { return j_get_playback_ports (c, howmany, v, false); }
   
 
-c_jackclient::c_jackclient (c_deconvolver *dec, jack_client_t *jc)
-    : c_audioclient (dec) {
-  if (jc) client = jc;
-  backend = audio_driver::JACK;
-  backend_name = "JACK";
-}
-
-c_jackclient::~c_jackclient () { CP
-  debug ("start");
-  if (client) {
-    CP
-    shutdown ();
-    //jack_client_close (client); // done in shutdown?
-    client = NULL;
-  }
-  debug ("end");
-}
-
 #define MAX_JACK_PORTS 999
 
 int c_jackclient::get_input_ports (std::vector<std::string> &v) {
@@ -334,14 +334,14 @@ bool c_jackclient::init (std::string clientname,      // = "",
                          //const char *jack_in_port,
                          bool stereo_out) {     // = true) {
   debug ("start");
-  if (jack_inited) {
+  if (client) {
     // already have a client, nothing to do
     return true;
   }
   
   is_stereo = stereo_out;
   jack_status_t status = JackFailure;
-  
+  CP
   // choose a client name:
   const char *name = nullptr;
   if (!clientname.empty ()) {
@@ -354,16 +354,17 @@ bool c_jackclient::init (std::string clientname,      // = "",
     // last-chance default
     name = "deconvolver";
   }
-  
-  if (!client)
+  CP
+  if (!client) {
+    debug ("OPENING JACK CLIENT\n");
     client = jack_client_open (name, JackNullOption, &status);
+  }
   if (!client) {
     std::cerr << "Error: cannot connect to JACK (client name \""
               << name << "\")\n";
-    jack_inited = false;
     return false;
   }
-  
+  CP
   // JACK is alive, get its sample rate
   samplerate = (int) jack_get_sample_rate (client);
   bufsize = (int) jack_get_buffer_size (client);
@@ -387,12 +388,23 @@ bool c_jackclient::init (std::string clientname,      // = "",
   port_inL = port_inR = nullptr;
   //port_outL = port_outR = nullptr;
   // register jack ports
+  
+  // activate client
+  
+  jack_set_process_callback (client, jack_process_cb, this);
+  
+  if (jack_activate (client) != 0) {
+    std::cerr << "Error: cannot activate JACK client.\n";
+    return false;
+  }
+  
+  /*
   port_outL = jack_port_register (client, "out",
                             JACK_DEFAULT_AUDIO_TYPE,
                             JackPortIsOutput, 0);
-  /*port_outR = jack_port_register (client, "out_R",
+  / *port_outR = jack_port_register (client, "out_R",
                             JACK_DEFAULT_AUDIO_TYPE,
-                            JackPortIsOutput, 0);*/
+                            JackPortIsOutput, 0);* /
   if (is_stereo) {
     port_inL  = jack_port_register (client, "in_L",
                               JACK_DEFAULT_AUDIO_TYPE,
@@ -404,27 +416,27 @@ bool c_jackclient::init (std::string clientname,      // = "",
     port_inL  = jack_port_register (client, "in",
                               JACK_DEFAULT_AUDIO_TYPE,
                               JackPortIsInput, 0);
-  }
-  init_output (false);
-  init_input (is_stereo);
+  }*/
+  //CP
+  //if (!register_output (false)) return false;
+  //CP
+  //if (!register_input (is_stereo)) return false;
+  CP
 
+  state = audiostate::IDLE;
+  
+  // ...wuh duh fuuuh?
+  //(void) chan_in;
+  //(void) chan_out;
+  
+  debug ("end");
+  return true;
+}
+
+bool c_jackclient::connect_ports () {
   if (!port_outL || !port_inL || (is_stereo && !port_inR)) {
     std::cerr << "Error: cannot register JACK ports.\n";
     //jack_deactivate (client);
-    jack_client_close (client);
-    client  = nullptr;
-    jack_inited        = false;
-    return false;
-  }
-  
-  jack_set_process_callback (client, jack_process_cb, this);
-  
-  // 5) Activate client
-  if (jack_activate (client) != 0) {
-    std::cerr << "Error: cannot activate JACK client.\n";
-    jack_client_close (client);
-    client = nullptr;
-    jack_inited       = false;
     return false;
   }
   
@@ -482,18 +494,10 @@ bool c_jackclient::init (std::string clientname,      // = "",
                             
   }
   
-  state = audiostate::IDLE;
-  jack_inited = true;
-  
-  // ...wuh duh fuuuh?
-  //(void) chan_in;
-  //(void) chan_out;
-  
-  debug ("end");
   return true;
 }
 
-bool c_jackclient::init_output (bool st) {
+bool c_jackclient::register_output (bool st) {
   debug ("start (TODO: fix this)");
   
   if (port_outL) {
@@ -516,26 +520,23 @@ bool c_jackclient::init_output (bool st) {
     return false;
   /*if (b && !port_outR)
     return false;*/
+  debug ("connecting ports by default");
+  connect_ports ();
   
   debug ("end");
   return true;
 }
 
-bool c_jackclient::init_input (bool st) {
+bool c_jackclient::register_input (bool st) {
   debug ("start, st=%s", st ? "true" : "false");
   //if (st == is_stereo)
   //  return true;
     
   is_stereo = st;
   
-  if (port_inL) {
-    jack_port_unregister (client, port_inL);
-    port_inL = NULL;
-  }
-  
-  if (port_inR) {
-    jack_port_unregister (client, port_inR);
-    port_inR = NULL;
+  if (port_inL || port_inR) {
+    CP
+    unregister ();
   }
   
   if (is_stereo) {
@@ -551,18 +552,22 @@ bool c_jackclient::init_input (bool st) {
                                                   JackPortIsInput, 0);
   }
   
-  if (!port_inL)
+  if (!port_inL) {
+    CP
     return false;
-  if (is_stereo && !port_inR)
+  }
+  if (is_stereo && !port_inR) {
+    CP
     return false;
+  }
   
   debug ("end");
   return true;
 }
 
-bool c_jackclient::shutdown () {
+bool c_jackclient::unregister () {
   debug ("start");
-  if (!jack_inited) {
+  if (!client) {
     CP
     return false;
   }
@@ -570,18 +575,20 @@ bool c_jackclient::shutdown () {
   if (port_outL) jack_port_unregister (client, port_outL);
   if (port_inL) jack_port_unregister (client, port_inL);
   if (port_inR) jack_port_unregister (client, port_inR);
-  jack_deactivate (client);
-  jack_client_close (client);
-  client = nullptr;
-  jack_inited = false;
-  state = audiostate::NOTREADY;
+  port_outL = NULL;
+  port_inL = NULL;
+  port_inR = NULL;
+  
+  //jack_deactivate (client);
+  //jack_client_close (client);
+  //state = audiostate::NOTREADY;
   
   debug ("end");
   return true;
 }
 
 bool c_jackclient::ready () {
-  return jack_inited && state != audiostate::NOTREADY;
+  return client != NULL && state != audiostate::NOTREADY;
 }
 
 bool c_jackclient::arm_record () {
@@ -613,7 +620,7 @@ bool c_jackclient::play (const std::vector<float> &sig_l,
                          const std::vector<float> &sig_r,
                          bool block) {
   debug ("start, %s", block ? "block" : "!block");
-  if (!jack_inited || !client) {
+  if (!client) {
     return false;
   }
   
@@ -653,7 +660,7 @@ bool c_jackclient::playrec (const std::vector<float> &out_l,
   debug ("start, is_stereo=%s", (is_stereo ? "true" : "false"));
 
   // ensure JACK client
-  if (!jack_inited || !client) {
+  if (!client) {
     //if (!jack_init(std::string (), chn_stereo, chn_stereo)) {
       return false;
     //}
@@ -715,6 +722,35 @@ bool c_jackclient::stop_record () {
   
   debug ("end");
   return true;
+}
+
+#undef debug
+#define debug(...) cmdline_debug(stderr,ANSI_RED,__FILE__,__LINE__,__FUNC__,__VA_ARGS__)
+
+int jack_test_main (int argc, char **argv) {
+  debug ("start");
+  c_deconvolver dec;
+  c_jackclient j (&dec);
+  CP
+  
+  if (!j.init ()) {
+    printf ("j.init returned false!\n");
+    return 1;
+  }
+  CP
+  if (!j.register_input (true)) {
+    printf ("j.register_input returned false!\n");
+    return 1;
+  }
+  CP
+  if (!j.register_output (false)) {
+    printf ("j.register_output returned false!\n");
+    return 1;
+  }
+  CP
+  usleep (1000000);
+  return true;
+  debug ("end");
 }
 
 #endif

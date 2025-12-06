@@ -91,6 +91,7 @@ public:
   
   void set_prefs (s_prefs *prefs);
   void set_name (std::string str);
+  bool set_stereo (bool b);
   bool load_sweep_dry (const char *in_filename);
   bool load_sweep_wet (const char *in_filename);
   bool output_ir (const char *out_filename, long int ir_length_samples = 0);

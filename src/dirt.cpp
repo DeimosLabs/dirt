@@ -835,7 +835,10 @@ int main (int argc, char **argv) {
     snprintf (realjackname, 255, p.jack_name.c_str (), argv [0]);
     
     CP
-    if (!dec->audio_init (realjackname, p.sweep_sr, p.request_stereo) || !dec->audio_ready ()) {
+    if (!dec->audio_init (realjackname, p.sweep_sr, p.request_stereo) || 
+                          !dec->audio_ready () ||
+                          !dec->audio->register_input (p.request_stereo) ||
+                          !dec->audio->register_output (false)) {
       std::cout << "Error initializing audio\n";
       if (dec) delete dec;
       return 1;
@@ -927,7 +930,7 @@ int main (int argc, char **argv) {
     }
     
     int play_ok = dec->audio->play (sweep, true);
-    dec->audio->shutdown();
+    dec->audio->unregister ();
     
     debug ("return");
     if (dec) delete dec;
@@ -964,7 +967,7 @@ int main (int argc, char **argv) {
       if (dec) delete dec;
       return 1;
     }
-    //CP
+    CP
     while (!dec->audio_playback_done ()){
       usleep (10 * 1000);
     }

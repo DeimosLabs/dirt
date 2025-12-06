@@ -977,6 +977,13 @@ bool c_deconvolver::audio_init (std::string clientname,
   return false;
 }
 
+bool c_deconvolver::set_stereo (bool b) {
+  if (prefs_) prefs_->request_stereo = b;
+  if (audio) audio->unregister ();
+  if (audio) return audio->register_input (b);
+  return false;
+}
+
 bool c_deconvolver::audio_shutdown () {CP
   if (audio) delete audio;
   return true; // for now
