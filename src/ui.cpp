@@ -1441,7 +1441,7 @@ void c_meterwidget::render_base_image () {
   debug ("w/h=%d,%d", width, height);
   if (vertical) {
     clip_width = width;
-    clip_height = 22;//std::min (width, height * 9 / 10);;
+    clip_height = std::min (width / 2, height * 9 / 10);;
     rec_width = width;
     rec_height = std::min (width, height * 9 / 10);;
   } else {
@@ -1629,8 +1629,8 @@ void c_meterwidget::draw_bar (wxDC &dc, int t, int o, bool is_r,
     if (len > len - 2) len = len - 2;
     if (vertical) {
       if (len > 0) {
-        img_bar_sub = img_bar.GetSubBitmap (wxRect (0, m - len, o, len + rec_height + 2));
-        dc.DrawBitmap (img_bar_sub, t, m - len + 2);
+        img_bar_sub = img_bar.GetSubBitmap (wxRect (0, m - len, o, len + 2));
+        dc.DrawBitmap (img_bar_sub, t, m - len + clip_height - 4);
       }
     } else {
       if (len > 0) {
@@ -1713,7 +1713,7 @@ void c_meterwidget::update (wxWindowDC &dc) {
     clipx = width - clip_width + 2;
     clipy = ((height - clip_height) / 2) - 2;
   }
-  /*if (clipany || xrun) {
+  if ((clipany || xrun) && show_clip) {
     if (vertical) {
       dc.SetPen (wxPen (*wxRED));
       dc.SetBrush (wxBrush (*wxRED));
@@ -1726,8 +1726,24 @@ void c_meterwidget::update (wxWindowDC &dc) {
     dc.SetPen (wxPen ());
     dc.SetBrush (wxBrush (col_default_bg));
     dc.DrawRectangle (clipx, clipy, clip_width, clip_height);
+  }
+  
+  if (show_rec) {
+    int x, y, w, h, padding = 3;
     
-  }*/
+    dc.SetPen (wxPen (*wxRED));
+    dc.SetBrush (wxBrush (*wxRED));
+    if (vertical) {
+      x = padding;
+      y = height - rec_height + padding;
+    } else {
+      x = padding;
+      y = padding;
+    }
+    w = rec_width - padding * 2;
+    h = rec_width - padding * 2;
+    dc.DrawEllipse (x, y, w, h);
+  }
 }
 
 

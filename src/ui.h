@@ -264,13 +264,11 @@ public:
   bool vertical = false;
   float l       = 0.0;
   float r       = 0.0;
-  float hold_l  = 0.0;
-  float hold_r  = 0.0;
-  bool  clip_l  = false;
-  bool  clip_r  = false;
-  bool  xrun    = false;
 
   wxFont tinyfont;
+  bool show_rec   = true;   // enable red circle / recording indicator
+  bool show_clip  = true;    // show when clipping
+  bool show_xrun  = true;    // show when xruns detected
 
 protected:
 private:
@@ -290,6 +288,12 @@ private:
   int   rec_width    = -1;
   int   rec_height   = -1;
   bool last_stereo   = false;
+
+  float hold_l  = 0.0;
+  float hold_r  = 0.0;
+  bool  clip_l  = false;
+  bool  clip_r  = false;
+  bool  xrun    = false;
 };
 
 class c_waveformwidget : public c_customwidget {
