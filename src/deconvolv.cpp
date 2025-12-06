@@ -963,6 +963,8 @@ bool c_deconvolver::audio_init (std::string clientname,
          clientname.c_str (), samplerate, stereo_out ? "true" : "false");
 #ifdef USE_JACK
   debug ("prefs_->portname_dry=%s", prefs_->portname_dry.c_str ());
+  debug ("prefs_->portname_wetL=%s", prefs_->portname_wetL.c_str ());
+  debug ("prefs_->portname_wetR=%s", prefs_->portname_wetR.c_str ());
   audio = new c_jackclient (this);
   CP
   if (audio && audio->init (clientname, samplerate, stereo_out)) {

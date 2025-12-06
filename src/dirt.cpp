@@ -325,13 +325,15 @@ static bool resolve_sources (s_prefs &opt, int paths_bf) {
     size_t a = s.find_first_not_of (" \t");
     size_t b = s.find_last_not_of (" \t");
     if (a == std::string::npos) { s.clear (); return; }
-    s = s.substr(a, b - a + 1);
+    s = s.substr (a, b - a + 1);
   };
   
   debug ("opt->portname_dry=%s", opt.portname_dry.c_str ());
+  debug ("opt->portname_wetL=%s", opt.portname_wetL.c_str ());
+  debug ("opt->portname_wetR=%s", opt.portname_wetR.c_str ());
 
   // --- dry source ---
-  if (paths_bf & 1 || opt.gui) {
+  if ((paths_bf & 1) || opt.gui) {
 #ifdef USE_JACK
     if (opt.dry_path == "jack") {
 #else
@@ -339,7 +341,7 @@ static bool resolve_sources (s_prefs &opt, int paths_bf) {
 #endif
       opt.dry_source = sig_source::JACK;
       // if only dry was specified, assume playsweep to default
-      if (!(paths_bf & 2)) {
+      if (!(paths_bf & 2) || opt.gui) {
         opt.jack_autoconnect_dry        = true;
         opt.jack_autoconnect_to_default = true;
       }
@@ -359,18 +361,19 @@ static bool resolve_sources (s_prefs &opt, int paths_bf) {
       return false;
     }
   }
-
+  
 // --- wet source ---
-  if (paths_bf & 2 || opt.gui) {
+  if ((paths_bf & 2) || opt.gui) {
 #ifdef USE_JACK
     if (opt.wet_path == "jack") {
 #else
     if (0) {
 #endif
+      CP
       opt.wet_source = sig_source::JACK;
       // no default autoconnect here; user should patch or give explicit port
-
     } else {
+      CP
       // check for stereo form "portL,portR"
       auto comma = opt.wet_path.find (',');
       if (comma != std::string::npos) {
@@ -428,7 +431,7 @@ static bool resolve_sources (s_prefs &opt, int paths_bf) {
   }
   
   // --- output file/port ---
-  if (paths_bf & 4) {
+  if ((paths_bf & 4) || opt.gui) {
     if (opt.out_path == "jack" || looks_like_jack_port (opt.out_path)) {
       if (opt.mode == opmode::DECONVOLVE) {
         std::cerr << "Can't write IR directly to a JACK port\n\n";
@@ -473,6 +476,7 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
       opt.dry_path = argv [i];
     } else if (arg == "-g" || arg == "--gui") {
       opt.gui = true;
+      opt.mode = opmode::GUI;
     } else if (arg == "-w" || arg == "--wet") {
       if (++i >= argc) { std::cerr << "Missing value for " << arg << "\n"; return ret_err; }
       opt.wet_path = argv [i];
@@ -633,7 +637,7 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
       positionals.push_back(argv[i]);
     }
   }
-  
+  CP
   // if not provided by flags, use positionals:
   //   dry wet out [len]
   // ...except if mode is makesweep and we have only 1 positional param
@@ -645,34 +649,36 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
       // allow either:
       //   dirt -s -o sweep.wav
       //   dirt -s sweep.wav
-      if (opt.out_path.empty() && !positionals.empty()) {
-          opt.out_path = positionals[0];
+      if (opt.out_path.empty () && !positionals.empty ()) {
+          opt.out_path = positionals [0];
       }
       // don't interpret positionals as dry/wet in makesweep mode
   } else {
       // deconvolution / normal modes:
       //   dry wet out [len]
       if (opt.dry_path.empty() && positionals.size() >= 1) {
-          opt.dry_path = positionals[0];
+          opt.dry_path = positionals [0];
       }
       if (opt.wet_path.empty() && positionals.size() >= 2) {
-          opt.wet_path = positionals[1];
+          opt.wet_path = positionals [1];
       }
       if (opt.out_path.empty() && positionals.size() >= 3) {
-          opt.out_path = positionals[2];
+          opt.out_path = positionals [2];
       }
       if (opt.ir_length_samples == 0 && positionals.size() >= 4) {
-          opt.ir_length_samples = std::strtol(positionals[3], nullptr, 10);
+          opt.ir_length_samples = std::strtol (positionals [3], nullptr, 10);
       }
   }
   
-  if (opt.gui) return 0;
+  //if (opt.gui) return 0;
   CP
   int bf = 0;
   if (!opt.dry_path.empty()) bf |= 1;
   if (!opt.wet_path.empty()) bf |= 2;
   if (!opt.out_path.empty()) bf |= 4;
 
+  if (opt.gui) return bf;
+  
   // --- Non-deconvolution modes: handle simply and bail out early ---
   if (opt.mode == opmode::MAKESWEEP) {
       if (opt.out_path.empty()) {
@@ -710,7 +716,7 @@ int parse_args (int argc, char **argv, s_prefs &opt) {
       debug ("end");
       return bf;
   }
-
+  CP
   switch (bf) {
     case 0:
       // deconvolve mode but no paths at all -> show full usage
@@ -797,6 +803,8 @@ int main (int argc, char **argv) {
       return 1;
     }
   }
+  
+  debug ("paths_bf=%x", paths_bf);
   
   CP
   if (!resolve_sources (p, paths_bf)) {

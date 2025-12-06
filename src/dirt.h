@@ -124,6 +124,7 @@ enum class opmode {
   DECONVOLVE,
   MAKESWEEP,
   PLAYSWEEP,
+  GUI,
   ERROR, // maybe extend this for diff. error types?
   MAX
 };

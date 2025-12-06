@@ -287,6 +287,8 @@ private:
   float size_bar     = 0.0;*/
   int   clip_width   = -1;  // for "clip" indicator on right
   int   clip_height  = -1;
+  int   rec_width    = -1;
+  int   rec_height   = -1;
   bool last_stereo   = false;
 };
 

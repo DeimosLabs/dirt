@@ -1438,9 +1438,12 @@ void c_meterwidget::render_base_image () {
   dc.SelectObject (base_image);
   
   GetSize (&width, &height);
+  debug ("w/h=%d,%d", width, height);
   if (vertical) {
     clip_width = width;
-    clip_height = 3;
+    clip_height = 22;//std::min (width, height * 9 / 10);;
+    rec_width = width;
+    rec_height = std::min (width, height * 9 / 10);;
   } else {
     int fontsize = (width / 125);
     tinyfont.SetPointSize (fontsize);
@@ -1449,18 +1452,20 @@ void c_meterwidget::render_base_image () {
     wxSize fsz_clip = dc.GetTextExtent ("CLIP");
     wxSize fsz_xrun = dc.GetTextExtent ("XRUN");
     clip_width = std::max (fsz_clip.GetWidth (), fsz_xrun.GetWidth ()) * 1.5;
-    clip_height = std::max (fsz_xrun.GetHeight (), fsz_xrun.GetHeight ());
+    clip_height = std::max (fsz_clip.GetHeight (), fsz_xrun.GetHeight ());
+    rec_width = std::min (height, width * 9 / 10);
+    rec_height = height;
   }
   
   // keep a bit of space for clip/xrun indicator
   int len, th, w, h, w2, h2;
   if (vertical) {
-    len = height - clip_height;
+    len = height - clip_height - rec_height;
     th = height;// - 1;
     h2 = height - 1;
     w2 = width - 1;
   } else {
-    len = width - clip_width;
+    len = width - clip_width - rec_width;
     th = width;// - 1;
     h2 = height - 1;
     w2 = width - 1;
@@ -1473,37 +1478,45 @@ void c_meterwidget::render_base_image () {
   
   dc.SetBrush (wxBrush (*wxBLACK));
   if (vertical)
-    dc.DrawRectangle (0, 0, th, len);
+    dc.DrawRectangle (0, clip_height, th, len);
   else
-    dc.DrawRectangle (0, 0, len, th);
+    dc.DrawRectangle (rec_width, 0, len, th);
   
+  int cl, m1, m2, m3, m4;
   // draw grid
   if (vertical) {
+    cl = vertical ? clip_height : 0;
+    m1 = clip_height + len - (cl + len / 2);
+    m2 = clip_height + len - (cl + len * 3 / 4);
+    m3 = clip_height + len - (cl + len * 7 / 8);
+    m4 = clip_height;
+  
     dc.SetPen (wxPen (col_default_bg));
-    dc.DrawLine (0, th - 1, w, th -1);               // (0, 0, 0, h); //left
-    dc.DrawLine (w2, 0, w2, len);                    // (0, h2, len, h2); // bottom
+    //dc.DrawLine (0, rec_height + th - 1, w, th -1);
+    dc.DrawLine (w2, 0, w2, len + clip_height);
     dc.SetPen (wxPen (*wxGREEN));
-    dc.DrawLine (0, len / 2, th, len / 2);           //(len / 2, 0, len / 2, th); // middle marker
-    dc.DrawLine (0, len - (len * 3 / 4), th, len - (len * 3 / 4));  //(len * 3 / 4, 0, len * 3 / 4, th); // 3/4 marker
+    dc.DrawLine (0, m1, th, m1);
     dc.SetPen (wxPen (*wxYELLOW));
-    dc.DrawLine (0, len - (len * 7 / 8), th, len - (len * 7 / 8)); //(len * 7 / 8, 0, len * 7 / 8, th); //yellow marker
-    //dc.SetPen (wxPen (wxColour (255,128,0)));
-    //dc.DrawLine (len * 15 / 16, 0, len * 15 / 16, h);
+    dc.DrawLine (0, m2, th, m2);
     dc.SetPen (wxPen (*wxRED));
-    dc.DrawLine (0, 0, th, 0); // right (red marker)
+    dc.DrawLine (0, m3, th, m3);
+    dc.DrawLine (0, m4, th, m4);
   } else {
+    m1 = rec_width + len / 2;
+    m2 = rec_width + len * 3 / 4;
+    m3 = rec_width + len * 7 / 8;
+    m4 = rec_width + len;
+  
     dc.SetPen (wxPen (col_default_bg));
     dc.DrawLine (0, 0, 0, th);
-    dc.DrawLine (0, h2, len, h2);
+    dc.DrawLine (0, h2, len + rec_width, h2);
     dc.SetPen (wxPen (*wxGREEN));
-    dc.DrawLine (len / 2, 0, len / 2, th);
-    dc.DrawLine (len * 3 / 4, 0, len * 3 / 4, th);
+    dc.DrawLine (m1, 0, m1, th);
     dc.SetPen (wxPen (*wxYELLOW));
-    dc.DrawLine (len * 7 / 8, 0, len * 7 / 8, th);
-    //dc.SetPen (wxPen (wxColour (255,128,0)));
-    //dc.DrawLine (len * 15 / 16, 0, len * 15 / 16, h);
+    dc.DrawLine (m2, 0, m2, th);
     dc.SetPen (wxPen (*wxRED));
-    dc.DrawLine (len, 0, len, th);
+    dc.DrawLine (m3, 0, m3, th);
+    dc.DrawLine (m4, 0, m4, th);
   }
   
   // also render gradient bar
@@ -1521,6 +1534,7 @@ void c_meterwidget::render_base_image () {
     wxAlphaPixelData::Iterator p (pdata);
     p.MoveTo (pdata, 0, 0);
     
+    // yep, this one was a doozie
     if (vertical) {
       for (y = 0; y < h; ++y) {
         wxAlphaPixelData::Iterator rowstart = p;
@@ -1572,6 +1586,24 @@ void c_meterwidget::render_base_image () {
       }
     }
   }
+  
+#if 0 // debug
+  // test outline
+  dc.SetPen (wxPen (wxColour (255, 255, 255, 128)));
+  dc.SetBrush (wxBrush ());
+  dc.DrawRectangle (0, 0, width, height);
+  // test diagonal red lines
+  dc.SetPen (wxPen (*wxRED));
+  if (vertical) {
+    dc.DrawLine (0, 0, width, clip_height);
+    debug ("width=%d, height=%d, rec_height=%d", width, height, rec_height);
+    dc.DrawLine (0, height - rec_height, width, height);
+  } else {
+    dc.DrawLine (0, 0, rec_width, rec_height);
+    dc.DrawLine (width - clip_width, 0, width, height);
+  }
+#endif
+
   //dc.DrawBitmap (img_bar, 0, 0);
   dc.SelectObject (wxNullBitmap);
   //debug ("end");
@@ -1586,32 +1618,35 @@ void c_meterwidget::draw_bar (wxDC &dc, int t, int o, bool is_r,
   int m; // usable meter length
   if (level > 1) level = 1;
   if (vertical)
-    m = height - clip_height;
+    m = height - clip_height - rec_height;
   else
-    m = width - clip_width;
+    m = width - clip_width - rec_width;
   int len = m * level;
   if (len > 0) {
-    int ulim = m - 3;
-    if (len > ulim) len = ulim;
+    if (len > m - 2) len = m - 2;
     /*debug ("%s o=%d, m=%d, len=%d, width=%d, height=%d",
            vertical ? "ver" : "hor", o, m, len, width, height);*/
+    if (len > len - 2) len = len - 2;
     if (vertical) {
-      img_bar_sub = img_bar.GetSubBitmap (wxRect (t, m - len, o, len));
-      dc.DrawBitmap (img_bar_sub, t, m - len - 2);
-      //dc.SetBrush (wxBrush (*wxGREEN));
-      //dc.DrawRectangle (t, m - len, o, len);
+      if (len > 0) {
+        img_bar_sub = img_bar.GetSubBitmap (wxRect (0, m - len, o, len + rec_height + 2));
+        dc.DrawBitmap (img_bar_sub, t, m - len + 2);
+      }
     } else {
-      img_bar_sub = img_bar.GetSubBitmap (wxRect (0, 0, len, o));
-      dc.DrawBitmap (img_bar_sub, 2, t);
+      if (len > 0) {
+        img_bar_sub = img_bar.GetSubBitmap (wxRect (0, 0, len, o));
+        dc.DrawBitmap (img_bar_sub, rec_width + 2, t);
+      }
     }
   }
   int holdpos = m * hold;
   if (holdpos > 0 && holdpos < m) {
     dc.SetPen (wxColour (192, 192, 128));
     if (vertical)
-      dc.DrawLine (t, m - holdpos, t + o, m - holdpos);
+      dc.DrawLine (t, m + clip_height - holdpos,
+               t + o, m + clip_height - holdpos);
     else
-      dc.DrawLine (holdpos, t, holdpos, t + o - 1);
+      dc.DrawLine (holdpos + rec_width, t, holdpos + rec_width, t + o - 1);
   }
 }
 
@@ -1664,7 +1699,7 @@ void c_meterwidget::update (wxWindowDC &dc) {
       h = height - (t * 2) - 1;
     }
     
-    if (height >= 0) height = 1;
+    //if (height >= 0) height = 1;
     //if (t < 0 || t > height - 1) t = 0;
     //draw_bar (dc, t, h, false, l, hold_l, clip_l, xrun_l);
     draw_bar (dc, t, h, false, l, hold_l, clip_l, xrun);
@@ -1678,7 +1713,7 @@ void c_meterwidget::update (wxWindowDC &dc) {
     clipx = width - clip_width + 2;
     clipy = ((height - clip_height) / 2) - 2;
   }
-  if (clipany || xrun) {
+  /*if (clipany || xrun) {
     if (vertical) {
       dc.SetPen (wxPen (*wxRED));
       dc.SetBrush (wxBrush (*wxRED));
@@ -1692,7 +1727,7 @@ void c_meterwidget::update (wxWindowDC &dc) {
     dc.SetBrush (wxBrush (col_default_bg));
     dc.DrawRectangle (clipx, clipy, clip_width, clip_height);
     
-  }
+  }*/
 }
 
 

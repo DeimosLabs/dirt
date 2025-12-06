@@ -302,15 +302,17 @@ c_jackclient::c_jackclient (c_deconvolver *dec, jack_client_t *jc)
 }
 
 c_jackclient::~c_jackclient () { CP
+  debug ("start");
   if (client) {
     CP
     shutdown ();
-    //jack_client_close (client); 
+    //jack_client_close (client); // done in shutdown?
     client = NULL;
   }
+  debug ("end");
 }
 
-#define MAX_JACK_PORTS 9999
+#define MAX_JACK_PORTS 999
 
 int c_jackclient::get_input_ports (std::vector<std::string> &v) {
   CP
@@ -559,9 +561,12 @@ bool c_jackclient::init_input (bool st) {
 }
 
 bool c_jackclient::shutdown () {
-  if (!jack_inited)
+  debug ("start");
+  if (!jack_inited) {
+    CP
     return false;
-  CP
+  }
+  
   if (port_outL) jack_port_unregister (client, port_outL);
   if (port_inL) jack_port_unregister (client, port_inL);
   if (port_inR) jack_port_unregister (client, port_inR);
@@ -571,6 +576,7 @@ bool c_jackclient::shutdown () {
   jack_inited = false;
   state = audiostate::NOTREADY;
   
+  debug ("end");
   return true;
 }
 
