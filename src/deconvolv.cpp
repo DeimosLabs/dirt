@@ -813,7 +813,9 @@ void align_stereo_joint_no_chop (std::vector<float> &L,
 #define ANSI_DUMMY
 #endif
 
-static void print_vu_meter (float, bool)    { ANSI_DUMMY }
+static void static void print_vu_meter (float level, float hold,
+                                        bool clip, bool xrun)
+                                            { ANSI_DUMMY }
 static void ansi_cursor_move_x (int n)      { ANSI_DUMMY }
 static void ansi_cursor_move_to_x (int n)   { ANSI_DUMMY }
 static void ansi_cursor_move_y (int n)      { ANSI_DUMMY }
@@ -1045,7 +1047,7 @@ int c_deconvolver::on_arm_rec_stop (void *data)      { return 0; }
 int c_deconvolver::on_record_start (void *data)      { return 0; }
 int c_deconvolver::on_record_loop (void *data)       { return 0; }
 
-int c_deconvolver::on_record_stop (void *data) { CP
+int c_deconvolver::on_record_stop (void *data) {
   audio_stop_playback ();
   return 0;
 }
@@ -1066,6 +1068,37 @@ int c_deconvolver::on_playrec_start (void *data)     {
   return 0; 
 }
 
+void c_deconvolver::set_vu_pre () {
+  //printf ("\n\n\n\n\n");
+  ansi_cursor_move_y (audio->is_stereo ? -4 : -3);
+}
+
+void c_deconvolver::set_vu_l (float l, float h, bool c, bool x) {
+  ansi_cursor_move_x (0);
+  ansi_clear_to_endl ();
+  print_vu_meter (l, h, c, x);
+  ansi_cursor_move_x (0);
+}
+
+void c_deconvolver::set_vu_r (float l, float h, bool c, bool x) {
+  ansi_cursor_move_x (0);
+  ansi_clear_to_endl ();
+  print_vu_meter (l, h, c, x);
+  ansi_cursor_move_x (0);
+}
+
+void c_deconvolver::set_vu_post () {
+  int timeleft = audio->get_play_left () / audio->samplerate;
+    ansi_clear_to_endl ();
+    if (audio->state == audiostate::PLAYREC) {
+      int timeleft = audio->get_play_left () / audio->samplerate;
+      std::cout << "Recording, " << timeleft << " seconds left\n";
+    } else {
+      std::cout << "Press enter to play and record sweep...\n";
+    }
+    //ansi_cursor_move_y (audio->is_stereo ? -2 : -3);
+}
+
 int c_deconvolver::on_playrec_loop (void *data) {
   static float show_l = 0;
   static float show_r = 0;
@@ -1084,17 +1117,15 @@ int c_deconvolver::on_playrec_loop (void *data) {
   
   if (audio->bufsize == 0) return -1;
   
-  const float sec_per_redraw = ANSI_VU_REDRAW_EVERY;
+  const float sec_per_redraw = VU_REDRAW_EVERY;
   int redraw_every = (int) (sec_per_redraw * bufs_sec);
   if (redraw_every < 1)
     redraw_every = 1;
   
   if (playrec_loop_passes % redraw_every == 0) {
-    std::cout << "\n";
-    ansi_cursor_move_y (audio->is_stereo ? -4 : -3);
-    int peak_hold_frames = (ANSI_VU_PEAK_HOLD * bufs_sec / redraw_every);
-    int clip_hold_frames = (ANSI_VU_CLIP_HOLD * bufs_sec / redraw_every);
-    int xrun_hold_frames = (ANSI_VU_XRUN_HOLD * bufs_sec / redraw_every);
+    int peak_hold_frames = (VU_PEAK_HOLD * bufs_sec / redraw_every);
+    int clip_hold_frames = (VU_CLIP_HOLD * bufs_sec / redraw_every);
+    int xrun_hold_frames = (VU_XRUN_HOLD * bufs_sec / redraw_every);
     
     pl = std::max (std::fabs (audio->peak_plus_l), std::fabs (audio->peak_minus_l));
     pr = std::max (std::fabs (audio->peak_plus_r), std::fabs (audio->peak_minus_r));
@@ -1115,41 +1146,23 @@ int c_deconvolver::on_playrec_loop (void *data) {
     if (clip_r_timestamp && now - clip_r_timestamp < clip_hold_frames) show_clip_r = true;
     if (xrun_timestamp && now - xrun_timestamp < xrun_hold_frames)     show_xrun = true;
     
-    ansi_clear_to_endl ();
-    int move_up = 1;
-    print_vu_meter (show_l, hold_l, show_clip_l, show_xrun);
+    set_vu_pre ();
+    set_vu_l (show_l, hold_l, show_clip_l, show_xrun);
     if (audio->is_stereo) {  // 2 vu meters
-      ansi_cursor_move_x (0);
-      ansi_clear_to_endl ();
-      move_up = 2;
-      print_vu_meter (show_r, hold_r, show_clip_r, show_xrun);
-      ansi_cursor_move_x (0);
-      /*ansi_cursor_move_y (-3);
-    } else {       // just 1 vu meter
-      ansi_cursor_move_y (-2);
-    }*/
+      set_vu_r (show_r, hold_r, show_clip_r, show_xrun);
     }
-    ansi_clear_to_endl ();
-    if (audio->state == audiostate::PLAYREC) {
-      int timeleft = audio->get_play_left () / audio->samplerate;
-      move_up++;
-      std::cout << "Recording, " << timeleft << " seconds left\n";
-    } else {
-      std::cout << "Press enter to play and record sweep...\n";
-    }
-    //ansi_cursor_move_y (move_up * -1);
-    
+    set_vu_post ();
     if (pl > show_l)
       show_l = pl;
     else {
-      show_l -= ANSI_VU_FALL_SPEED;
+      show_l -= VU_FALL_SPEED;
       if (show_l < 0) show_l = 0;
     }
 
     if (pr > show_r)
       show_r = pr;
     else {
-      show_r -= ANSI_VU_FALL_SPEED;
+      show_r -= VU_FALL_SPEED;
       if (show_r < 0) show_r = 0;
     }
     

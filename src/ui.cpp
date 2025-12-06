@@ -8,6 +8,9 @@
 
 #ifdef USE_WXWIDGETS
 
+#include <wx/dir.h>
+#include <wx/rawbmp.h>
+
 #include "dirt.h"
 #include "ui.h"
 #include "deconvolv.h"
@@ -46,7 +49,7 @@ wxBEGIN_EVENT_TABLE (c_mainwindow, ui_mainwindow)
   EVT_RADIOBUTTON (ID_MAKESWEEP, c_mainwindow::on_radio_makesweep)
   EVT_RADIOBUTTON (ID_ROUNDTRIP, c_mainwindow::on_radio_roundtrip)
   EVT_RADIOBUTTON (ID_PLAYSWEEP, c_mainwindow::on_radio_playsweep)
-  EVT_CHECKBOX (ID_FORCEMONO, c_mainwindow::on_checkbox)
+  EVT_CHECKBOX (ID_FORCEMONO, c_mainwindow::on_chk_forcemono)
 
   EVT_BUTTON (ID_DRYFILE_BROWSE, c_mainwindow::on_btn_dryfile_browse)
   EVT_BUTTON (ID_GENERATE, c_mainwindow::on_btn_generate)
@@ -97,7 +100,7 @@ c_mainwindow::c_mainwindow (c_deconvolver *d)
   
   init_audio ();
   timer.Bind (wxEVT_TIMER, &c_mainwindow::on_timer, this);
-  timer.Start (32);
+  timer.Start (16);
 }
 
 c_mainwindow::~c_mainwindow () {
@@ -105,47 +108,73 @@ c_mainwindow::~c_mainwindow () {
 }
 
 void c_mainwindow::on_timer (wxTimerEvent &ev) {
+  static long int num_passes = 0;
+  const int update_widgets_every = 10;
+  num_passes++;
   if (!dec || !dec->audio) return;
   
-  bool do_full_update = false;
-  audiostate s = dec->audio->state;
+  // animation stuff etc. that we do every pass
+  // nothing yet, our custom widgets update themselves on redraw events
+  pn_meter->Refresh ();
   
-  if (s != prev_audio_state) {
-    prev_audio_state = s;
-    do_full_update = true;
-  }
-  if (mode != prev_mode) {
-    prev_mode = mode;
-    do_full_update = true;
-  }
-  
-  if (s == audiostate::NOTREADY) {
-    disable (btn_play);
-    btn_audio->SetLabel ("Connect");
-  } else if (s == audiostate::IDLE) {
-    if (!dec->has_dry ()) {
-      disable (btn_play);
-    } else {
-      enable (btn_play);
+  // widget stuff: update only every n passes
+  if (num_passes % update_widgets_every == 0) {
+    
+    bool do_full_update = false;
+    audiostate s = dec->audio->state;
+    
+    if (s != prev_audio_state) {
+      prev_audio_state = s;
+      do_full_update = true;
     }
-    btn_play->SetLabel ((mode == ID_ROUNDTRIP) ? "Process" : "Play");
-    btn_audio->SetLabel ("Disconnect");
-  } else {
-    if (!dec->has_dry ()) {
+    if (mode != prev_mode) {
+      prev_mode = mode;
+      do_full_update = true;
+    }
+    
+    if (s == audiostate::NOTREADY) {
       disable (btn_play);
-    } else {
-      enable (btn_play);
-      int sr = dec->prefs_ ? dec->prefs_->sweep_sr : 
-                             atoi (comb_samplerate->GetValue ().c_str ());
-      size_t sec_left = dec->audio->get_play_left () / (size_t) sr;
-      char buf [32];
-      snprintf (buf, 31, "Stop (%ld)", sec_left);
-      //debug ("sr=%d, sec_left=%d", sr, sec_left);
-      btn_play->SetLabel (buf);
+      btn_audio->SetLabel ("Connect");
+    } else if (s == audiostate::IDLE) {
+      if (!dec->has_dry ()) {
+        disable (btn_play);
+      } else {
+        enable (btn_play);
+      }
+      btn_play->SetLabel ((mode == ID_ROUNDTRIP) ? "Record" : "Play");
       btn_audio->SetLabel ("Disconnect");
+    } else {
+      if (!dec->has_dry ()) {
+        disable (btn_play);
+      } else {
+        enable (btn_play);
+        int sr = dec->prefs_ ? dec->prefs_->sweep_sr : 
+                               atoi (comb_samplerate->GetValue ().c_str ());
+        size_t sec_left = dec->audio->get_play_left () / (size_t) sr;
+        char buf [32];
+        snprintf (buf, 31, "Stop (%ld)", sec_left);
+        //debug ("sr=%d, sec_left=%d", sr, sec_left);
+        btn_play->SetLabel (buf);
+        btn_audio->SetLabel ("Disconnect");
+      }
     }
+    
+    wxArrayInt dummy;
+    if (list_inputfiles->GetSelections (dummy) > 0)
+      btn_inputfiles_clear->SetLabel ("Remove");
+    else
+      btn_inputfiles_clear->SetLabel ("Clear");
+    
+    if (list_inputfiles->GetCount ())
+      enable (btn_inputfiles_clear);
+    else
+      disable (btn_inputfiles_clear);
+    
+    if (text_inputdir->GetValue ().size ())
+      enable (btn_inputdir_scan);
+    else
+      disable (btn_inputdir_scan);
   }
-  
   /*if (do_full_update)
     set_mode (mode);*/
 }
@@ -205,6 +234,7 @@ bool c_mainwindow::init_audio (int samplerate, bool stereo) {
     return false;
   }
   
+  dec->audio_arm_record ();
   init_audio_done = true;
   
   debug ("end");
@@ -245,10 +275,18 @@ void c_mainwindow::on_about (wxCommandEvent &ev) {
   show_message (str);
 }
 
-void c_mainwindow::on_checkbox (wxCommandEvent &ev) {
+void c_mainwindow::on_chk_forcemono (wxCommandEvent &ev) {
   if (radio_file->GetValue ()) set_mode (ID_FILE);
   else if (radio_makesweep->GetValue ()) set_mode (ID_MAKESWEEP);
   else if (radio_roundtrip->GetValue ()) set_mode (ID_ROUNDTRIP);
+  
+  if (chk_forcemono->GetValue ()) {
+    debug ("force mono");
+    dec->audio->is_stereo = false;
+  } else {
+    debug ("stereo");
+    dec->audio->is_stereo = true;
+  }
 }
 
 void c_mainwindow::on_radio_file (wxCommandEvent &ev) { set_mode (ID_FILE); }
@@ -384,6 +422,8 @@ void c_mainwindow::set_mode (long int _mode) {
     { ID_HPF_FREQ,             true  },
     { ID_LPF_FREQ,             true  },
     { ID_ZEROALIGN,            true  },
+    { ID_TRIM_START,           true  },
+    { ID_TRIM_END,             true  },
     { ID_OVERWRITE,            true  },
     { ID_DEBUG,                true  },
     { ID_SWEEP_THR,            true  },
@@ -407,9 +447,9 @@ void c_mainwindow::set_mode (long int _mode) {
     { ID_DRY_PREROLL,          true  },
     { ID_DRY_MARKER,           true  },
     { ID_DRY_GAP,              true  },
-    { ID_GENERATE,             true },
-    { ID_DRY_SAVE,             true },
-    { ID_JACK_DRY,             true },
+    { ID_GENERATE,             true  },
+    { ID_DRY_SAVE,             true  },
+    { ID_JACK_DRY,             true  },
     { ID_JACK_WET_L,           false },
     { ID_JACK_WET_R,           false },
     { ID_PLAY,                 true  },
@@ -429,11 +469,13 @@ void c_mainwindow::set_mode (long int _mode) {
     { ID_HPF_FREQ,             true  },
     { ID_LPF_FREQ,             true  },
     { ID_ZEROALIGN,            true  },
+    { ID_TRIM_START,           true  },
+    { ID_TRIM_END,             true  },
     { ID_OVERWRITE,            true  },
     { ID_DEBUG,                true  },
     { ID_SWEEP_THR,            true  },
-    { ID_IR_START_THR,         true },
-    { ID_IR_END_THR,           true },
+    { ID_IR_START_THR,         true  },
+    { ID_IR_END_THR,           true  },
     { ID_CHN_OFFSET,           true  },
     { ID_PROCESS,              true  },
     { -1,                      false }
@@ -474,6 +516,8 @@ void c_mainwindow::set_mode (long int _mode) {
     { ID_HPF_FREQ,             false },
     { ID_LPF_FREQ,             false },
     { ID_ZEROALIGN,            false },
+    { ID_TRIM_START,           false },
+    { ID_TRIM_END,             false },
     { ID_OVERWRITE,            false },
     { ID_DEBUG,                false },
     { ID_SWEEP_THR,            false },
@@ -489,6 +533,11 @@ void c_mainwindow::set_mode (long int _mode) {
 #else
   bool do_audio = false;
 #endif
+  bool fm = chk_forcemono->GetValue ();
+  if (last_forcemono != fm) {
+    pn_meter->stereo = !fm;
+    last_forcemono = fm;
+  }
   
   //bool b = chk_forcemono->GetValue();
   //set_enable (list_jack_wet_r, !b);
@@ -697,18 +746,66 @@ void c_mainwindow::on_btn_dry_save (wxCommandEvent &ev) {
 
 void c_mainwindow::on_btn_inputdir_scan (wxCommandEvent &ev) {
   CP
+  wxDir absdir (text_inputdir->GetValue ());
+  
+  if (!absdir.IsOpened ())
+    return;
+  wxString wxabspath = absdir.GetName ();
+  
+  std::string abspath (wxabspath);
+  
+  int n = add_dir (abspath, chk_inputdir_recursive->GetValue ());
+  char buf [32];
+  snprintf (buf, 31, "%d", n);
+  show_message ("Scanned:\n" + abspath + "\n\nAdded " +
+                std::string (buf) + " files\n");
 }
 
 void c_mainwindow::on_btn_inputdir_browse (wxCommandEvent &ev) {
   CP
+  wxDirDialog f (this, "Choose directory containing input files");
+  int ret = f.ShowModal ();
+  if (ret != wxID_CANCEL) {
+    std::string fn = std::string (f.GetPath ());
+    text_inputdir->SetValue (fn);
+  }
 }
 
 void c_mainwindow::on_btn_inputfiles_add (wxCommandEvent &ev) {
   CP
+  std::vector<std::string> list;
+  std::string s;
+  wxFileDialog f (this, "Choose input file(s)",
+                  "", "", "*.[Ww][Aa][Vv]", wxFD_OPEN|wxFD_MULTIPLE);
+  if (cwd.size () > 0)
+    f.SetDirectory (wxString (cwd));
+  int ret = f.ShowModal ();
+  if (ret != wxID_CANCEL) {
+    cwd = f.GetDirectory ();
+    wxArrayString wxv;
+    f.GetFilenames (wxv);
+    for (int i = 0; i < wxv.GetCount (); i++) {
+      s = std::string (wxv [i]);
+      list_inputfiles->Append (cwd + "/" + s);
+      /*std::cout << "got filename: " + s + "\n" << std::flush;
+      list.push_back (std::string (s));*/
+    }
+  }
 }
 
 void c_mainwindow::on_btn_inputfiles_clear (wxCommandEvent &ev) {
-  CP
+  wxArrayInt list;
+  int count = list_inputfiles->GetSelections (list);
+  debug ("count=%d", count);
+  if (!count) {
+    CP
+    list_inputfiles->Clear ();
+  } else {
+    for (int i = list.GetCount () - 1; i >= 0; i--) {
+      debug ("deleting item %d", i);
+      list_inputfiles->Delete (list [i]);
+    }
+  }
 }
 
 void c_mainwindow::on_btn_align_manual (wxCommandEvent &ev) {
@@ -744,6 +841,92 @@ void c_mainwindow::on_btn_play (wxCommandEvent &ev) {
 
 void c_mainwindow::on_btn_process (wxCommandEvent &ev) {
   CP
+}
+
+int c_mainwindow::add_files (std::vector<std::string> list) {
+  CP
+  // not using this, see on_btn_inputfiles_add
+  int count = 0;
+  return count;
+}
+
+// could optimize this... 
+static bool suffix_match (std::string fn, std::string suffix) {
+  int pos = fn.find_last_of ('.');
+  
+  if (pos < 0)
+    return false;
+  
+  bool retval = true;
+  for (int i = 0; fn [pos + i] && suffix [i]; i++) {
+    if (tolower (fn [pos +i]) != tolower (suffix [i]))
+      retval = false;
+  }
+  
+  //debug ("fn=%s, suffix=%s, pos=%d, retval=%s",
+  //       fn.c_str (), suffix.c_str (), pos, retval ? "true" : "false");
+  return retval;
+}
+
+int c_mainwindow::add_dir (std::string dirname, bool recurs) {
+  //CP
+  int count = 0;
+  
+  wxDir dir (dirname);
+  wxString str;
+  
+  if (dir.IsOpened ()) {
+    wxString wxfn;
+    bool found = dir.GetFirst (&wxfn);
+    while (found) {
+      std::string fn (wxfn);
+      std::string absfn (dirname + "/" + fn.c_str ());
+      if (!dir_exists (absfn)) {
+        if (recurs) {
+          printf ("recurs dir: %s\n", absfn.c_str ());
+          count += add_dir (absfn, recurs);
+        } else {
+          printf ("found dir:  %s\n", absfn.c_str ());
+        }
+      } else {
+        if (suffix_match (absfn, ".wav")) {
+          printf ("found file: %s\n", absfn.c_str ());
+          list_inputfiles->Append (absfn);
+          count++;
+        } else {
+          printf ("ignoring file: %s\n", absfn.c_str ());
+        }
+      }
+      found = dir.GetNext (&wxfn);
+    }
+  } else {
+    show_error ("can't open directory " + dirname + "\n");
+  }
+  
+  return count;
+}
+
+void c_mainwindow::set_vu_l (float level, float hold, bool clip, bool xrun)
+  { if (pn_meter) pn_meter->set_l (level, hold, clip, xrun); }
+void c_mainwindow::set_vu_r (float level, float hold, bool clip, bool xrun)
+  { if (pn_meter) pn_meter->set_r (level, hold, clip, xrun); }
+  
+
+// c_deconvolver_gui
+
+void c_deconvolver_gui::set_vu_pre () {  }
+void c_deconvolver_gui::set_vu_post () { }
+
+void c_deconvolver_gui::set_vu_l (float level, float hold, bool clip, bool xrun) {
+  c_app *app = ((c_app *) wxTheApp);
+  if (!app || !app->mainwindow) return;
+  app->mainwindow->set_vu_l (level, hold, clip, xrun);
+}
+
+void c_deconvolver_gui::set_vu_r (float level, float hold, bool clip, bool xrun) {
+  c_app *app = ((c_app *) wxTheApp);
+  if (!app || !app->mainwindow) return;
+  app->mainwindow->set_vu_r (level, hold, clip, xrun);
 }
 
 
@@ -964,13 +1147,14 @@ void c_customwidget::render_base_image () {
   wxBitmap /*dummy_bitmap,*/ text_image;
   wxMemoryDC dc;
   
-  GetClientSize (&width, &height);
+  GetSize (&width, &height);
   //debug ("start, width=%d, height=%d", width, height);
   
   /*int w = width - 1;
   int h = height - 1;*/
   int gradwidth = width / 5;
   base_image = wxBitmap (width, height, 32);
+  img_overlay = wxBitmap (width, height, 32);
   
   dc.SelectObject (base_image);
   dc.SetBackground (col_bg);
@@ -1006,7 +1190,7 @@ void c_customwidget::render_base_image () {
                             (height / 2) - (img_line1.GetHeight () / 2));*/
   
   /* now the lines around the border*/
-  //dc.SelectObject (base_image);
+  dc.SelectObject (base_image);
   dc.SetPen (wxPen (col_fg));
   dc.DrawLine (0, 0, width, 0);
   dc.DrawLine (0, 0, 0, height);
@@ -1031,7 +1215,7 @@ void c_customwidget::update (wxWindowDC &dc) {
   
   //debug ("start");
   
-  GetClientSize (&new_width, &new_height);
+  GetSize (&new_width, &new_height);
   
   if (!base_image_valid || new_width != width || new_height != height) {
     render_base_image ();
@@ -1042,6 +1226,7 @@ void c_customwidget::update (wxWindowDC &dc) {
   //wxGraphicsContext *gc = wxGraphicsContext::Create (dc);
   
   dc.DrawBitmap (base_image, 0, 0);
+  //dc.DrawBitmap (img_overlay, 0, 0);
   
   /* Add overlay/highlight indicators etc.
    * we would need to do this AFTER render_base_image () */
@@ -1219,7 +1404,7 @@ void c_customwidget::on_mouseleave (wxMouseEvent &ev) {
 }
 
 
-void c_customwidget::on_resize_event (wxSizeEvent &ev) { CP
+void c_customwidget::on_resize_event (wxSizeEvent &ev) {
   //debug ("start");
   
   base_image_valid = false;
@@ -1228,6 +1413,7 @@ void c_customwidget::on_resize_event (wxSizeEvent &ev) { CP
   //debug ("end");
 }
 
+
 c_meterwidget::c_meterwidget (wxWindow *parent,
                               int id,
                               wxPoint pos,
@@ -1235,36 +1421,163 @@ c_meterwidget::c_meterwidget (wxWindow *parent,
                               int wtf)
 : c_customwidget (parent, id, pos, size, (wxBorder) wtf) {
   CP
+  //GetSize (&width, &height);
 }
 
 // c_meterwidget
 
-void c_meterwidget::render_base_image () { CP
+void c_meterwidget::render_base_image () {
   //debug ("start");
   c_customwidget::render_base_image ();
-
-  // draw grid
-  int w2 = width / 2;
-  int h2 = height / 2;
-  
-  wxColour col_grid (255, 0, 0);
-  
   wxMemoryDC dc; 
   dc.SelectObject (base_image);
-  dc.SetPen (wxPen (col_grid));
   
-  dc.DrawLine (w2, 0, w2, height);
-  dc.DrawLine (0, h2, width, h2);
+  GetSize (&width, &height);
   
+  // keep a bit of space for clip/xrun indicator
+  int w = width - clip_size;
+  int h = height;// - 1;
+  int w2 = w / 2;
+  int h2 = height / 2;
+  
+  dc.SetBrush (wxBrush (*wxBLACK));
+  dc.DrawRectangle (0, 0, w, h);
+  
+  // draw grid
+  dc.SetPen (wxPen (col_default_bg));
+  dc.DrawLine (0, 0, 0, h);
+  dc.DrawLine (0, h2, w, h2);
+  dc.SetPen (wxPen (*wxGREEN));
+  dc.DrawLine (w2, 0, w2, h);
+  dc.DrawLine (w * 3 / 4, 0, w * 3 / 4, h);
+  dc.SetPen (wxPen (*wxYELLOW));
+  dc.DrawLine (w * 7 / 8, 0, w * 7 / 8, h);
+  dc.SetPen (wxPen (*wxRED));
+  dc.DrawLine (w * 15 / 16, 0, w * 15 / 16, h);
+  dc.DrawLine (w, 0, w, h);
+  
+  // also render gradient bar
+  { // shadow variable names above
+    img_bar = wxBitmap (width, height, 32);
+    int w = img_bar.GetWidth ();
+    int r = w - clip_size;
+    int mid = r * 2 / 3;
+    int h = img_bar.GetHeight ();
+    int x, y;
+    // render bar gradient
+    wxAlphaPixelData pdata (img_bar);
+    wxAlphaPixelData::Iterator p (pdata);
+    p.MoveTo (pdata, 0, 0);
+    for (y = 0; y < h; ++y) {
+      wxAlphaPixelData::Iterator rowstart = p;
+      for (x = 0; x < w; ++x, ++p) {
+        //a = ((float) p.Alpha ()) * alpha_factor;
+        // TODO: sort out alpha premultiply stuff
+        if (x < mid) {
+          p.Red () = (x * 255) / mid;
+          p.Green () = 255;
+          p.Blue () = 0;
+          p.Alpha () = 255;
+        } else if (x < r) {
+          p.Red () = 255;
+          float t = float (x - mid) / float (w - mid);
+          p.Green () = 255.0 * (1.0 - t);
+          //p.Green () = (255 * (x + 1 - mid));
+          p.Blue () = 0;
+          p.Alpha () = 255;
+        } else {
+          p.Alpha () = 0;
+        }
+      }
+      p = rowstart;
+      p.OffsetY (pdata, 1);
+    }
+  }
+    
+  dc.SelectObject (wxNullBitmap);
   //debug ("end");
 }
 
-void c_meterwidget::update () { CP
-  c_customwidget::update ();
+void c_meterwidget::on_resize_event (wxSizeEvent &ev) { CP
+  c_customwidget::on_resize_event (ev);
+}
+
+void c_meterwidget::draw_bar (wxDC &dc, int t, int h, bool is_r,
+                                float level, float hold, bool clip, bool xrun) {
+  //dc.Clear ();
+  dc.SetPen (wxPen (wxColour ()));
+  
+  dc.SetBrush (wxBrush (wxColour (255, 0, 0)));
+  int len = (width - clip_size) * level;
+  if (len <= 0) return;
+  img_bar_sub = img_bar.GetSubBitmap (wxRect (0, 0, len, h));
+  dc.DrawBitmap (img_bar_sub, 2, t);
+  int holdpos = (width - clip_size) * hold;
+  if (holdpos > 0 && holdpos < width - clip_size) {
+    dc.SetPen (wxColour (128, 128, 0));
+    dc.DrawLine (holdpos, t, holdpos, h);
+  }
+}
+
+void c_meterwidget::redraw () {
+  Update ();
 }
 
 void c_meterwidget::update (wxWindowDC &dc) {
+  //wxMemoryDC dc;
+  ////if (!img_overlay.IsOk ()) { CP; return; }
+  //dc.SelectObject (img_overlay);
+  
   c_customwidget::update (dc);
+  dc.SetPen (wxPen (*wxRED));
+  dc.SetBrush (wxBrush (*wxRED));
+  //debug ("lev %f,%f  hold %f,%f  clip %s,%s  xrun %s,%s",
+  //       l, r, hold_l, hold_r,
+  //       clip_l ? "t" : "f", clip_r ? "t" : "f",
+  //       xrun_l ? "t" : "f", xrun_r ? "t" : "f");
+ 
+  float t, h;
+  
+  if (stereo) {
+    t = height / 8;
+    if (t < 1) t = 1;
+    h = height / 4;
+    if (h < 1) h = 1;
+    
+    draw_bar (dc, t, h, false, l, hold_l, clip_l, xrun_l);
+    
+    t = height - h - t;
+    draw_bar (dc, t, h, true,  r, hold_r, clip_r, xrun_r);
+  } else {
+    t = height / 4;
+    h = height - (t * 2);
+    
+    if (height >= 0) height = 1;
+    //if (t < 0 || t > height - 1) t = 0;
+    //draw_bar (dc, t, h, false, l, hold_l, clip_l, xrun_l);
+    draw_bar (dc, t, h, false, l, hold_l, clip_l, xrun_l);
+  }
+
+}
+
+
+void c_meterwidget::set_l (float level, float hold, bool clip, bool xrun) {
+  //debug ("lev:%f, hold=%f, clip=%s, xrun=%s", level, hold,
+  //       clip ? "true" : "false", xrun ? "true": "false");
+  l = level;
+  hold_l = hold;
+  clip_l = clip;
+  xrun_l = xrun;
+  
+}
+
+void c_meterwidget::set_r (float level, float hold, bool clip, bool xrun) {
+  //debug ("lev:%f, hold=%f, clip=%s, xrun=%s", level, hold,
+  //       clip ? "true" : "false", xrun ? "true": "false");
+  r = level;
+  hold_r = hold;
+  clip_r = clip;
+  xrun_r = xrun;
 }
 
 // c_waveformwidget
@@ -1276,15 +1589,15 @@ c_waveformwidget::c_waveformwidget (wxWindow *parent,
                               int wtf)
 : c_customwidget (parent, id, pos, size, (wxBorder) wtf) {
   CP
+  // for now, hard-coded colors for our waveform view
   col_bezel1 = wxColour (0, 0, 0, 128);
   col_bezel2 = wxColour (255, 255, 255, 128);
-  col_bg = wxColour (24, 24, 24);
+  col_bg = wxColour (0, 0, 0);
   col_fg = wxColour (0, 128, 32);
 }
 
-void c_waveformwidget::render_base_image () { CP
+void c_waveformwidget::render_base_image () {
   c_customwidget::render_base_image ();
-
   // draw grid
   int w2 = width / 2;
   int h2 = height / 2;
@@ -1305,25 +1618,37 @@ void c_waveformwidget::render_base_image () { CP
     return;
   }
   
-  // background, bezel
+  // background
   dc.SetBrush (wxBrush (col_bg));
-  dc.SetPen (wxPen ());
+  dc.SetPen (wxPen (col_bg));
   dc.DrawRectangle (0, 0, width, height);
-  dc.SetPen (wxPen (col_bezel1));
-  dc.DrawLine (0, 0, width * 2, -1);
-  dc.DrawLine (0, 1, -1, height * 2);
-  dc.SetPen (wxPen (col_bezel2));
-  dc.DrawLine (width, height * -3 / 2, width - 1, height - 1);
-  dc.DrawLine (width - 2, height - 1, width * -3 / 2, height);
   
   // baseline
   dc.SetPen (wxPen (col_fg));
-  dc.DrawLine (2, height / 2, width - 4, height / 2);
+  dc.DrawLine (2, 1 + height / 2, 1 + width - 4, 1 + height / 2);
   
+  draw_frame (dc);
 }
 
-void c_waveformwidget::update () { CP
-  c_customwidget::update ();
+void c_waveformwidget::draw_frame (wxDC &dc) {
+  // bezel/frame, this gives a nice gradient effect: line at a slight
+  // angle, sandwitched between two lines of system background color
+  dc.SetPen (wxPen (col_bezel1));
+  dc.DrawLine (1, 1, width * 2, -1);
+  dc.DrawLine (1, 1, -1, height * 2);
+  dc.SetPen (wxPen (col_bezel2));
+  dc.DrawLine (width - 1, height * -3 / 2, width - 2, height);
+  dc.DrawLine (width - 2, height - 2, 1 + (width * -3 / 2), height - 1);
+  
+  dc.SetPen (wxPen (col_default_bg));
+  //dc.DrawLine (2, 2, width -3, 2);
+  //dc.DrawLine (2, 2, 2, height - 3);
+  dc.DrawLine (width - 3, 2, width - 3, height - 3);
+  dc.DrawLine (width - 3, height - 3, 3, height - 3);
+  dc.DrawLine (0, 0, width -1, 0);
+  dc.DrawLine (0, 0, 0, height - 1);
+  dc.DrawLine (width - 1, 0, width - 1, height - 1);
+  dc.DrawLine (width - 1, height - 1, 0, height - 1);
 }
 
 void c_waveformwidget::update (wxWindowDC &dc) {

@@ -30,7 +30,9 @@
 
 #ifdef USE_WXWIDGETS
 
-#include "wx/wx.h"
+#include <wx/wx.h>
+#include <wx/arrstr.h>
+
 #include "wxwidgets/mainwindow.h"
 #include "deconvolv.h"
 
@@ -66,7 +68,7 @@ public:
   void on_radio_playsweep (wxCommandEvent &ev);
   void on_radio_makesweep (wxCommandEvent &ev);
   void on_radio_roundtrip (wxCommandEvent &ev);
-  void on_checkbox (wxCommandEvent &ev);
+  void on_chk_forcemono (wxCommandEvent &ev);
   //void on_prefs (wxCommandEvent &ev);
   //void on_quit (wxCommandEvent &ev);
   //void on_menu_highlight (wxMenuEvent &ev);
@@ -85,6 +87,9 @@ public:
   void on_port_select (wxCommandEvent &ev);
   void on_timer (wxTimerEvent &ev);
   
+  void set_vu_l (float level, float hold, bool clip = false, bool xrun = false);
+  void set_vu_r (float level, float hold, bool clip = false, bool xrun = false);
+  
   c_deconvolver *dec = NULL;
   std::vector <float> drysweep;
 
@@ -97,7 +102,9 @@ private:
   int add_dir (std::string dir, bool recurs);
   
   wxTimer timer;
+  std::string cwd;
   bool init_audio_done = false;
+  bool last_forcemono = false;
   long int mode = ID_FILE;
   long int prev_mode = -1;
   audiostate prev_audio_state = (audiostate) -1;
@@ -108,6 +115,12 @@ class c_deconvolver_gui : public c_deconvolver {
 public:
   c_deconvolver_gui (struct s_prefs *prefs = NULL, std::string name = "")
     : c_deconvolver (prefs, name) {}
+  
+  virtual void set_vu_pre ();
+  virtual void set_vu_l (float level, float hold, bool clip, bool xrun);
+  virtual void set_vu_r (float level, float hold, bool clip, bool xrun);
+  virtual void set_vu_post ();
+
 };
 
 class c_app : public wxApp {
@@ -126,6 +139,8 @@ protected:
   
 private:
 };
+
+wxDECLARE_APP (c_app);
 
 
 /*
@@ -164,7 +179,6 @@ public:
   
   virtual void render_base_image ();
   //virtual void render_base_image (wxMemoryDC *dc);
-  virtual void update ();
   virtual void update (wxWindowDC &dc);
   //void schedule_deletion ();
   
@@ -172,7 +186,17 @@ public:
                                     int max_width, int max_height, int align, int gradient_h, int gradient_v,
                                     char **r_last_visible_char = NULL);
                                     
+  wxColour col_default_bg;
+  wxColour col_default_fg;
+  wxColour col_bg;
+  wxColour col_fg;
+  wxColour col_bezel1;
+  wxColour col_bezel2;
+  wxFont font;
+  wxFont smallboldfont;
+  
 protected:
+  virtual void update ();
   // event handler boilerplate - might be more to come if needed
   virtual void on_paint_event (wxPaintEvent &evt);
   virtual void on_resize_event (wxSizeEvent &evt);
@@ -212,14 +236,6 @@ protected:
   wxBitmap base_image;
   wxBitmap img_overlay;
   wxBitmap image;
-  wxColour col_default_bg;
-  wxColour col_default_fg;
-  wxColour col_bg;
-  wxColour col_fg;
-  wxColour col_bezel1;
-  wxColour col_bezel2;
-  wxFont font;
-  wxFont smallboldfont;
   wxFontMetrics fm;
   
   DECLARE_EVENT_TABLE ();
@@ -235,10 +251,40 @@ public:
   ~c_meterwidget () {}
   
   virtual void render_base_image ();
-  virtual void update ();
+  virtual void redraw ();
   virtual void update (wxWindowDC &dc);
+  virtual void on_resize_event (wxSizeEvent &ev);
+  
+  //void set_audio_client (c_audioclient *cli);
+  void set_l (float level, float hold, bool clip = false, bool xrun = false);
+  void set_r (float level, float hold, bool clip = false, bool xrun = false);
+  void draw_bar (wxDC &dc, int t, int h, bool is_right, float level, float hold, 
+                   bool clip, bool xrun);
+  
+  bool stereo  = true; // TODO: eventually arbitrary num. of channels?
+  float l      = 0.0;
+  float r      = 0.0;
+  float hold_l = 0.0;
+  float hold_r = 0.0;
+  bool  clip_l = false;
+  bool  clip_r = false;
+  bool  xrun_l = false;
+  bool  xrun_r = false;
+
 protected:
 private:
+  
+  // drawing related stuff
+  // floats for math precision, but these are in pixels
+  wxBitmap img_bar;
+  wxBitmap img_bar_sub;
+  /*float center_line  = 0.0;
+  float bar_size     = 0.0;
+  float center_pos   = 0.0;
+  float pos_bar1     = 0.0;
+  float pos_bar2     = 0.0;
+  float size_bar     = 0.0;*/
+  int   clip_size    = 32;  // for "clip" indicator on right
 };
 
 class c_waveformwidget : public c_customwidget {
@@ -251,16 +297,17 @@ public:
   ~c_waveformwidget () {}
   
   virtual void render_base_image ();
-  virtual void update ();
+  //virtual void update ();
   virtual void update (wxWindowDC &dc);
+  
   
 protected:
 private:
+  void draw_frame (wxDC &dc);
   std::vector<float> *wavdata = NULL;
+  wxFont tinyfont;
 };
 
-
-wxDECLARE_APP (c_app);
 
 int wx_main (int argc, char **argv, c_deconvolver *p);
 

@@ -95,8 +95,8 @@ static int jack_process_cb (jack_nframes_t nframes, void *arg) {
     case audiostate::PLAYMONITOR: d->on_play_loop ();     break;
     default: CP break;
   }
-
-  bool stereo = (j->is_stereo && j->port_inR != NULL);
+  
+  bool rec_stereo = (j->is_stereo && j->port_inR != NULL);
   
   // PLAYBACK
   if (j->port_outL) {
@@ -151,7 +151,7 @@ static int jack_process_cb (jack_nframes_t nframes, void *arg) {
         jack_port_get_buffer (j->port_inR, nframes);
     }
 
-    if (!stereo) {
+    if (!j->is_stereo) {
       j->peak_plus_r  = 0;
       j->peak_minus_r = 0;
       j->clip_r       = false;
@@ -167,7 +167,7 @@ static int jack_process_cb (jack_nframes_t nframes, void *arg) {
       if (vL < j->peak_minus_l) j->peak_minus_l = vL;
       if (fabsf (vL) > 0.99f)   j->clip_l = true;
 
-      if (stereo) {
+      if (rec_stereo) {
         if (vR > j->peak_plus_r)  j->peak_plus_r  = vR;
         if (vR < j->peak_minus_r) j->peak_minus_r = vR;
         if (fabsf (vR) > 0.99f)   j->clip_r = true;
@@ -177,7 +177,7 @@ static int jack_process_cb (jack_nframes_t nframes, void *arg) {
       if (!j->monitor_only) {
         if (j->rec_index < j->rec_total) {
           j->sig_in_l [j->rec_index] = vL;
-          if (stereo) {
+          if (rec_stereo) {
             j->sig_in_r [j->rec_index] = vR;
           }
           j->rec_index++;

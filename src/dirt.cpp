@@ -805,9 +805,9 @@ int main (int argc, char **argv) {
   
 #ifdef USE_WXWIDGETS
   if (p.gui)
-    dec = new c_deconvolver (&p);
-  else
     dec = new c_deconvolver_gui (&p);
+  else
+    dec = new c_deconvolver (&p);
   
   //c_deconvolver dec (&p);
   

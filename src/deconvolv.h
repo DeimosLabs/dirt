@@ -134,6 +134,11 @@ public:
   virtual int on_playrec_loop (void *data = NULL);
   virtual int on_playrec_stop (void *data = NULL);
   
+  virtual void set_vu_pre ();
+  virtual void set_vu_l (float level, float hold, bool clip, bool xrun);
+  virtual void set_vu_r (float level, float hold, bool clip, bool xrun);
+  virtual void set_vu_post ();
+  
   /*static bool calc_ir_raw (const std::vector<float> &wet,
                           const std::vector<float>  &dry,
                           std::vector<float>        &ir_raw,

@@ -21,6 +21,8 @@
 #include "wx/frame.h"
 #include "wx/notebook.h"
 #include "wx/spinctrl.h"
+#include "wx/scrolbar.h"
+#include "wx/statline.h"
 ////@end includes
 
 /*!
@@ -62,8 +64,8 @@ class c_waveformwidget;
 #define ID_DRY_SAVE 10046
 #define ID_JACK_DRY 10024
 #define ID_JACK_WET_L 10025
-#define ID_METER 10051
 #define ID_JACK_WET_R 10026
+#define ID_METER 10051
 #define ID_PLAY 10031
 #define ID_TAB2 10040
 #define ID_INPUTDIR_RECURSIVE 10006
@@ -76,12 +78,15 @@ class c_waveformwidget;
 #define ID_OUTPUTDIR 10010
 #define ID_OUTPUTDIR_BROWSE 10011
 #define ID_SWEEP_ALIGN 10003
+#define ID_ALIGN_MANUAL 10050
 #define ID_HPF_MODE 10028
 #define ID_HPF_FREQ 10033
 #define ID_LPF_MODE 10029
 #define ID_LPF_FREQ 10034
-#define ID_ALIGN_MANUAL 10050
 #define ID_ZEROALIGN 10004
+#define ID_TRIM_START 10036
+#define ID_TRIM_END 10055
+#define ID_CHECKBOX 10067
 #define ID_OVERWRITE 10036
 #define ID_DEBUG 10027
 #define ID_SWEEP_THR 10035
@@ -90,8 +95,21 @@ class c_waveformwidget;
 #define ID_CHN_OFFSET 10041
 #define ID_PROCESS 10045
 #define ID_PANEL1 10047
+#define ID_LISTBOX 10056
+#define ID_BUTTON 10057
+#define ID_BUTTON1 10058
 #define ID_WAVEFORM 10052
+#define ID_SCROLLBAR1 10054
+#define ID_SCROLLBAR 10053
+#define ID_BUTTON2 10059
+#define ID_BUTTON3 10060
+#define ID_BUTTON4 10061
+#define ID_BUTTON5 10062
+#define ID_BUTTON6 10063
+#define ID_BUTTON7 10064
+#define ID_BUTTON8 10065
 #define ID_PANEL 10032
+#define wxID_STATUSBAR 10066
 #define SYMBOL_UI_MAINWINDOW_STYLE wxCAPTION|wxRESIZE_BORDER|wxSYSTEM_MENU|wxCLOSE_BOX
 #define SYMBOL_UI_MAINWINDOW_TITLE _("DIRT")
 #define SYMBOL_UI_MAINWINDOW_IDNAME ID_UI_MAINWINDOW
@@ -163,9 +181,9 @@ public:
     wxSpinCtrl* spin_dry_gap;
     wxComboBox* list_jack_dry;
     wxComboBox* list_jack_wet_l;
-    c_meterwidget* pn_meter;
     wxComboBox* list_jack_wet_r;
     wxBoxSizer* sizer_meters;
+    c_meterwidget* pn_meter;
     wxButton* btn_play;
     wxPanel* tab_deconvolv;
     wxBoxSizer* staticbox_deconvolv;
@@ -179,12 +197,14 @@ public:
     wxTextCtrl* text_outputdir;
     wxButton* btn_outputdir_browse;
     wxChoice* list_align;
+    wxButton* btn_align_manual;
     wxChoice* list_hpf_mode;
     wxSpinCtrl* spin_hpf_freq;
     wxChoice* list_lpf_mode;
     wxSpinCtrl* spin_lpf_freq;
-    wxButton* btn_align_manual;
     wxCheckBox* chk_zeroalign;
+    wxCheckBox* chk_trim_start;
+    wxCheckBox* chk_trim_end;
     wxCheckBox* chk_overwrite;
     wxCheckBox* chk_debug;
     wxSpinCtrl* spin_sweep_thr;
@@ -193,6 +213,7 @@ public:
     wxSpinCtrl* spin_chn_offset;
     wxButton* btn_process;
     c_waveformwidget* m_waveform;
+    wxStaticText* text_statusbar;
     wxButton* btn_about;
     wxButton* btn_ok;
 ////@end ui_mainwindow member variables
