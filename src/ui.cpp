@@ -94,13 +94,12 @@ c_mainwindow::c_mainwindow (c_deconvolver *d)
   SetSize (GetSize () + wxSize (0, 100));
   SetSizeHints (GetSize ());
   
-  //testwidget = new c_meterwidget (pn_meter);
-  
   set_mode (ID_FILE);
   
   init_audio ();
   timer.Bind (wxEVT_TIMER, &c_mainwindow::on_timer, this);
   timer.Start (32);
+  pn_meter2->vertical = true;
 }
 
 c_mainwindow::~c_mainwindow () {
@@ -213,6 +212,7 @@ bool c_mainwindow::init_audio (int samplerate, bool stereo) {
   }
   
   if (!dec->audio) {
+    CP
     dec->audio_init ("DIRT", -1, stereo);
   }
   
@@ -535,7 +535,7 @@ void c_mainwindow::set_mode (long int _mode) {
 #endif
   bool fm = chk_forcemono->GetValue ();
   if (last_forcemono != fm) {
-    pn_meter->stereo = !fm;
+    pn_meter->stereo = pn_meter2->stereo = !fm;
     last_forcemono = fm;
   }
   
@@ -907,15 +907,16 @@ int c_mainwindow::add_dir (std::string dirname, bool recurs) {
 }
 
 void c_mainwindow::set_vu_l (float level, float hold, bool clip, bool xrun) 
-  { pn_meter->set_l (level, hold, clip, xrun); }
+  { pn_meter->set_l (level, hold, clip, xrun);
+    pn_meter2->set_l (level, hold, clip, xrun); }
   
 void c_mainwindow::set_vu_r (float level, float hold, bool clip, bool xrun)
-  { pn_meter->set_r (level, hold, clip, xrun); }
-  
+  { pn_meter->set_r (level, hold, clip, xrun); 
+    pn_meter2->set_r (level, hold, clip, xrun); }  
 
 // c_deconvolver_gui
 
-void c_deconvolver_gui::set_vu_pre () {  }
+void c_deconvolver_gui::set_vu_pre () { }
 void c_deconvolver_gui::set_vu_post () { }
 
 void c_deconvolver_gui::set_vu_l (float level, float hold, bool clip, bool xrun) {
@@ -1437,101 +1438,180 @@ void c_meterwidget::render_base_image () {
   dc.SelectObject (base_image);
   
   GetSize (&width, &height);
-  int fontsize = (width / 125);
-  tinyfont.SetPointSize (fontsize);
-  tinyfont.MakeBold ();
-
-  dc.SetFont (tinyfont);
-  wxSize fsz_clip = dc.GetTextExtent ("CLIP");
-  wxSize fsz_xrun = dc.GetTextExtent ("XRUN");
-  clip_width = std::max (fsz_clip.GetWidth (), fsz_xrun.GetWidth ()) * 1.5;
-  clip_height = std::max (fsz_xrun.GetHeight (), fsz_xrun.GetHeight ());
+  if (vertical) {
+    clip_width = width;
+    clip_height = 3;
+  } else {
+    int fontsize = (width / 125);
+    tinyfont.SetPointSize (fontsize);
+    tinyfont.MakeBold ();
+    dc.SetFont (tinyfont);
+    wxSize fsz_clip = dc.GetTextExtent ("CLIP");
+    wxSize fsz_xrun = dc.GetTextExtent ("XRUN");
+    clip_width = std::max (fsz_clip.GetWidth (), fsz_xrun.GetWidth ()) * 1.5;
+    clip_height = std::max (fsz_xrun.GetHeight (), fsz_xrun.GetHeight ());
+  }
   
   // keep a bit of space for clip/xrun indicator
-  int wid = width - clip_width;
-  int h = height;// - 1;
-  int h2 = height - 1;
+  int len, th, w, h, w2, h2;
+  if (vertical) {
+    len = height - clip_height;
+    th = height;// - 1;
+    h2 = height - 1;
+    w2 = width - 1;
+  } else {
+    len = width - clip_width;
+    th = width;// - 1;
+    h2 = height - 1;
+    w2 = width - 1;
+  }
   
-  if (stereo)
+  if (stereo) {
     h2 = height / 2;
+    w2 = width / 2;
+  }
   
   dc.SetBrush (wxBrush (*wxBLACK));
-  dc.DrawRectangle (0, 0, wid, h);
+  if (vertical)
+    dc.DrawRectangle (0, 0, th, len);
+  else
+    dc.DrawRectangle (0, 0, len, th);
   
   // draw grid
-  dc.SetPen (wxPen (col_default_bg));
-  dc.DrawLine (0, 0, 0, h);
-  dc.DrawLine (0, h2, wid, h2);
-  dc.SetPen (wxPen (*wxGREEN));
-  dc.DrawLine (wid / 2, 0, wid / 2, h);
-  dc.DrawLine (wid * 3 / 4, 0, wid * 3 / 4, h);
-  dc.SetPen (wxPen (*wxYELLOW));
-  dc.DrawLine (wid * 7 / 8, 0, wid * 7 / 8, h);
-  dc.SetPen (wxPen (*wxRED));
-  dc.DrawLine (wid * 15 / 16, 0, wid * 15 / 16, h);
-  dc.DrawLine (wid, 0, wid, h);
+  if (vertical) {
+    dc.SetPen (wxPen (col_default_bg));
+    dc.DrawLine (0, th - 1, w, th -1);               // (0, 0, 0, h); //left
+    dc.DrawLine (w2, 0, w2, len);                    // (0, h2, len, h2); // bottom
+    dc.SetPen (wxPen (*wxGREEN));
+    dc.DrawLine (0, len / 2, th, len / 2);           //(len / 2, 0, len / 2, th); // middle marker
+    dc.DrawLine (0, len - (len * 3 / 4), th, len - (len * 3 / 4));  //(len * 3 / 4, 0, len * 3 / 4, th); // 3/4 marker
+    dc.SetPen (wxPen (*wxYELLOW));
+    dc.DrawLine (0, len - (len * 7 / 8), th, len - (len * 7 / 8)); //(len * 7 / 8, 0, len * 7 / 8, th); //yellow marker
+    //dc.SetPen (wxPen (wxColour (255,128,0)));
+    //dc.DrawLine (len * 15 / 16, 0, len * 15 / 16, h);
+    dc.SetPen (wxPen (*wxRED));
+    dc.DrawLine (0, 0, th, 0); // right (red marker)
+  } else {
+    dc.SetPen (wxPen (col_default_bg));
+    dc.DrawLine (0, 0, 0, th);
+    dc.DrawLine (0, h2, len, h2);
+    dc.SetPen (wxPen (*wxGREEN));
+    dc.DrawLine (len / 2, 0, len / 2, th);
+    dc.DrawLine (len * 3 / 4, 0, len * 3 / 4, th);
+    dc.SetPen (wxPen (*wxYELLOW));
+    dc.DrawLine (len * 7 / 8, 0, len * 7 / 8, th);
+    //dc.SetPen (wxPen (wxColour (255,128,0)));
+    //dc.DrawLine (len * 15 / 16, 0, len * 15 / 16, h);
+    dc.SetPen (wxPen (*wxRED));
+    dc.DrawLine (len, 0, len, th);
+  }
   
   // also render gradient bar
   { // shadow variable names above
     img_bar = wxBitmap (width, height, 32);
     int w = img_bar.GetWidth ();
-    int r = w - clip_width;
-    int mid = r * 2 / 3;
     int h = img_bar.GetHeight ();
+    int r = (vertical ? h : w) - (vertical ? clip_height : clip_width);
+    int mid = r * 2 / 3;
+    //if (vertical) mid = h - mid;
+    int th = vertical ? img_bar.GetWidth () : img_bar.GetHeight ();
     int x, y;
     // render bar gradient
     wxAlphaPixelData pdata (img_bar);
     wxAlphaPixelData::Iterator p (pdata);
     p.MoveTo (pdata, 0, 0);
-    for (y = 0; y < h; ++y) {
-      wxAlphaPixelData::Iterator rowstart = p;
-      for (x = 0; x < w; ++x, ++p) {
-        //a = ((float) p.Alpha ()) * alpha_factor;
-        // TODO: sort out alpha premultiply stuff
-        if (x < mid) {
-          p.Red () = (x * 255) / mid;
-          p.Green () = 255;
-          p.Blue () = 0;
-          p.Alpha () = 255;
-        } else if (x < r) {
-          p.Red () = 255;
-          float t = float (x - mid) / float (w - mid);
-          p.Green () = 255.0 * (1.0 - t);
-          //p.Green () = (255 * (x + 1 - mid));
-          p.Blue () = 0;
-          p.Alpha () = 255;
-        } else {
-          p.Alpha () = 0;
+    
+    if (vertical) {
+      for (y = 0; y < h; ++y) {
+        wxAlphaPixelData::Iterator rowstart = p;
+        for (x = 0; x < th; ++x, ++p) {
+          //a = ((float) p.Alpha ()) * alpha_factor;
+          // TODO: sort out alpha premultiply stuff
+          if (h-y < mid) {
+            p.Red () = ((h-y) * 255) / mid;
+            p.Green () = 255;
+            p.Blue () = 0;
+            p.Alpha () = 255;
+          } else if (h-y < r) {
+            p.Red () = 255;
+            float t = float ((h-y) - mid) / float (mid - h);
+            p.Green () = 255.0 * (t);
+            p.Blue () = 0;
+            p.Alpha () = 255;
+          } else {
+            p.Alpha () = 0;
+          }
         }
+        p = rowstart;
+        p.OffsetY (pdata, 1);
       }
-      p = rowstart;
-      p.OffsetY (pdata, 1);
+    } else {
+      for (y = 0; y < th; ++y) {
+        wxAlphaPixelData::Iterator rowstart = p;
+        for (x = 0; x < w; ++x, ++p) {
+          //a = ((float) p.Alpha ()) * alpha_factor;
+          // TODO: sort out alpha premultiply stuff
+          if (x < mid) {
+            p.Red () = (x * 255) / mid;
+            p.Green () = 255;
+            p.Blue () = 0;
+            p.Alpha () = 255;
+          } else if (x < r) {
+            p.Red () = 255;
+            float t = float (x - mid) / float (w - mid);
+            p.Green () = 255.0 * (1.0 - t);
+            //p.Green () = (255 * (x + 1 - mid));
+            p.Blue () = 0;
+            p.Alpha () = 255;
+          } else {
+            p.Alpha () = 0;
+          }
+        }
+        p = rowstart;
+        p.OffsetY (pdata, 1);
+      }
     }
   }
-    
+  //dc.DrawBitmap (img_bar, 0, 0);
   dc.SelectObject (wxNullBitmap);
   //debug ("end");
 }
 
-void c_meterwidget::draw_bar (wxDC &dc, int t, int h, bool is_r,
+void c_meterwidget::draw_bar (wxDC &dc, int t, int o, bool is_r,
                                 float level, float hold, bool clip, bool xrun) {
   //dc.Clear ();
   dc.SetPen (wxPen (wxColour ()));
-  
   dc.SetBrush (wxBrush (wxColour (255, 0, 0)));
+  
+  int m; // usable meter length
   if (level > 1) level = 1;
-  int w = width - clip_width;
-  int len = w * level;
+  if (vertical)
+    m = height - clip_height;
+  else
+    m = width - clip_width;
+  int len = m * level;
   if (len > 0) {
-    int rlim = w - 3;
-    if (len > rlim) len = rlim;
-    img_bar_sub = img_bar.GetSubBitmap (wxRect (0, 0, len, h));
-    dc.DrawBitmap (img_bar_sub, 2, t);
+    int ulim = m - 3;
+    if (len > ulim) len = ulim;
+    /*debug ("%s o=%d, m=%d, len=%d, width=%d, height=%d",
+           vertical ? "ver" : "hor", o, m, len, width, height);*/
+    if (vertical) {
+      img_bar_sub = img_bar.GetSubBitmap (wxRect (t, m - len, o, len));
+      dc.DrawBitmap (img_bar_sub, t, m - len - 2);
+      //dc.SetBrush (wxBrush (*wxGREEN));
+      //dc.DrawRectangle (t, m - len, o, len);
+    } else {
+      img_bar_sub = img_bar.GetSubBitmap (wxRect (0, 0, len, o));
+      dc.DrawBitmap (img_bar_sub, 2, t);
+    }
   }
-  int holdpos = w * hold;
-  if (holdpos > 0 && holdpos < w) {
+  int holdpos = m * hold;
+  if (holdpos > 0 && holdpos < m) {
     dc.SetPen (wxColour (192, 192, 128));
-    dc.DrawLine (holdpos, t, holdpos, t + h - 1);
+    if (vertical)
+      dc.DrawLine (t, m - holdpos, t + o, m - holdpos);
+    else
+      dc.DrawLine (holdpos, t, holdpos, t + o - 1);
   }
 }
 
@@ -1556,18 +1636,33 @@ void c_meterwidget::update (wxWindowDC &dc) {
   bool clipany = clip_l||clip_r;
   
   if (stereo) {
-    t = height / 8;
-    if (t < 1) t = 1;
-    h = height / 4;
-    if (h < 1) h = 1;
+    if (vertical) {
+      t = width / 8;
+      if (t < 1) t = 1;
+      h = width / 4;
+      if (h < 1) h = 1;
+    } else {
+      t = height / 8;
+      if (t < 1) t = 1;
+      h = height / 4;
+      if (h < 1) h = 1;
+    }
     
     draw_bar (dc, t, h, false, l, hold_l, clipany, xrun);
     
-    t = height - h - t;
+    if (vertical)
+      t = width - h - t;
+    else
+      t = height - h - t;
     draw_bar (dc, t, h, true,  r, hold_r, clipany, xrun);
   } else {
-    t = height / 4;
-    h = height - (t * 2) - 1;
+    if (vertical) {
+      t = width / 4;
+      h = width - (t * 2) - 1;
+    } else {
+      t = height / 4;
+      h = height - (t * 2) - 1;
+    }
     
     if (height >= 0) height = 1;
     //if (t < 0 || t > height - 1) t = 0;
@@ -1575,11 +1670,23 @@ void c_meterwidget::update (wxWindowDC &dc) {
     draw_bar (dc, t, h, false, l, hold_l, clip_l, xrun);
   }
   //debug ("w/h %d,%d", width, height);
-  int clipx = width - clip_width + 2;
-  int clipy = ((height - clip_height) / 2) - 2;
+  int clipx, clipy;
+  if (vertical) {
+    clipx = ((width - clip_width) / 2) - 2;
+    clipy = height - clip_height + 2;
+  } else {
+    clipx = width - clip_width + 2;
+    clipy = ((height - clip_height) / 2) - 2;
+  }
   if (clipany || xrun) {
-    dc.SetTextForeground (*wxRED);
-    dc.DrawText (xrun? "XRUN" : "CLIP", clipx, clipy);
+    if (vertical) {
+      dc.SetPen (wxPen (*wxRED));
+      dc.SetBrush (wxBrush (*wxRED));
+      dc.DrawRectangle (0, 0, clip_width, clip_height);
+    } else {
+      dc.SetTextForeground (*wxRED);
+      dc.DrawText (xrun? "XRUN" : "CLIP", clipx, clipy);
+    }
   } else {
     dc.SetPen (wxPen ());
     dc.SetBrush (wxBrush (col_default_bg));

@@ -327,10 +327,10 @@ int c_jackclient::get_output_ports (std::vector<std::string> &v) {
 }
 
 bool c_jackclient::init (std::string clientname,      // = "",
-                               int _samplerate,        // = -1, // ignored for now
-                               //const char *jack_out_port,
-                               //const char *jack_in_port,
-                               bool stereo_out) {     // = true) {
+                         int _samplerate,        // = -1, // ignored for now
+                         //const char *jack_out_port,
+                         //const char *jack_in_port,
+                         bool stereo_out) {     // = true) {
   debug ("start");
   if (jack_inited) {
     // already have a client, nothing to do
@@ -384,12 +384,6 @@ bool c_jackclient::init (std::string clientname,      // = "",
   sig_out_r.clear ();
   port_inL = port_inR = nullptr;
   //port_outL = port_outR = nullptr;
-#if 0
-  // force init by passing opposite of stereo state - hackish but WORKS
-  init_output (false);
-  is_stereo = !is_stereo;
-  init_input (!is_stereo);
-#else
   // register jack ports
   port_outL = jack_port_register (client, "out",
                             JACK_DEFAULT_AUDIO_TYPE,
@@ -409,7 +403,6 @@ bool c_jackclient::init (std::string clientname,      // = "",
                               JACK_DEFAULT_AUDIO_TYPE,
                               JackPortIsInput, 0);
   }
-#endif
   init_output (false);
   init_input (is_stereo);
 

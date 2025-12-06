@@ -260,14 +260,15 @@ public:
   void draw_bar (wxDC &dc, int t, int h, bool is_right, float level, float hold, 
                    bool clip, bool xrun);
   
-  bool stereo  = true; // TODO: eventually arbitrary num. of channels?
-  float l      = 0.0;
-  float r      = 0.0;
-  float hold_l = 0.0;
-  float hold_r = 0.0;
-  bool  clip_l = false;
-  bool  clip_r = false;
-  bool  xrun   = false;
+  bool stereo   = true; // TODO: eventually arbitrary num. of channels?
+  bool vertical = false;
+  float l       = 0.0;
+  float r       = 0.0;
+  float hold_l  = 0.0;
+  float hold_r  = 0.0;
+  bool  clip_l  = false;
+  bool  clip_r  = false;
+  bool  xrun    = false;
 
   wxFont tinyfont;
 

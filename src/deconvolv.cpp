@@ -45,19 +45,6 @@ size_t find_last_nonsilent (const std::vector<float> &buf,
   return buf.size ();
 }
 
-/*static size_t find_peak (const std::vector<float> &buf) {
-  size_t idx = 0;
-  float maxv = 0.0f;
-  for (size_t i = 0; i < buf.size (); ++i) {
-    float a = std::fabs (buf [i]);
-    if (a > maxv) {
-      maxv = a;
-      idx = i;
-    }
-  }
-  return idx;
-}*/
-
 size_t find_peak (const std::vector<float> &buf) {
   int i = 0, len = buf.size (), peakpos = 0;
   float peak = 0;
@@ -975,7 +962,9 @@ bool c_deconvolver::audio_init (std::string clientname,
   debug ("start, clientname=%s, samplerate=%d, stereo_out=%s",
          clientname.c_str (), samplerate, stereo_out ? "true" : "false");
 #ifdef USE_JACK
+  debug ("prefs_->portname_dry=%s", prefs_->portname_dry.c_str ());
   audio = new c_jackclient (this);
+  CP
   if (audio && audio->init (clientname, samplerate, stereo_out)) {
     debug ("return (true)");
     return true;
@@ -1070,7 +1059,7 @@ int c_deconvolver::on_playrec_start (void *data)     {
 
 void c_deconvolver::set_vu_pre () {
   //printf ("\n\n\n\n\n");
-  ansi_cursor_move_y (audio->is_stereo ? -4 : -3);
+  ansi_cursor_move_y (audio->is_stereo ? -3 : -2);
 }
 
 void c_deconvolver::set_vu_l (float l, float h, bool c, bool x) {

@@ -327,9 +327,11 @@ static bool resolve_sources (s_prefs &opt, int paths_bf) {
     if (a == std::string::npos) { s.clear (); return; }
     s = s.substr(a, b - a + 1);
   };
+  
+  debug ("opt->portname_dry=%s", opt.portname_dry.c_str ());
 
   // --- dry source ---
-  if (paths_bf & 1) {
+  if (paths_bf & 1 || opt.gui) {
 #ifdef USE_JACK
     if (opt.dry_path == "jack") {
 #else
@@ -359,7 +361,7 @@ static bool resolve_sources (s_prefs &opt, int paths_bf) {
   }
 
 // --- wet source ---
-  if (paths_bf & 2) {
+  if (paths_bf & 2 || opt.gui) {
 #ifdef USE_JACK
     if (opt.wet_path == "jack") {
 #else
@@ -382,8 +384,10 @@ static bool resolve_sources (s_prefs &opt, int paths_bf) {
                     << opt.wet_path << "\")\n";
           return false;
         }
-
-        if (looks_like_jack_port(left) && looks_like_jack_port (right)) {
+        
+        CP
+        if (looks_like_jack_port (left) && looks_like_jack_port (right)) {
+          CP
           opt.wet_source           = sig_source::JACK;
           opt.jack_autoconnect_wet = true;
           opt.portname_wetL        = left;
@@ -784,25 +788,32 @@ int main (int argc, char **argv) {
   
   int paths_bf = parse_args (argc, argv, p);
   
-  if (!p.gui) {
-    if (paths_bf == -1 || p.mode == opmode::ERROR) {
+  //if (!p.gui) {
+  CP
+  if (paths_bf == -1 || p.mode == opmode::ERROR) {
+    if (!p.gui) {
       print_usage (argv [0]);
       debug ("return");
       return 1;
     }
-    
-    if (!resolve_sources (p, paths_bf)) {
+  }
+  
+  CP
+  if (!resolve_sources (p, paths_bf)) {
+    if (!p.gui) {
       print_usage (argv [0], false);
       debug ("return");
       return 1;
     }
   }
+  //}
   
   // our main deconvolver object
   // this needs to be created after we parse args but before wx_main
   
   c_deconvolver *dec = NULL;
   
+  debug ("p.portname_dry=%s", p.portname_dry.c_str ());
 #ifdef USE_WXWIDGETS
   if (p.gui)
     dec = new c_deconvolver_gui (&p);
@@ -811,6 +822,19 @@ int main (int argc, char **argv) {
   
   //c_deconvolver dec (&p);
   
+#ifdef USE_JACK
+  if (p.dry_source == sig_source::JACK || p.wet_source == sig_source::JACK || p.gui) {
+    snprintf (realjackname, 255, p.jack_name.c_str (), argv [0]);
+    
+    CP
+    if (!dec->audio_init (realjackname, p.sweep_sr, p.request_stereo) || !dec->audio_ready ()) {
+      std::cout << "Error initializing audio\n";
+      if (dec) delete dec;
+      return 1;
+    }
+  }
+#endif
+
   // start gui BEFORE init audio
   if (p.gui) {
     //char **argv_dummy = { NULL };
@@ -823,18 +847,6 @@ int main (int argc, char **argv) {
   }
 #endif
   
-#ifdef USE_JACK
-  if (p.dry_source == sig_source::JACK || p.wet_source == sig_source::JACK || p.gui) {
-    snprintf (realjackname, 255, p.jack_name.c_str (), argv [0]);
-    
-    if (!dec->audio_init (realjackname, p.sweep_sr, p.request_stereo) || !dec->audio_ready ()) {
-      std::cout << "Error initializing audio\n";
-      if (dec) delete dec;
-      return 1;
-    }
-  }
-#endif
-
   // using jack at all?
   // avoid upper freq. aliasing: now that we have sample rate from either user
   // or jack, make sure we don't sweep past 95% of nyquist frequency
@@ -944,7 +956,7 @@ int main (int argc, char **argv) {
       if (dec) delete dec;
       return 1;
     }
-    CP
+    //CP
     while (!dec->audio_playback_done ()){
       usleep (10 * 1000);
     }

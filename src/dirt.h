@@ -303,11 +303,6 @@ public:
   bool xrun = false;
   //audio_driver driver = driver_jack;
   
-  
-  /*std::string portname_dry = "";
-  std::string portname_wetL = "";
-  std::string portname_wetR = "";*/
-  
   bool is_stereo = false;
   int samplerate = 0;
   int bufsize = 256; // sensible default in case we can't determine

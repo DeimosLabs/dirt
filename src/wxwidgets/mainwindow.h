@@ -31,8 +31,8 @@
 
 ////@begin forward declarations
 class wxBoxSizer;
-class wxSpinCtrl;
 class c_meterwidget;
+class wxSpinCtrl;
 class c_waveformwidget;
 ////@end forward declarations
 
@@ -52,6 +52,7 @@ class c_waveformwidget;
 #define ID_FORCEMONO 10009
 #define ID_BACKEND 10023
 #define ID_AUDIO 10048
+#define ID_C_METERWIDGET 10068
 #define ID_DRYFILE 10014
 #define ID_DRYFILE_BROWSE 10015
 #define ID_DRY_LENGTH 10017
@@ -170,6 +171,7 @@ public:
     wxCheckBox* chk_forcemono;
     wxChoice* list_backend;
     wxButton* btn_audio;
+    c_meterwidget* pn_meter2;
     wxTextCtrl* text_dryfile;
     wxButton* btn_dryfile_browse;
     wxSpinCtrl* spin_dry_length;
