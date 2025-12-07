@@ -83,7 +83,7 @@ target_include_directories(dirt PRIVATE
 target_link_libraries(dirt PRIVATE
     ${SNDFILE_LIBRARIES}
     ${FFTW3_LIBRARIES}
-    ${REALINE_LIBRARIES}
+    ${READLINE_LIBRARIES}
 )
 
 if (GUI)
