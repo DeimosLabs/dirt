@@ -22,29 +22,43 @@
 // ...more callback red tape...
 
 static audiostate determine_state_from_flags (c_jackclient *j) {
-  if (!j)
+  if (!j || !j->client)
     return audiostate::NOTREADY;
     
-  if (!j->client)
+  if (j->force_notready) {
+    //j->force_notready = false;
     return audiostate::NOTREADY;
+  }
     
   if (!j->play_go && !j->rec_go)
     return audiostate::IDLE;
   
-  if (j->rec_go && j->monitor_only && !j->play_go)
-      return audiostate::MONITOR;
+  if (!j->play_go && j->rec_go && j->monitor_only)
+    return audiostate::MONITOR;
 
-  if (j->play_go && !j->rec_go && j->monitor_only)
-      return audiostate::PLAYMONITOR;
+  if (j->play_go && j->rec_go && j->monitor_only)
+    return audiostate::PLAYMONITOR;
 
   if (j->play_go && !j->rec_go)
-      return audiostate::PLAY;
+    return audiostate::PLAY;
 
   if (!j->monitor_only && j->rec_go && !j->play_go)
-      return audiostate::REC;
+    return audiostate::REC;
 
   return (!j->monitor_only) ? audiostate::PLAYREC : audiostate::MONITOR;
 }
+
+static const char *g_state_names [] = {
+  "NOTREADY",
+  "IDLE",
+  "MONITOR",
+  "PLAY",
+  "REC",
+  "PLAYREC",
+  "PLAYMONITOR",
+  "MAX",
+  NULL
+};
 
 // our JACK callback, takes care of actual audio i/o buffers
 static int jack_process_cb (jack_nframes_t nframes, void *arg) {
@@ -53,13 +67,15 @@ static int jack_process_cb (jack_nframes_t nframes, void *arg) {
   c_deconvolver *d = j->get_deconvolver ();
   if (!d) return 0;
 
-  audiostate prev_state = j->state;   // stored from last callback
+  audiostate prev_state = j->state;   // from last callback
   audiostate new_state  = determine_state_from_flags (j);
-  /*if (prev_state != new_state) {
-      debug ("prev_state=%d, new_state=%d", prev_state, new_state);
-  }*/
+  //debug ("prev_state=%d, new_state=%d", prev_state, new_state);
 
   if (new_state != prev_state) {
+    debug ("state change: %s (%d) -> %s (%d)",
+           g_state_names [(int) prev_state], prev_state,
+           g_state_names [(int) new_state], new_state);
+    
     // leave previous state
     switch (prev_state) {
       case audiostate::PLAY:        d->on_play_stop ();     break;
@@ -101,7 +117,7 @@ static int jack_process_cb (jack_nframes_t nframes, void *arg) {
   // PLAYBACK
   if (j->port_outL) {
     auto *port_outL =
-        (jack_default_audio_sample_t*) jack_port_get_buffer(j->port_outL, nframes);
+        (jack_default_audio_sample_t *) jack_port_get_buffer (j->port_outL, nframes);
     // auto *port_outR = ... in case we add it later?
 
     if (j->play_go && !j->sig_out_l.empty ()) {
@@ -212,12 +228,14 @@ c_jackclient::~c_jackclient () { CP
     debug ("CLOSING JACK CLIENT\n");    
     jack_client_close (client);
     client = NULL;
+    force_notready = true; //state = audiostate::NOTREADY;
   }
   debug ("end");
 }
 
 int c_jackclient::disconnect_all (jack_port_t *port) {
   int i;
+  CP
   const char **connected = jack_port_get_all_connections (client, port);
   if (connected) {
       for (i = 0; connected [i]; i++) {
@@ -422,20 +440,56 @@ bool c_jackclient::init (std::string clientname,      // = "",
   //CP
   //if (!register_input (is_stereo)) return false;
   CP
-
-  state = audiostate::IDLE;
+  
+  force_notready = false; //state = audiostate::IDLE;
   
   // ...wuh duh fuuuh?
   //(void) chan_in;
   //(void) chan_out;
   
+  determine_state_from_flags (this);
+  
   debug ("end");
   return true;
 }
 
-bool c_jackclient::connect_ports () {
-  if (!port_outL || !port_inL || (is_stereo && !port_inR)) {
-    std::cerr << "Error: cannot register JACK ports.\n";
+bool c_jackclient::set_stereo (bool b) {
+  debug ("start, b=%d", (int) b);
+  if (b != is_stereo) {
+    if (!unregister ())               { 
+      debug ("unregister failed"); BP
+      //return false;
+    }
+    
+    if (!register_input (b)) {
+      debug ("register input failed"); BP
+      return false;
+    }
+    
+    if (!register_output (false)) {
+      debug ("register output failed"); BP
+      return false;
+    }
+    
+    connect_ports ();
+    
+  }
+  is_stereo = b;
+  
+  //if (!b) sig_inR.clear ();
+  return true;
+}
+
+bool c_jackclient::connect_ports (bool in, bool out) {
+  debug ("start, in=%d, out=%d", (int) in, (int) out);
+  bool ok = true;
+  if (out && !port_outL)               { CP ok = false; }
+  if (in && !port_inL)                 { CP ok = false; }
+  if (in && is_stereo && !port_inR)    { CP ok = false; }
+  
+  if (!ok) { CP
+  //if (!port_outL || !port_inL || (is_stereo && !port_inR)) {
+    std::cerr << "Error: missing JACK ports.\n";
     //jack_deactivate (client);
     return false;
   }
@@ -445,25 +499,27 @@ bool c_jackclient::connect_ports () {
   // no port given:
   //   playsweep: no -W? auto connect to system default
   //   other: no autoconnect
-  if (prefs_->portname_dry.length () > 0) {
-    debug ("got portname_dry");
-    // connect to portname_dry
-    int err = jack_connect (client,
-                            jack_port_name (port_outL),
-                            prefs_->portname_dry.c_str ());
-    if (err) std::cerr << "warning: failed to connect to JACK input port "
-                       << prefs_->portname_dry << std::endl;
-  } else {
-    if (prefs_->mode == opmode::PLAYSWEEP && !prefs_->sweepwait) {
-      // connect to system default
-      std::vector<std::string> strv;
-      int n = j_get_default_playback (client, 1, strv);
-      if (n == 1) {
-        int err = jack_connect (client,
-                                jack_port_name (port_outL),
-                                strv [0].c_str ());
-         if (err) std::cerr << "warning: failed to connect to JACK output port"
-                            << strv [0] << std::endl;
+  if (out) {
+    if (prefs_->portname_dry.length () > 0) { CP
+      debug ("got portname_dry");
+      // connect to portname_dry
+      int err = jack_connect (client,
+                              jack_port_name (port_outL),
+                              prefs_->portname_dry.c_str ());
+      if (err) std::cerr << "warning: failed to connect to JACK input port "
+                         << prefs_->portname_dry << std::endl;
+    } else { CP
+      if (prefs_->mode == opmode::PLAYSWEEP && !prefs_->sweepwait) {
+        // connect to system default
+        std::vector<std::string> strv;
+        int n = j_get_default_playback (client, 1, strv);
+        if (n == 1) {
+          int err = jack_connect (client,
+                                  jack_port_name (port_outL),
+                                  strv [0].c_str ());
+           if (err) std::cerr << "warning: failed to connect to JACK output port"
+                              << strv [0] << std::endl;
+        }
       }
     }
   }
@@ -471,34 +527,41 @@ bool c_jackclient::connect_ports () {
   // autoconnect input where it makes sense:
   // any port given: auto connect to it
   // no port given: no autoconnect
-  std::cout << "output port L: " << prefs_->portname_wetL << std::endl;
-  std::cout << "output port R: " << prefs_->portname_wetR << std::endl;
-  if (prefs_->portname_wetL.length () > 0) {
-    debug ("got portname_wetL");
-    // connect to portname_wetL
-    int err = jack_connect (client,
-                            prefs_->portname_wetL.c_str (),
-                            jack_port_name (port_inL));
-    if (err) std::cerr << "warning: failed to connect to JACK output port " 
-                       << prefs_->portname_wetL << std::endl;
-                            
-  }
-  if (prefs_->portname_wetR.length () > 0) {
-    debug ("got portname_wetL");
-    // connect to portname_wetL
-    int err = jack_connect (client,
-                            prefs_->portname_wetR.c_str (),
-                            jack_port_name (port_inR));
-    if (err) std::cerr << "warning: failed to connect to JACK output port "
-                       << prefs_->portname_wetR << std::endl;
-                            
+  if (in) {
+    std::cout << "output port L: " << prefs_->portname_wetL << std::endl;
+    std::cout << "output port R: " << prefs_->portname_wetR << std::endl;
+    if (prefs_->portname_wetL.length () > 0) { CP
+      debug ("got portname_wetL");
+      // connect to portname_wetL
+      int err = jack_connect (client,
+                              prefs_->portname_wetL.c_str (),
+                              jack_port_name (port_inL));
+      if (err) std::cerr << "warning: failed to connect to JACK output port " 
+                         << prefs_->portname_wetL << std::endl;
+                              
+    }
+    if (prefs_->portname_wetR.length () > 0) { CP
+      debug ("got portname_wetL");
+      // connect to portname_wetL
+      int err = jack_connect (client,
+                              prefs_->portname_wetR.c_str (),
+                              jack_port_name (port_inR));
+      if (err) std::cerr << "warning: failed to connect to JACK output port "
+                         << prefs_->portname_wetR << std::endl;
+                              
+    }
   }
   
   return true;
 }
 
 bool c_jackclient::register_output (bool st) {
-  debug ("start (TODO: fix this)");
+  debug ("start (TODO: fix/complete this)");
+  
+  if (!client) return false;
+  
+  force_notready = false;
+  debug ("state=%d (%s)", (int) state, g_state_names [(int) state]);
   
   if (port_outL) {
     jack_port_unregister (client, port_outL);
@@ -520,18 +583,24 @@ bool c_jackclient::register_output (bool st) {
     return false;
   /*if (b && !port_outR)
     return false;*/
-  debug ("connecting ports by default");
-  connect_ports ();
+  if (port_inL || port_inR) {
+    debug ("connecting ports by default");
+    connect_ports ();
+  }
   
   debug ("end");
   return true;
 }
 
-bool c_jackclient::register_input (bool st) {
+bool c_jackclient::register_input (bool st) { CP
   debug ("start, st=%s", st ? "true" : "false");
   //if (st == is_stereo)
   //  return true;
-    
+  
+  if (!client) return false;
+  
+  debug ("state=%d (%s)", (int) state, g_state_names [(int) state]);
+  
   is_stereo = st;
   
   if (port_inL || port_inR) {
@@ -539,14 +608,14 @@ bool c_jackclient::register_input (bool st) {
     unregister ();
   }
   
-  if (is_stereo) {
+  if (is_stereo) { CP
     if (!port_inL) port_inL  = jack_port_register (client, "in_L",
                                                   JACK_DEFAULT_AUDIO_TYPE,
                                                   JackPortIsInput, 0);
     if (!port_inR) port_inR  = jack_port_register (client, "in_R",
                                                   JACK_DEFAULT_AUDIO_TYPE,
                                                   JackPortIsInput, 0);
-  } else {
+  } else { CP
     if (!port_inL) port_inL  = jack_port_register (client, "in",
                                                   JACK_DEFAULT_AUDIO_TYPE,
                                                   JackPortIsInput, 0);
@@ -559,6 +628,11 @@ bool c_jackclient::register_input (bool st) {
   if (is_stereo && !port_inR) {
     CP
     return false;
+  }
+  
+  if (port_outL /*|| port_outR*/) {
+    debug ("connecting ports by default");
+    connect_ports ();
   }
   
   debug ("end");
@@ -581,14 +655,21 @@ bool c_jackclient::unregister () {
   
   //jack_deactivate (client);
   //jack_client_close (client);
-  //state = audiostate::NOTREADY;
+  stop ();
+  force_notready = true; //state = audiostate::NOTREADY;
   
   debug ("end");
   return true;
 }
 
 bool c_jackclient::ready () {
-  return client != NULL && state != audiostate::NOTREADY;
+  CP
+  //if (client != NULL) { CP return false;} <--- wtf?
+  //if (state != audiostate::NOTREADY) { CP return false;}
+  if (!client) { CP return false; }
+  if (state == audiostate::NOTREADY) { CP return false; }
+   
+  return true;
 }
 
 bool c_jackclient::arm_record () {
@@ -598,6 +679,8 @@ bool c_jackclient::arm_record () {
   
   rec_go = true;
   monitor_only = true;
+  
+  //state = audiostate::MONITOR;
   
   return true;
 }
@@ -629,14 +712,13 @@ bool c_jackclient::play (const std::vector<float> &sig_l,
   sig_out_l = sig_l;
   sig_out_r = sig_r;
   index   = 0;
-  play_go = false;
   
   /*size_t limit = sig_out_l.size ();
   if (is_stereo && !sig_out_r.empty ())
     limit = std::min (sig_out_l.size (), sig_out_r.size ());
   */
   play_go = true;
-  CP
+  debug ("state: %d", (int) state);
   if (block)                         // TODO: fix
     while (index < sig_out_l.size () /*&& ((!is_stereo) || index < sig_out_r.size ())*/) {
       usleep (10 * 1000); // 10 ms

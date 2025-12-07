@@ -56,6 +56,14 @@
 class c_jackclient;
 #endif
 
+#include <readline/readline.h>
+#include <readline/history.h>
+#ifdef BP
+#undef BP
+#endif
+#define BP {debug("\x1B[1;31m____BREAKPOINT____\x1B[1;37m");readline(NULL);}
+#define DIE {debug("\x1B[1;31m____DIE____\x1B[1;37m");for(;;)sleep(1);}
+
 #define MARKER_FREQ                     1000 // in Hz
 #define MAX_IR_LEN                      10.0
 #define LOWPASS_F                       22000 // gets clamped to nyquist freq
@@ -149,6 +157,7 @@ enum class align_method {
   SILENCE,
   MANUAL,
   NONE,
+  UNKNOWN,
   MAX
 };
 
@@ -243,6 +252,7 @@ public:
   
   virtual bool register_input (bool stereo) = 0;
   virtual bool register_output (bool stereo) = 0;
+  virtual bool set_stereo (bool stereo) = 0;
   
   virtual bool unregister () = 0;
   virtual bool ready () = 0;
@@ -261,8 +271,8 @@ public:
   
   virtual int get_input_ports (std::vector<std::string> &v) = 0;
   virtual int get_output_ports (std::vector<std::string> &v) = 0;
-  virtual int disconnect_all (jack_port_t *port) = 0;
-  virtual bool connect (jack_port_t *port, std::string port_name) = 0;
+  /*virtual int disconnect_all (jack_port_t *port) = 0;
+  virtual bool connect (jack_port_t *port, std::string port_name) = 0;*/
   //virtual int get_samplerate () = 0;
   //virtual int get_bufsize () = 0;
   //virtual int get_bitdepth () = 0;

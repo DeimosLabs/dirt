@@ -46,7 +46,7 @@ public:
   
   bool init_audio ();
   bool init_audio (int samplerate, bool stereo);
-  bool shutdown_audio ();
+  bool disable_audio ();
   bool audio_ready ();
   void set_statustext (const char *str, ...);
   void set_mode (long int mode);

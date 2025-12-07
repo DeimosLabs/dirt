@@ -108,6 +108,8 @@ c_mainwindow::~c_mainwindow () {
 void c_mainwindow::on_timer (wxTimerEvent &ev) {
   static long int num_passes = 0;
   const int update_widgets_every = 4;
+  bool do_full_update = false;
+  
   num_passes++;
   if (!dec || !dec->audio) return;
   
@@ -117,34 +119,38 @@ void c_mainwindow::on_timer (wxTimerEvent &ev) {
   
   // widget stuff: update only every n passes
   if (num_passes % update_widgets_every == 0) {
-    
-    bool do_full_update = false;
     audiostate s = dec->audio->state;
     
     if (s != prev_audio_state) {
+      debug ("prev_audio_state=%d, s=%d", (int) prev_audio_state, (int) s);
       prev_audio_state = s;
       do_full_update = true;
-    }
+    } //else {CP}
     if (mode != prev_mode) {
       prev_mode = mode;
       do_full_update = true;
-    }
+    } //else {CP}
     
-    if (s == audiostate::NOTREADY) {
+    if (s == audiostate::NOTREADY) { CP // audio offline
       disable (btn_play);
       btn_audio->SetLabel ("Connect");
-    } else if (s == audiostate::IDLE) {
-      if (!dec->has_dry ()) {
+      init_audio_done = false;
+    } else if (s == audiostate::IDLE || 
+               s == audiostate::MONITOR) { // on, not playing
+      if (!dec->has_dry ()) {           // ready to play
         disable (btn_play);
-      } else {
+      } else { debug ("state %d", dec->audio->state);
         enable (btn_play);
       }
       btn_play->SetLabel ((mode == ID_ROUNDTRIP) ? "Record" : "Play");
       btn_audio->SetLabel ("Disconnect");
-    } else {
-      if (!dec->has_dry ()) {
+    } else if (s == audiostate::PLAY ||
+               s == audiostate::PLAYMONITOR ||
+               s == audiostate::PLAYREC) { CP// something's playing?
+      if (!dec->has_dry ()) { CP           // uhhh wut
+        debug ("audio: playing something but what?");
         disable (btn_play);
-      } else {
+      } else { CP                          // playing dry sweep
         enable (btn_play);
         int sr = dec->prefs_ ? dec->prefs_->sweep_sr : 
                                atoi (comb_samplerate->GetValue ().c_str ());
@@ -153,8 +159,10 @@ void c_mainwindow::on_timer (wxTimerEvent &ev) {
         snprintf (buf, 31, "Stop (%ld)", sec_left);
         //debug ("sr=%d, sec_left=%d", sr, sec_left);
         btn_play->SetLabel (buf);
-        btn_audio->SetLabel ("Disconnect");
       }
+      btn_audio->SetLabel ("Disconnect");
+    } else {
+      debug ("audio: no idea what's going on");
     }
     
     wxArrayInt dummy;
@@ -173,37 +181,36 @@ void c_mainwindow::on_timer (wxTimerEvent &ev) {
     else
       disable (btn_inputdir_scan);
   }
-  /*if (do_full_update)
-    set_mode (mode);*/
+  if (do_full_update)
+    set_mode (mode);
 }
 
 bool c_mainwindow::audio_ready () {
+  init_audio_done = false;
+  
   if (!dec) {
-    //debug ("no deconvolver");
+    debug ("no deconvolver");
     return false;
   }
   if (!dec->audio) {
-    //debug ("deconvolver has no audio client");
+    debug ("deconvolver has no audio client");
     return false;
   }
-  if (dec->audio->state == audiostate::NOTREADY) {
-    //debug ("deconvolver audio not ready");
+  if (dec->audio->state == audiostate::NOTREADY ||
+      dec->audio->state == audiostate::IDLE) {
+    debug ("deconvolver audio not ready");
     return false;
   }
   
+  CP
+  init_audio_done = true;
   return true;
 }
 
-bool c_mainwindow::init_audio () { CP
-  return init_audio (atoi (comb_samplerate->GetValue ().c_str ()), 
-                      !chk_forcemono->GetValue ());
-}
-
-bool c_mainwindow::init_audio (int samplerate, bool stereo) {
+bool c_mainwindow::init_audio (int samplerate, bool stereo) { CP
   if (init_audio_done)
     return true;
   debug ("start, samplerate=%d, stereo=%s", samplerate, stereo ? "true" : "false");
-  CP
   
   if (!dec) {
     debug ("no deconvolver given");
@@ -211,7 +218,6 @@ bool c_mainwindow::init_audio (int samplerate, bool stereo) {
   }
   
   if (!dec->audio) {
-    CP
     dec->audio_init ("DIRT", -1, stereo);
   }
   
@@ -227,12 +233,15 @@ bool c_mainwindow::init_audio (int samplerate, bool stereo) {
   if (dec->prefs_) jack_name = dec->prefs_->jack_name;
   std::cout << "name: " << jack_name << "\n";
   CP
-  if (!dec->audio->init (jack_name, sr, st)) {
+  dec->audio->unregister ();
+  if (!dec->audio->register_output (false) ||
+      !dec->audio->register_input (dec->prefs_->request_stereo)) {
     CP
     debug ("audio init failed");
     return false;
   }
   
+  CP
   dec->audio_arm_record ();
   init_audio_done = true;
   
@@ -240,7 +249,12 @@ bool c_mainwindow::init_audio (int samplerate, bool stereo) {
   return true;
 }
 
-bool c_mainwindow::shutdown_audio () { CP
+bool c_mainwindow::init_audio () {
+  return init_audio (atoi (comb_samplerate->GetValue ().c_str ()), 
+                      !chk_forcemono->GetValue ());
+}
+
+bool c_mainwindow::disable_audio () { CP
   if (!dec || !dec->audio) return false;
   if (dec->audio->state == audiostate::NOTREADY) return false;
   
@@ -274,17 +288,38 @@ void c_mainwindow::on_about (wxCommandEvent &ev) {
   show_message (str);
 }
 
-void c_mainwindow::on_chk_forcemono (wxCommandEvent &ev) {
+void c_mainwindow::on_chk_forcemono (wxCommandEvent &ev) { CP
   if (radio_file->GetValue ()) set_mode (ID_FILE);
   else if (radio_makesweep->GetValue ()) set_mode (ID_MAKESWEEP);
   else if (radio_roundtrip->GetValue ()) set_mode (ID_ROUNDTRIP);
   
-  if (chk_forcemono->GetValue ()) {
+  if (!audio_ready ()) // don't re-enable audio on checkbox
+    return;
+  
+  CP
+  /*if (!init_audio_done) {
+    CP 
+    init_audio ();
+  }*/
+  
+  bool a = false;
+  bool b = chk_forcemono->GetValue ();
+  
+  if (!dec->audio->is_stereo == !b)
+    a = true;
+  
+  debug ("a=%d, b=%d", (int) a, (int) b);
+  if (b) {
     debug ("force mono");
-    dec->set_stereo (true);
+    dec->set_stereo (false);
   } else {
     debug ("stereo");
-    dec->set_stereo (false);
+    dec->set_stereo (true);
+  }
+  
+  if (a) { 
+    debug ("RE-ARMING RECORD"); 
+    dec->audio_arm_record ();
   }
 }
 
@@ -576,46 +611,42 @@ void c_mainwindow::set_mode (long int _mode) {
     }
   }
   
-  if (dec && dec->audio)
-    pn_meter->set_stereo (dec->audio->is_stereo);
   
   if (do_audio) {
-    init_audio ();
-    if (!audio_ready ()) {
-      std::cerr << "Failed to initialize audio!\n";
-      return;
-    }
-    char buf [128];
-    snprintf (buf, 127, "%d", dec->audio->samplerate);
-    comb_samplerate->SetValue (buf);
-    CP
-    bool s = !chk_forcemono->GetValue ();
-    if ((!s) != (!dec->audio->is_stereo)) { // cheap xor
+    if (dec && dec->audio) {
+      char buf [128];
+      snprintf (buf, 127, "%d", dec->audio->samplerate);
+      comb_samplerate->SetValue (buf);
       CP
-      dec->audio->register_input (s);
-      //dec->audio->init_output (false);
+      bool s = !chk_forcemono->GetValue ();
+      pn_meter->set_stereo (s/*dec->audio->is_stereo*/);
+      if ((!s) != (!dec->audio->is_stereo)) { // cheap xor
+        CP
+        //dec->audio->register_input (s);
+        //dec->audio->init_output (false);
+      }
+      update_audio_ports ();
     }
+    
+    if (!audio_ready ()) {
+      disable (list_jack_dry);
+      disable (list_jack_wet_l);
+      disable (list_jack_wet_r);
+    } /*else {
+      enable (list_jack_dry);
+      enable (list_jack_wet_l);
+      enable (list_jack_wet_r);
+    }*/
+    
+    if (chk_forcemono->GetValue()) {
+      disable (list_jack_wet_r);
+      disable (spin_chn_offset);
+    } else {
+      enable (spin_chn_offset);
+    }
+    
+    update_audio_ports ();
   }
-  update_audio_ports ();
-  
-  if (!audio_ready ()) {
-    disable (list_jack_dry);
-    disable (list_jack_wet_l);
-    disable (list_jack_wet_r);
-  } /*else {
-    enable (list_jack_dry);
-    enable (list_jack_wet_l);
-    enable (list_jack_wet_r);
-  }*/
-  
-  if (chk_forcemono->GetValue()) {
-    disable (list_jack_wet_r);
-    disable (spin_chn_offset);
-  } else {
-    enable (spin_chn_offset);
-  }
-  
-  update_audio_ports ();
 }
 
 void c_mainwindow::set_enable (wxWindow *w, bool b) {
@@ -826,15 +857,16 @@ void c_mainwindow::on_btn_audio (wxCommandEvent &ev) { CP
                     "\n...is audio device available?\n");
     }
   } else {
-    shutdown_audio ();
+    disable_audio ();
   }
 }
 
 void c_mainwindow::on_btn_play (wxCommandEvent &ev) {
   if (!audio_ready ()) return;
   CP
-  init_audio ();
-  if (dec->audio->state == audiostate::IDLE)
+  //init_audio ();
+  if (dec->audio->state == audiostate::IDLE ||
+      dec->audio->state == audiostate::MONITOR)
     dec->audio->play (dec->dry_, false);
   else
     dec->audio->stop ();

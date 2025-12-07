@@ -25,7 +25,8 @@ public:
   
   virtual bool register_input (bool stereo);
   virtual bool register_output (bool stereo);
-  virtual bool connect_ports ();
+  virtual bool set_stereo (bool stereo);
+  virtual bool connect_ports (bool in = true, bool out = true);
   
   virtual bool unregister ();
   //virtual bool shutdown ();
@@ -58,6 +59,7 @@ public:
   //jack_port_t   *port_outR = NULL; // not used for now
   
 //private:
+  bool force_notready = false;
 };
 
 

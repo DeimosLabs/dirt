@@ -90,7 +90,7 @@ size_t c_audioclient::get_play_left () {
   if (index <= 0)
     return 0;
     
-  if (state == audiostate::PLAY || state == audiostate::PLAYREC) {
+  if (play_go) {
     /*size_t a = sig_in_l.size ();
     size_t b = sig_in_r.size ();
     size_t c = sig_out.size ();*/
@@ -836,12 +836,12 @@ int main (int argc, char **argv) {
     
     CP
     if (!dec->audio_init (realjackname, p.sweep_sr, p.request_stereo) || 
-                          !dec->audio_ready () ||
                           !dec->audio->register_input (p.request_stereo) ||
-                          !dec->audio->register_output (false)) {
+                          !dec->audio->register_output (false) ||
+                          !dec->audio_ready ()) {
       std::cout << "Error initializing audio\n";
-      if (dec) delete dec;
-      return 1;
+      //if (dec) delete dec;
+      //return 1;
     }
   }
 #endif

@@ -790,18 +790,18 @@ void align_stereo_joint_no_chop (std::vector<float> &L,
     shift_ir_right(R, shift);
 }
 
-//#define DONT_USE_ANSI
+#define DONT_USE_ANSI
 
 #ifdef DONT_USE_ANSI
 
 #ifdef DEBUG
-#define ANSI_DUMMY
+#define ANSI_DUMMY //CP
 #else
 #define ANSI_DUMMY
 #endif
 
-static void static void print_vu_meter (float level, float hold,
-                                        bool clip, bool xrun)
+static void print_vu_meter (float level, float hold,
+                             bool clip, bool xrun)
                                             { ANSI_DUMMY }
 static void ansi_cursor_move_x (int n)      { ANSI_DUMMY }
 static void ansi_cursor_move_to_x (int n)   { ANSI_DUMMY }
@@ -813,6 +813,13 @@ static void ansi_cursor_restore ()          { ANSI_DUMMY }
 static void ansi_clear_screen ()            { ANSI_DUMMY }
 static void ansi_clear_to_endl ()           { ANSI_DUMMY }
 
+#define FUCK char*//(char*)std::string("") //const
+
+char *g_ansi_colors [32] = { NULL };
+  //FUCK, FUCK, FUCK, FUCK, FUCK, FUCK, FUCK, FUCK, 
+  //FUCK, FUCK, FUCK, FUCK, FUCK, FUCK, FUCK, FUCK, 
+  //FUCK, FUCK, FUCK, FUCK, FUCK, FUCK, FUCK, FUCK, 
+  //FUCK, FUCK, FUCK, FUCK, FUCK, FUCK, FUCK, FUCK };
 #else
 
 #ifndef __CMDLINE_H
@@ -867,8 +874,6 @@ static void ansi_cursor_hide ()     { printf ("\x1b[?25l"); }
 static void ansi_cursor_show ()     { printf ("\x1b[?25h"); }
 static void ansi_cursor_save ()     { printf ("\x1b[s");    }
 static void ansi_cursor_restore ()  { printf ("\x1b[u");    }
-
-#endif
 
 static void print_vu_meter (float level, float hold, bool clip, bool xrun) {
   if (level < 0) level = 0;
@@ -955,6 +960,9 @@ static void print_vu_meter (float level, float hold, bool clip, bool xrun) {
   std::cout << output << " \n" << std::flush;
 }
 
+#endif // DONT_USE_ANSI
+
+
 // c_deconvolver "passthrough" red tape for audio backend
 
 bool c_deconvolver::audio_init (std::string clientname,
@@ -971,17 +979,26 @@ bool c_deconvolver::audio_init (std::string clientname,
     debug ("return (true)");
     return true;
   }
+  set_stereo (prefs_->request_stereo);
 #endif
   
   debug ("end (false)");
   return false;
 }
 
-bool c_deconvolver::set_stereo (bool b) {
-  if (prefs_) prefs_->request_stereo = b;
-  if (audio) audio->unregister ();
-  if (audio) return audio->register_input (b);
-  return false;
+bool c_deconvolver::set_stereo (bool b) { CP 
+  if (prefs_) { CP prefs_->request_stereo = b; }
+  if (!audio) { CP return false; }
+  if (audio->is_stereo == b) { CP return true; }
+  debug ("b=%d", (int) b);
+  
+  bool rs = audio->set_stereo (b);
+  //audio->unregister ();
+  //bool ri = audio->register_input (b);
+  //bool ro = audio->register_output (false);
+  //bool ret = ri && ro;
+  //debug ("rs=%d, ri=%d, ro=%d, ret=%d", (int) rs, (int) ri, (int) ro, (int) ret);
+  return rs;//ret;
 }
 
 bool c_deconvolver::audio_shutdown () {CP
@@ -989,8 +1006,10 @@ bool c_deconvolver::audio_shutdown () {CP
   return true; // for now
 }
 
-bool c_deconvolver::audio_ready () {CP
-  return audio && audio->ready ();
+bool c_deconvolver::audio_ready () {
+  bool ret = audio && audio->ready ();
+  debug ("ret=%d", (int) ret);
+  return ret;
 }
 
 bool c_deconvolver::audio_playback_done () {
@@ -1186,7 +1205,9 @@ int c_deconvolver::on_arm_rec_loop (void *data) {
 }
 
 bool c_deconvolver::has_dry () {
-  return have_dry_ && (dry_.size () > 0);
+  bool ret = have_dry_ && (dry_.size () > 0);
+  //debug ("ret=%d", (int) ret);
+  return ret;
 }
 
 // other c_deconvolver member functions
