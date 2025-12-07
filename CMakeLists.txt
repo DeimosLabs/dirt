@@ -35,6 +35,11 @@ pkg_check_modules(SNDFILE REQUIRED sndfile)
 pkg_check_modules(FFTW3   REQUIRED fftw3)
 pkg_check_modules(JACK            jack)
 
+if (DEBUG)
+    message(STATUS "DEBUG enabled: linking against readline")
+    pkg_check_modules(READLINE REQUIRED readline)
+endif()
+
 # --- Executable target ---
 add_executable(dirt)
 
@@ -78,6 +83,7 @@ target_include_directories(dirt PRIVATE
 target_link_libraries(dirt PRIVATE
     ${SNDFILE_LIBRARIES}
     ${FFTW3_LIBRARIES}
+    ${REALINE_LIBRARIES}
 )
 
 if (GUI)
