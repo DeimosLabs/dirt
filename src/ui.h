@@ -36,8 +36,28 @@
 #include "wxwidgets/mainwindow.h"
 #include "deconvolv.h"
 
+extern int64_t get_unique_id ();
+
+class ir_entry {
+public:
+  int64_t id = 0;
+  int samplerate = 48000;
+  std::vector<float> l;
+  std::vector<float> r;
+  std::string path;
+  bool dirty = false;
+  ir_entry () { id = ::get_unique_id (); }
+};
+
 class c_customwidget;
 class c_meterwidget;
+
+enum class meterwarn {
+  REC,
+  CLIP,
+  XRUN,
+  MAX
+};
 
 class c_mainwindow : public ui_mainwindow {
 public:
@@ -78,6 +98,7 @@ public:
   void on_btn_dry_save (wxCommandEvent &ev);
   void on_btn_inputdir_scan (wxCommandEvent &ev);
   void on_btn_inputdir_browse (wxCommandEvent &ev);
+  void on_btn_outputdir_browse (wxCommandEvent &ev);
   void on_btn_align_manual (wxCommandEvent &ev);
   void on_btn_inputfiles_add (wxCommandEvent &ev);
   void on_btn_inputfiles_clear (wxCommandEvent &ev);
@@ -100,11 +121,15 @@ private:
   void enable (wxWindow *w) { set_enable (w, true); }
   int add_files (std::vector<std::string> list);
   int add_dir (std::string dir, bool recurs);
+  int update_ir_list ();
+  bool add_ir (ir_entry &entry);
   
+  std::vector <ir_entry> ir_files;
   wxTimer timer;
   std::string cwd;
   bool init_audio_done = false;
   bool last_forcemono = false;
+  int last_ir_count = 0;
   long int mode = ID_FILE;
   long int prev_mode = -1;
   audiostate prev_audio_state = (audiostate) -1;
@@ -233,7 +258,7 @@ protected:
   bool deleted;
   int click_distance;
   wxWindow *parent;
-  wxBitmap base_image;
+  wxBitmap img_base;
   wxBitmap img_overlay;
   wxBitmap image;
   wxFontMetrics fm;
@@ -254,6 +279,8 @@ public:
   virtual void update (wxWindowDC &dc);
   virtual void on_resize_event (wxSizeEvent &ev);
   
+  virtual void render_gradient_bar ();
+  
   //void set_audio_client (c_audioclient *cli);
   void set_stereo (bool b);
   void set_l (float level, float hold, bool clip = false, 
@@ -266,38 +293,45 @@ public:
   float r       = 0.0;
 
   wxFont tinyfont;
-  bool show_rec   = false;   // enable red circle / recording indicator
-  bool show_clip  = true;    // warn when clipping
-  bool show_xrun  = true;    // warn when xruns detected
+  //bool  show_rec    = false;  // enable red circle / recording indicator
+  //bool  show_clip   = false;  // warn when clipping, (for now) also used for xruns
+  int   clip_size    = 0;
+  int   rec_size     = 0;
+  float hold_l      = 0.0;
+  float hold_r      = 0.0;
+  bool  clip_l      = false;
+  bool  clip_r      = false;
+  bool  rec         = true;
+  bool  xrun        = false;
 
 protected:
 private:
   
-  void draw_bar (wxDC &dc, int t, int h, bool is_right, float level, float hold, 
-                   bool clip = false, bool xrun = false, bool show_rec = false);
+  /*void draw_bar (wxDC &dc, int t, int h, bool is_right, float level, float hold, 
+                   bool clip = false, bool xrun = false, bool show_rec = false);*/
+  void draw_bar (wxDC &dc, int t, int h, bool is_right, float level, float hold);
   
   // drawing related stuff
   // floats for math precision, but these are in pixels
   bool stereo   = true; // TODO: eventually arbitrary num. of channels?
   wxBitmap img_bar;
   wxBitmap img_bar_sub;
+  wxBitmap img_warning [(int) meterwarn::MAX];
   /*float center_line  = 0.0;
   float bar_size     = 0.0;
   float center_pos   = 0.0;
   float pos_bar1     = 0.0;
   float pos_bar2     = 0.0;
   float size_bar     = 0.0;*/
-  int   clip_width   = -1;  // for "clip" indicator on right
-  int   clip_height  = -1;
-  int   rec_width    = -1;
-  int   rec_height   = -1;
-  bool last_stereo   = false;
+  int   met_len      = -1;
+  bool  last_stereo  = false;
 
-  float hold_l  = 0.0;
-  float hold_r  = 0.0;
-  bool  clip_l  = false;
-  bool  clip_r  = false;
-  bool  xrun    = false;
+  
+  // length, thickness: x/y size depending if horiz. or vertical
+  int ln, th;
+  // position of bars along the widget's total thickness
+  // left t1->t2, right t3->t4, tp is padding between black and inner bars
+  int t1, t2, t3, t4, tp;
 };
 
 class c_waveformwidget : public c_customwidget {
@@ -321,10 +355,25 @@ private:
   std::vector<float> *wavdata = NULL;
 };
 
-
 int wx_main (int argc, char **argv, c_deconvolver *p);
 
 extern c_app *g_app;
+
+// example derived class from c_customwidget
+
+class c_testwidget : public c_customwidget {
+public:
+  c_testwidget (wxWindow *parent = NULL,
+                int id = -1,//ID_FOREIGN,
+                wxPoint pos = wxDefaultPosition,
+                wxSize size = wxDefaultSize,
+                int border = -1)
+  : c_customwidget (parent, id) {}
+  
+  virtual void render_base_image ();
+   void update (wxWindowDC &dc);
+};
+
 
 #endif  // USE_WXWIDGETS
 

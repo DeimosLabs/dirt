@@ -1105,10 +1105,9 @@ void c_deconvolver::set_vu_r (float l, float h, bool c, bool x) {
 }
 
 void c_deconvolver::set_vu_post () {
-  int timeleft = audio->get_play_left () / audio->samplerate;
     ansi_clear_to_endl ();
     if (audio->state == audiostate::PLAYREC) {
-      int timeleft = audio->get_play_left () / audio->samplerate;
+      int timeleft = audio->get_play_remaining () / audio->samplerate;
       std::cout << "Recording, " << timeleft << " seconds left\n";
     } else {
       std::cout << "Press enter to play and record sweep...\n";

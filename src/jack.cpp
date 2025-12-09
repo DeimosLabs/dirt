@@ -325,9 +325,9 @@ int /*c_jackclient::*/j_get_capture_ports (jack_client_t *client,
 }
 
 int j_get_default_capture (jack_client_t *c, int howmany, std::vector<std::string> &v)
-    { return j_get_capture_ports (c, howmany, v, false); }
+    { CP return j_get_capture_ports (c, howmany, v, false); }
 int j_get_default_playback (jack_client_t *c, int howmany, std::vector<std::string> &v)
-    { return j_get_playback_ports (c, howmany, v, false); }
+    { CP return j_get_playback_ports (c, howmany, v, false); }
   
 
 #define MAX_JACK_PORTS 999

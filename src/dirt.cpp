@@ -43,6 +43,16 @@
 extern char *g_dirt_build_timestamp;
 extern char *g_dirt_version;
 
+/*extern*/ int64_t get_unique_id () { CP
+  static int64_t unique_id = 0;
+  return ++unique_id;
+}
+
+void _bp () {
+  fflush (stdin);
+  getchar ();
+}
+
 c_audioclient::c_audioclient (c_deconvolver *dec) {
   debug ("start");
   dec_ = dec;
@@ -50,7 +60,7 @@ c_audioclient::c_audioclient (c_deconvolver *dec) {
   debug ("end");
 }
 
-c_audioclient::~c_audioclient () { }
+c_audioclient::~c_audioclient () { CP }
 
 void c_audioclient::peak_acknowledge () {
   peak_plus_l = 0;
@@ -75,7 +85,7 @@ bool c_audioclient::has_recording () const {
   return (sig_in_l.size () > 0 || sig_in_r.size () > 0) && state == audiostate::IDLE;
 }
 
-size_t c_audioclient::get_rec_left () {
+size_t c_audioclient::get_rec_remaining () {
   if (rec_index <= 0)
     return 0;
     
@@ -86,7 +96,7 @@ size_t c_audioclient::get_rec_left () {
   return 0;
 }
 
-size_t c_audioclient::get_play_left () {
+size_t c_audioclient::get_play_remaining () {
   if (index <= 0)
     return 0;
     

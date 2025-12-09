@@ -12,7 +12,7 @@
 #include "dirt.h"
 
 struct s_prefs {
-  opmode mode = opmode::DECONVOLVE;
+  opmode mode = opmode::DECONVOLVE; // this is mainly to guide CLI on what to do
 
   std::string dry_path; // file, JACK port, or empty (generate one)
   std::string wet_path; // file, or JACK port

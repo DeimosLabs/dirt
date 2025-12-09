@@ -61,9 +61,12 @@ class c_jackclient;
 #ifdef BP
 #undef BP
 #endif
-#define BP {debug("\x1B[1;31m____BREAKPOINT____\x1B[1;37m");readline(NULL);}
-#define DIE {debug("\x1B[1;31m____DIE____\x1B[1;37m");for(;;)sleep(1);}
+void _bp ();
+#define BP {debug("\x1B[1;31m\x1B[5m____BREAKPOINT____\x1B[0;37m\x1B\25[m");_bp();}
+#define DIE {debug("\x1B[1;31m\x1B[5m____!!!DIE!!!____\x1B[1;37m\x1B\25[m");for(;;)sleep(1);}
 
+#define SAMPLERATE_MIN                  8000
+#define SAMPLERATE_MAX                  192000
 #define MARKER_FREQ                     1000 // in Hz
 #define MAX_IR_LEN                      10.0
 #define LOWPASS_F                       22000 // gets clamped to nyquist freq
@@ -82,8 +85,8 @@ class c_jackclient;
 #define DEFAULT_MARKER_SEC              0.1
 #define DEFAULT_MARKGAP_SEC             1.0
 #define DEFAULT_ZEROPEAK                true // try to zero-align peak?
-#define ANSI_VU_METER_MIN_SIZE          64 // for our ascii-art [---- ] meters
-#define VU_REDRAW_EVERY            0.03 // in seconds
+#define ANSI_VU_METER_MIN_SIZE          64 // for our ascii-art [====--] meters
+#define VU_REDRAW_EVERY                 0.03 // in seconds
 #define VU_FALL_SPEED                   0.05
 #define VU_PEAK_HOLD                    0.5
 #define VU_CLIP_HOLD                    1.0
@@ -120,6 +123,19 @@ enum __dirt_ansi_colors {
   COLOR_GREY,         COLOR_RED,          COLOR_GREEN,       COLOR_YELLOW,
   COLOR_BLUE,         COLOR_MAGENTA,      COLOR_CYAN,        COLOR_WHITE,
   COLOR_RESET
+};
+
+enum class waverror {
+  NONE,
+  OPEN,
+  LOAD,
+  SAVE,
+  READ,
+  WRITE,
+  NAME,
+  SAMPLERATE,
+  CHANNELS,
+  BITDEPTH
 };
 
 enum class audio_driver {
@@ -282,8 +298,8 @@ public:
   const std::vector<float> &get_recorded_r () const { return sig_in_r; }
   void clear_recording ();
   bool has_recording () const;
-  size_t get_rec_left ();
-  size_t get_play_left ();
+  size_t get_rec_remaining ();
+  size_t get_play_remaining ();
   
   // call this after reading and displaying peak/clip/error data
   void peak_acknowledge ();

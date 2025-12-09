@@ -86,8 +86,10 @@ class c_waveformwidget;
 #define ID_ZEROALIGN 10004
 #define ID_TRIM_START 10036
 #define ID_TRIM_END 10055
-#define ID_CHECKBOX 10067
+#define ID_ABORT 10036
+#define ID_AUTOSAVE 10067
 #define ID_OVERWRITE 10036
+#define ID_IGNORESR 10068
 #define ID_DEBUG 10027
 #define ID_SWEEP_THR 10035
 #define ID_IR_START_THR 10042
@@ -95,7 +97,7 @@ class c_waveformwidget;
 #define ID_CHN_OFFSET 10041
 #define ID_PROCESS 10045
 #define ID_PANEL1 10047
-#define ID_LISTBOX 10056
+#define ID_IRFILES 10056
 #define ID_BUTTON 10057
 #define ID_BUTTON1 10058
 #define ID_WAVEFORM 10052
@@ -205,13 +207,17 @@ public:
     wxCheckBox* chk_zeroalign;
     wxCheckBox* chk_trim_start;
     wxCheckBox* chk_trim_end;
+    wxCheckBox* chk_abort;
+    wxCheckBox* chk_autosave;
     wxCheckBox* chk_overwrite;
+    wxCheckBox* chk_ignore_sr;
     wxCheckBox* chk_debug;
     wxSpinCtrl* spin_sweep_thr;
     wxSpinCtrl* spin_ir_start_thr;
     wxSpinCtrl* spin_ir_end_thr;
     wxSpinCtrl* spin_chn_offset;
     wxButton* btn_process;
+    wxListBox* list_irfiles;
     c_waveformwidget* m_waveform;
     wxStaticText* text_statusbar;
     wxButton* btn_about;

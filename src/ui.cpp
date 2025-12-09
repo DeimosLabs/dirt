@@ -38,6 +38,8 @@ static std::string g_backend_names [] = {
   "unknown"
 };
 
+
+////////////////////////////////////////////////////////////////////////////////
 // c_mainwindow
 
 wxBEGIN_EVENT_TABLE (c_mainwindow, ui_mainwindow)
@@ -56,6 +58,7 @@ wxBEGIN_EVENT_TABLE (c_mainwindow, ui_mainwindow)
   EVT_BUTTON (ID_DRY_SAVE, c_mainwindow::on_btn_dry_save)
   EVT_BUTTON (ID_INPUTDIR_SCAN, c_mainwindow::on_btn_inputdir_scan)
   EVT_BUTTON (ID_INPUTDIR_BROWSE, c_mainwindow::on_btn_inputdir_browse)
+  EVT_BUTTON (ID_OUTPUTDIR_BROWSE, c_mainwindow::on_btn_outputdir_browse)
   EVT_BUTTON (ID_INPUTFILES_ADD, c_mainwindow::on_btn_inputfiles_add)
   EVT_BUTTON (ID_INPUTFILES_CLEAR, c_mainwindow::on_btn_inputfiles_clear)
   EVT_BUTTON (ID_ALIGN_MANUAL, c_mainwindow::on_btn_align_manual)
@@ -77,6 +80,17 @@ c_mainwindow::c_mainwindow (c_deconvolver *d)
     debug ("No deconvolver given!");
   }
   
+  ir_entry ir;
+  ir.path = "abcd";
+  ir.samplerate = 48000;
+  ir.dirty = true;
+  add_ir (ir);
+  
+  comb_samplerate->Append ("44100");
+  comb_samplerate->Append ("48000");
+  comb_samplerate->Append ("96000");
+  comb_samplerate->Append ("192000");
+  
   list_backend->Append ("JACK");  
   list_backend->SetSelection (0);
   list_align->Append ("Marker detection");
@@ -91,8 +105,9 @@ c_mainwindow::c_mainwindow (c_deconvolver *d)
   
   Layout ();
   Fit ();
-  SetSize (GetSize () + wxSize (0, 100));
-  SetSizeHints (GetSize ());
+  wxSize sz = GetClientSize ();
+  SetSize (sz + wxSize (0, 100));
+  SetSizeHints (sz);
   
   set_mode (ID_FILE);
   
@@ -103,6 +118,24 @@ c_mainwindow::c_mainwindow (c_deconvolver *d)
 
 c_mainwindow::~c_mainwindow () {
   CP
+}
+
+bool c_mainwindow::add_ir (ir_entry &ent) { CP
+  debug ("got IR entry '%s' size l=%d,r=%d, %dHz, %s", 
+         ent.path.c_str (), ent.l.size (), ent.r.size (), ent.samplerate,
+         ent.dirty ? "dirty" : "not dirty");
+  if (1||ent.path.size () > 0 && ent.l.size () > 0) {
+    //ir_entry newir;
+    ir_files.push_back (ent);
+    //int i = ir_files.size () - 1;
+    //ir_files [i].path = ent.path;
+    //ir_files [i].l = ent.l;
+    //ir_files [i].r = ent.r;
+    return true;
+  }
+  debug ("empty IR, ignoring");
+  
+  return false;
 }
 
 void c_mainwindow::on_timer (wxTimerEvent &ev) {
@@ -131,7 +164,7 @@ void c_mainwindow::on_timer (wxTimerEvent &ev) {
       do_full_update = true;
     } //else {CP}
     
-    if (s == audiostate::NOTREADY) { CP // audio offline
+    if (s == audiostate::NOTREADY) {    // audio offline
       disable (btn_play);
       btn_audio->SetLabel ("Connect");
       init_audio_done = false;
@@ -139,22 +172,23 @@ void c_mainwindow::on_timer (wxTimerEvent &ev) {
                s == audiostate::MONITOR) { // on, not playing
       if (!dec->has_dry ()) {           // ready to play
         disable (btn_play);
-      } else { debug ("state %d", dec->audio->state);
+      } else {
+        //debug ("state %d", dec->audio->state);
         enable (btn_play);
       }
       btn_play->SetLabel ((mode == ID_ROUNDTRIP) ? "Record" : "Play");
       btn_audio->SetLabel ("Disconnect");
     } else if (s == audiostate::PLAY ||
                s == audiostate::PLAYMONITOR ||
-               s == audiostate::PLAYREC) { CP// something's playing?
-      if (!dec->has_dry ()) { CP           // uhhh wut
+               s == audiostate::PLAYREC) {   // something's playing/recording
+      if (!dec->has_dry ()) { CP             // uhhh wut
         debug ("audio: playing something but what?");
         disable (btn_play);
-      } else { CP                          // playing dry sweep
+      } else {                               // playing dry sweep
         enable (btn_play);
         int sr = dec->prefs_ ? dec->prefs_->sweep_sr : 
                                atoi (comb_samplerate->GetValue ().c_str ());
-        size_t sec_left = dec->audio->get_play_left () / (size_t) sr;
+        size_t sec_left = dec->audio->get_play_remaining () / (size_t) sr;
         char buf [32];
         snprintf (buf, 31, "Stop (%ld)", sec_left);
         //debug ("sr=%d, sec_left=%d", sr, sec_left);
@@ -180,6 +214,27 @@ void c_mainwindow::on_timer (wxTimerEvent &ev) {
       enable (btn_inputdir_scan);
     else
       disable (btn_inputdir_scan);
+    
+    if (list_inputfiles->GetCount () > 0 && dec->has_dry ())
+      enable (btn_process);
+    else
+      {}//disable (btn_process); TEMP!!!!
+    
+    if (chk_autosave->GetValue ()) {
+      enable (chk_overwrite);
+    } else {
+      disable (chk_overwrite);
+    }
+  
+    int n = ir_files.size ();
+    if (n != last_ir_count) {
+      debug ("updating ir list (have %d, last count %d)", n, last_ir_count);
+      last_ir_count = ir_files.size ();
+      CP
+      update_ir_list ();
+    } else {
+      //debug ("ir list up to date, (%d vs %d)", n, last_ir_count);
+    }
   }
   if (do_full_update)
     set_mode (mode);
@@ -195,6 +250,10 @@ bool c_mainwindow::audio_ready () {
   if (!dec->audio) {
     debug ("deconvolver has no audio client");
     return false;
+  }
+  if (dec->audio->state == audiostate::IDLE) {
+    debug ("deconvolver idle, arming record (monitor mode)");
+    dec->audio->arm_record ();
   }
   if (dec->audio->state == audiostate::NOTREADY ||
       dec->audio->state == audiostate::IDLE) {
@@ -395,7 +454,7 @@ void c_mainwindow::set_prefs (s_prefs *prefs) {
 void c_mainwindow::get_prefs (s_prefs *prefs) {
   prefs->sweep_seconds = spin_dry_length->GetValue ();
   int sr = atoi (comb_samplerate->GetValue ().c_str ());
-  if (sr > 0 && sr < 192000)
+  if (sr > SAMPLERATE_MIN && sr < SAMPLERATE_MAX)
     prefs->sweep_sr = sr;
   prefs->sweep_f1 = spin_dry_f1->GetValue ();
   prefs->sweep_f2 = spin_dry_f2->GetValue ();
@@ -420,6 +479,11 @@ void c_mainwindow::get_prefs (s_prefs *prefs) {
 void c_mainwindow::set_mode (long int _mode) {
   struct widget_status *wl;
   mode = _mode;
+  
+  if (!dec) {
+    debug ("no deconvolver object");
+  }
+  dec->prefs_->mode = opmode::GUI;
   
   static struct widget_status widget_status_file [] = {
     // dry sweep tab
@@ -458,6 +522,7 @@ void c_mainwindow::set_mode (long int _mode) {
     { ID_ZEROALIGN,            true  },
     { ID_TRIM_START,           true  },
     { ID_TRIM_END,             true  },
+    { ID_AUTOSAVE,             true  },
     { ID_OVERWRITE,            true  },
     { ID_DEBUG,                true  },
     { ID_SWEEP_THR,            true  },
@@ -505,6 +570,7 @@ void c_mainwindow::set_mode (long int _mode) {
     { ID_ZEROALIGN,            true  },
     { ID_TRIM_START,           true  },
     { ID_TRIM_END,             true  },
+    { ID_AUTOSAVE,             true  },
     { ID_OVERWRITE,            true  },
     { ID_DEBUG,                true  },
     { ID_SWEEP_THR,            true  },
@@ -552,6 +618,7 @@ void c_mainwindow::set_mode (long int _mode) {
     { ID_ZEROALIGN,            false },
     { ID_TRIM_START,           false },
     { ID_TRIM_END,             false },
+    { ID_AUTOSAVE,             false },
     { ID_OVERWRITE,            false },
     { ID_DEBUG,                false },
     { ID_SWEEP_THR,            false },
@@ -610,7 +677,6 @@ void c_mainwindow::set_mode (long int _mode) {
       set_enable (w, wl [i].is_on);
     }
   }
-  
   
   if (do_audio) {
     if (dec && dec->audio) {
@@ -691,7 +757,10 @@ void c_mainwindow::on_btn_dryfile_browse (wxCommandEvent &ev  ) {
     std::string fn = std::string (f.GetPath ());
     text_dryfile->SetValue (fn);
     if (!dec) return;
-    dec->load_sweep_dry (fn.c_str ());
+    bool b = dec->load_sweep_dry (fn.c_str ());
+    if (!b) {
+      show_message ("Failed to load dry sweep: " + fn);
+    }
   }
 }
 
@@ -765,7 +834,7 @@ void c_mainwindow::on_btn_dry_save (wxCommandEvent &ev) {
       ok = true;
     }*/
     int sr = atoi (srtext.c_str ());
-    if (sr < 0 || sr > 192000) {
+    if (sr < SAMPLERATE_MIN || sr > SAMPLERATE_MAX) {
       show_error ("Invalid sample rate:\n" + srtext);
     } else {
       if (!write_mono_wav (dest.c_str (), drysweep, sr)) {
@@ -800,6 +869,16 @@ void c_mainwindow::on_btn_inputdir_browse (wxCommandEvent &ev) {
   if (ret != wxID_CANCEL) {
     std::string fn = std::string (f.GetPath ());
     text_inputdir->SetValue (fn);
+  }
+}
+
+void c_mainwindow::on_btn_outputdir_browse (wxCommandEvent &ev) {
+  CP
+  wxDirDialog f (this, "Choose destination directory");
+  int ret = f.ShowModal ();
+  if (ret != wxID_CANCEL) {
+    std::string fn = std::string (f.GetPath ());
+    text_outputdir->SetValue (fn);
   }
 }
 
@@ -874,12 +953,68 @@ void c_mainwindow::on_btn_play (wxCommandEvent &ev) {
 
 void c_mainwindow::on_btn_process (wxCommandEvent &ev) {
   CP
+  std::string wetfile;
+  int i, n;
+  
+  if (!dec) {
+    printf ("No deconvolver object, can't process! (this shouldn't happen)\n");
+    return;
+  }
+  
+  if (!dec->has_dry ()) {
+    show_message ("No DRY sweep has been loaded yet");
+  }
+  
+  n = list_inputfiles->GetCount ();
+  printf ("got %d files:\n", n);
+  
+  dec->audio_stop ();
+  get_prefs (dec->prefs_);
+  debug ("mono: %s", dec->prefs_->request_stereo ? "true" : "false");
+  //dec->set_dry_from_buffer (...);
+  
+  for (i = 0; i < n; i++) {
+    wetfile = std::string (list_inputfiles->GetString (i));
+    printf ("  %d: '%s'\n", i, wetfile.c_str ());
+    bool b = dec->load_sweep_wet (wetfile.c_str ());
+    if (!b) {
+      printf ("can't load file %s, ", wetfile.c_str ());
+      if (chk_abort->GetValue ()) {
+        printf ("aborting\n");
+        i = n;
+      } else {
+        printf ("skipping\n");
+      }
+      break;
+    } else {
+      debug ("loaded '%s'", wetfile.c_str ());
+    }
+  }
 }
 
 int c_mainwindow::add_files (std::vector<std::string> list) {
   CP
   // not using this, see on_btn_inputfiles_add
   int count = 0;
+  return count;
+}
+
+int c_mainwindow::update_ir_list () {
+  int count, i, n = ir_files.size ();
+  debug ("n=%d", n);
+  list_irfiles->Clear ();
+  
+  for (i = 0; i < n; i++) {
+    if (1||ir_files [i].path.size () > 0 &&
+        ir_files [i].l.size () > 0 &&
+        ir_files [i].r.size () > 0) {
+      count++;
+      list_irfiles->Append (ir_files [i].path);
+    }
+  }
+  debug ("n=%d, count=%d, %d IR entries, %d list entries", 
+          n, count, ir_files.size (), list_irfiles->GetCount ());
+          
   return count;
 }
 
@@ -939,6 +1074,7 @@ int c_mainwindow::add_dir (std::string dirname, bool recurs) {
   return count;
 }
 
+// plumbing for vu data
 void c_mainwindow::set_vu_l (float level, float hold, bool clip, bool xrun) 
   { pn_meter->set_l (level, hold, clip, xrun); }
   
@@ -963,6 +1099,7 @@ void c_deconvolver_gui::set_vu_r (float level, float hold, bool clip, bool xrun)
 }
 
 
+////////////////////////////////////////////////////////////////////////////////
 // c_app
 
 c_app::c_app (c_deconvolver *d)
@@ -1028,13 +1165,8 @@ int wx_main (int argc, char **argv, c_deconvolver *dec) {
 }
 
 
-/*
- * Custom widget example/template - (usually) base class.
- *
- * Widget class derived directly from wxPanel, where we override/bind
- * paint events etc. to implement our own appearance and behaviour.
- */
-
+////////////////////////////////////////////////////////////////////////////////
+// c_customwidget - parent class for other widget types
 
 enum {
   ASKYESNO_NO = 0,
@@ -1160,14 +1292,6 @@ void c_customwidget::inspect () {
   debug ("end");
 }
 
-
-#ifdef SHOW_CUSTOMWIDGET_TEST_STUFF
-char *c_customwidget::get_example_label_text () {
-  return "This is an instance of c_customwidget.";
-}
-#endif
-
-
 /* Typically, this funciton would react on resize, or other event that
  * invalidates the base image. */
 void c_customwidget::render_base_image () {
@@ -1180,64 +1304,26 @@ void c_customwidget::render_base_image () {
   wxBitmap /*dummy_bitmap,*/ text_image;
   wxMemoryDC dc;
   
-  GetSize (&width, &height);
+  GetClientSize (&width, &height);
   //debug ("start, width=%d, height=%d", width, height);
   
   /*int w = width - 1;
   int h = height - 1;*/
   int gradwidth = width / 5;
-  base_image = wxBitmap (width, height, 32);
+  img_base = wxBitmap (width, height, 32);
   img_overlay = wxBitmap (width, height, 32);
   
-  dc.SelectObject (base_image);
+  dc.SelectObject (img_base);
   dc.SetBackground (col_bg);
   dc.Clear ();
   dc.SelectObject (wxNullBitmap);
   
   //c_misc::clear_bitmap (&img_overlay, 255, 255, 255, 32);
   
-#ifdef SHOW_CUSTOMWIDGET_TEST_STUFF
-  
-  /*wxBitmap img_line1 = c_misc::render_text_label ("Custom widget",
-                                                  smallboldfont,
-                                                  col_fg,
-                                                  col_bg,
-                                                  width,
-                                                  height,
-                                                  LABEL_ALIGN_LEFT,
-                                                  gradwidth,
-                                                  0);
-  wxBitmap img_line2 = c_misc::render_text_label (get_example_label_text (),
-                                                  font,
-                                                  col_fg,
-                                                  col_bg,
-                                                  width,
-                                                  height,
-                                                  LABEL_ALIGN_LEFT,
-                                                  gradwidth,
-                                                  0);
-
-  dc.SelectObject (base_image);
-  dc.DrawBitmap (img_line1, (width / 2) - (img_line1.GetWidth () / 2), 0);
-  dc.DrawBitmap (img_line2, (width / 2) - (img_line2.GetWidth () / 2), 
-                            (height / 2) - (img_line1.GetHeight () / 2));*/
-  
-  /* now the lines around the border*/
-  dc.SelectObject (base_image);
-  dc.SetPen (wxPen (col_fg));
-  dc.DrawLine (0, 0, width, 0);
-  dc.DrawLine (0, 0, 0, height);
-  dc.DrawLine (0, height - 1, width - 1, height - 1);
-  dc.DrawLine (width - 1, 0, width - 1, height - 1);
-  dc.SelectObject (wxNullBitmap);
-  
-#endif
-  
   base_image_valid = true;
   
   //debug ("end");
 }
-
 
 /* Typically, this function would react to minor appearance changes, such
  * as visual feedback of mouse events and so on. */
@@ -1248,7 +1334,7 @@ void c_customwidget::update (wxWindowDC &dc) {
   
   //debug ("start");
   
-  GetSize (&new_width, &new_height);
+  GetClientSize (&new_width, &new_height);
   
   if (!base_image_valid || new_width != width || new_height != height) {
     render_base_image ();
@@ -1258,7 +1344,7 @@ void c_customwidget::update (wxWindowDC &dc) {
   // ??? keeping this for reference
   //wxGraphicsContext *gc = wxGraphicsContext::Create (dc);
   
-  dc.DrawBitmap (base_image, 0, 0);
+  dc.DrawBitmap (img_base, 0, 0);
   //dc.DrawBitmap (img_overlay, 0, 0);
   
   /* Add overlay/highlight indicators etc.
@@ -1267,12 +1353,10 @@ void c_customwidget::update (wxWindowDC &dc) {
   //debug ("end");
 }
 
-
 void c_customwidget::update () {
   wxClientDC dc (this);
   update (dc);
 }
-
 
 /*void c_customwidget::schedule_deletion () {
   debug ("start");
@@ -1280,7 +1364,6 @@ void c_customwidget::update () {
   deleted = true;
   debug ("end");
 }
-
 
 void c_customwidget::idle_callback (wxIdleEvent &ev) {
   //debug ("start");
@@ -1292,12 +1375,10 @@ void c_customwidget::idle_callback (wxIdleEvent &ev) {
   //debug ("end");
 }*/
 
-
 void c_customwidget::on_visible_callback (wxShowEvent &ev) {
   base_image_valid = false;
   update ();
 }
-
 
 void c_customwidget::on_paint_event (wxPaintEvent &ev) {
   //debug ("start");
@@ -1305,7 +1386,6 @@ void c_customwidget::on_paint_event (wxPaintEvent &ev) {
   update (dc);
   //debug ("end");
 }
-
 
 // TODO: find out in which cases (if any) this x,y < 0 differs from
 // mapping EVT_ENTER_WINDOW - see $DOC/classwx_mouse_event.html
@@ -1328,7 +1408,6 @@ void c_customwidget::on_mousemove (wxMouseEvent &ev) {
   //debug ("end");
 }
 
-
 bool c_customwidget::check_click_distance (int which) {
   if (which < 0 || which >= 8)
     return false;
@@ -1341,7 +1420,6 @@ bool c_customwidget::check_click_distance (int which) {
   
   return true;
 }
-
 
 void c_customwidget::on_mousedown_left (wxMouseEvent &ev) {
   debug ("start");
@@ -1356,7 +1434,6 @@ void c_customwidget::on_mousedown_left (wxMouseEvent &ev) {
   debug ("end");
 }
 
-
 void c_customwidget::on_mouseup_left (wxMouseEvent &ev) {
   debug ("start");
   get_xy (ev);
@@ -1369,7 +1446,6 @@ void c_customwidget::on_mouseup_left (wxMouseEvent &ev) {
   debug ("end");
 }
 
-
 void c_customwidget::on_mousedown_middle (wxMouseEvent &ev) {
   debug ("start");
   get_xy (ev);
@@ -1379,7 +1455,6 @@ void c_customwidget::on_mousedown_middle (wxMouseEvent &ev) {
   update ();
   debug ("end");
 }
-
 
 void c_customwidget::on_mouseup_middle (wxMouseEvent &ev) {
   debug ("start");
@@ -1393,7 +1468,6 @@ void c_customwidget::on_mouseup_middle (wxMouseEvent &ev) {
   debug ("end");
 }
 
-
 void c_customwidget::on_mousedown_right (wxMouseEvent &ev) {
   debug ("start");
   get_xy (ev);
@@ -1403,7 +1477,6 @@ void c_customwidget::on_mousedown_right (wxMouseEvent &ev) {
   update ();
   debug ("end");
 }
-
 
 void c_customwidget::on_mouseup_right (wxMouseEvent &ev) {
   debug ("start");
@@ -1417,13 +1490,11 @@ void c_customwidget::on_mouseup_right (wxMouseEvent &ev) {
   debug ("end");
 }
 
-
 void c_customwidget::on_mousewheel (wxMouseEvent &ev) {
   //debug ("start");
   update ();
   //debug ("end");
 }
-
 
 void c_customwidget::on_mouseleave (wxMouseEvent &ev) {
   //debug ("start");
@@ -1436,7 +1507,6 @@ void c_customwidget::on_mouseleave (wxMouseEvent &ev) {
   //debug ("end");
 }
 
-
 void c_customwidget::on_resize_event (wxSizeEvent &ev) {
   //debug ("start");
   
@@ -1446,7 +1516,7 @@ void c_customwidget::on_resize_event (wxSizeEvent &ev) {
   //debug ("end");
 }
 
-
+////////////////////////////////////////////////////////////////////////////////
 // c_meterwidget
 
 c_meterwidget::c_meterwidget (wxWindow *parent,
@@ -1462,228 +1532,263 @@ void c_meterwidget::on_resize_event (wxSizeEvent &ev) { CP
   c_customwidget::on_resize_event (ev);
 }
 
+void c_meterwidget::render_gradient_bar () {
+  img_bar = wxBitmap (width, height, 32);
+  int bw = img_bar.GetWidth ();
+  int bh = img_bar.GetHeight ();
+  
+  // lookup table for each subpixel, len x 3 array
+  int i;
+  int len = vertical ? bh : bw;
+  int mid = len * 2 / 3;  // point 0..1 where color is exactly yellow
+  char lutR [len];
+  char lutG [len];
+  char lutB [len];
+  
+  tinyfont = wxSystemSettings::GetFont (wxSYS_SYSTEM_FONT).MakeBold ();
+  
+  for (i = 0; i < mid; i++) { // from green to yellow
+    lutR [i] = i * 255 / mid;
+    lutG [i] = 255;
+    lutB [i] = 0;
+  }
+  for (; i < len; i++) {      // from yellow to red
+    lutR [i] = 255;
+    //float t = (float) ((i - len - 1) - mid) / (float) (mid - len);
+    float t = (float)(i - mid) / (float)((len - 1) - mid);
+    t = std::clamp(t, 0.0f, 1.0f);
+    lutG[i] = 255.0f * (1.0f - t);
+    lutB [i] = 0;
+  }
+  
+  // ...now write actual pixels to bitmap
+  wxAlphaPixelData pdata (img_bar);
+  wxAlphaPixelData::Iterator p (pdata);
+  p.MoveTo (pdata, 0, 0);
+  for (int y = 0; y < bh; y++) {
+    wxAlphaPixelData::Iterator rowstart = p;
+    for (int x = 0; x < bw; x++, p++) {
+      int i = vertical ? (bh - 1 - y) : x;
+      p.Red ()                 = lutR [i];
+      p.Green ()               = lutG [i];
+      p.Blue ()                = lutB [i];
+      p.Alpha ()               = 255;
+    }
+    p = rowstart;
+    p.OffsetY (pdata, 1);
+  }
+}
+
 void c_meterwidget::render_base_image () {
   //debug ("start");
   c_customwidget::render_base_image ();
-  wxMemoryDC dc; 
-  dc.SelectObject (base_image);
   
-  GetSize (&width, &height);
-  debug ("w/h=%d,%d", width, height);
+  //if (rec_size < 0) rec_size = (vertical ? width : height);
+  //if (clip_size < 0) clip_size = (vertical ? rec_size / 2 : rec_size * 2);
   
-  if (height > width)
+  met_len = (vertical ? height : width) - clip_size - rec_size;
+
+  if (width < height) {
     vertical = true;
-  else
+    ln = height;
+    th = width;
+  } else {
     vertical = false;
-  
-  if (vertical) {
-    clip_width = width;
-    clip_height = std::min (width / 2, height * 9 / 10);;
-    rec_width = width;
-    rec_height = std::min (width, height * 9 / 10);;
-  } else {
-    int fontsize = (width / 125);
-    tinyfont.SetPointSize (fontsize);
-    tinyfont.MakeBold ();
-    dc.SetFont (tinyfont);
-    wxSize fsz_clip = dc.GetTextExtent ("CLIP");
-    wxSize fsz_xrun = dc.GetTextExtent ("XRUN");
-    clip_width = std::max (fsz_clip.GetWidth (), fsz_xrun.GetWidth ()) * 1.5;
-    clip_height = std::max (fsz_clip.GetHeight (), fsz_xrun.GetHeight ());
-    rec_width = std::min (height, width * 9 / 10);
-    rec_height = height;
+    ln = width;
+    th = height;
   }
   
-  // keep a bit of space for clip/xrun indicator
-  int len, th, w, h, w2, h2;
-  if (vertical) {
-    len = height - clip_height - rec_height;
-    th = height;// - 1;
-    h2 = height - 1;
-    w2 = width - 1;
-  } else {
-    len = width - clip_width - rec_width;
-    th = width;// - 1;
-    h2 = height - 1;
-    w2 = width - 1;
-  }
+  wxMemoryDC dc; 
+  dc.SelectObject (img_base);
+  
+  int crk = 0;
   
   if (stereo) {
-    h2 = height / 2;
-    w2 = width / 2;
-  }
-  
-  dc.SetBrush (wxBrush (*wxBLACK));
-  if (vertical)
-    dc.DrawRectangle (0, clip_height, th, len);
-  else
-    dc.DrawRectangle (rec_width, 0, len, th);
-  
-  int cl, m1, m2, m3, m4;
-  // draw grid
-  if (vertical) {
-    cl = vertical ? clip_height : 0;
-    m1 = clip_height + len - (cl + len / 2);
-    m2 = clip_height + len - (cl + len * 3 / 4);
-    m3 = clip_height + len - (cl + len * 7 / 8);
-    m4 = clip_height;
-  
-    dc.SetPen (wxPen (col_default_bg));
-    //dc.DrawLine (0, rec_height + th - 1, w, th -1);
-    dc.DrawLine (w2, 0, w2, len + clip_height);
-    dc.SetPen (wxPen (*wxGREEN));
-    dc.DrawLine (0, m1, th, m1);
-    dc.SetPen (wxPen (*wxYELLOW));
-    dc.DrawLine (0, m2, th, m2);
-    dc.SetPen (wxPen (*wxRED));
-    dc.DrawLine (0, m3, th, m3);
-    dc.DrawLine (0, m4, th, m4);
+    t1 = 0;
+    crk = th / 50;
+    if (crk < 1) crk = 1;
+    t2 = (th / 2) - crk;
+    t4 = th - t1;
+    t3 = th - t2;
+    tp = (th / 20);
+    if (tp <= 1) tp = 1;
   } else {
-    m1 = rec_width + len / 2;
-    m2 = rec_width + len * 3 / 4;
-    m3 = rec_width + len * 7 / 8;
-    m4 = rec_width + len;
-  
-    dc.SetPen (wxPen (col_default_bg));
-    dc.DrawLine (0, 0, 0, th);
-    dc.DrawLine (0, h2, len + rec_width, h2);
-    dc.SetPen (wxPen (*wxGREEN));
-    dc.DrawLine (m1, 0, m1, th);
-    dc.SetPen (wxPen (*wxYELLOW));
-    dc.DrawLine (m2, 0, m2, th);
-    dc.SetPen (wxPen (*wxRED));
-    dc.DrawLine (m3, 0, m3, th);
-    dc.DrawLine (m4, 0, m4, th);
+    t1 = th * 0.1;
+    t2 = th - t1;
+    t3 = -1;
+    t4 = -1;
+    tp = (th / 20) + 1;
   }
   
-  // also render gradient bar
-  { // shadow variable names above
-    img_bar = wxBitmap (width, height, 32);
-    int w = img_bar.GetWidth ();
-    int h = img_bar.GetHeight ();
-    int r = (vertical ? h : w) - (vertical ? clip_height : clip_width);
-    int mid = r * 2 / 3;
-    //if (vertical) mid = h - mid;
-    int th = vertical ? img_bar.GetWidth () : img_bar.GetHeight ();
-    int x, y;
-    // render bar gradient
-    wxAlphaPixelData pdata (img_bar);
-    wxAlphaPixelData::Iterator p (pdata);
-    p.MoveTo (pdata, 0, 0);
-    
-    // yep, this one was a doozie
+  dc.SetPen (wxPen (*wxBLACK));
+  dc.SetBrush (wxBrush (*wxBLACK));
+  //debug ("(%dx%d) t1=%d, t2=%d, t3=%d, t4=%d, crk=%d", width, height, t1, t2, t3, t4, crk);
+  if (vertical) {
+    dc.DrawRectangle (t1, clip_size, t2 - t1, met_len);
+    dc.DrawRectangle (t3, clip_size, t4 - t3, met_len);
+  } else {
+    dc.DrawRectangle (rec_size, t1, met_len, t2 - t1);
+    dc.DrawRectangle (rec_size, t3, met_len, t4 - t3);
+  }
+  
+  // debug outline
+  //dc.SetBrush (wxBrush ());
+  //dc.SetPen (wxPen (wxColour (255, 255, 255, 64)));
+  //dc.DrawRectangle (0, 0, width, height);
+  
+  // meter lines
+  struct ln {
+    float pos;
+    int r, g, b, a;
+  } lines [] = {
+    // pos    r    g    b    a 
+    //{ 0.0,     0, 255,   0, 255 },
+    { 0.5,     0, 255,   0, 255 },
+    { 0.75,  255, 255,   0, 255 },
+    { 0.875, 255, 128,   0, 255 },
+    { 1.0,   255,   0,   0, 255 },
+    { -1.0,    0,   0,   0, 255 },
+  };
+  
+  for (int i = 0; lines [i].pos >= 0; i++) {
+    ln * l = &lines [i];
+    //debug ("line: %f, rgb (%d,%d,%d)", l->pos, l->r, l->g, l->b);
+    dc.SetPen (wxPen (wxColour (l->r, l->g, l->b)));
     if (vertical) {
-      for (y = 0; y < h; ++y) {
-        wxAlphaPixelData::Iterator rowstart = p;
-        for (x = 0; x < th; ++x, ++p) {
-          //a = ((float) p.Alpha ()) * alpha_factor;
-          // TODO: sort out alpha premultiply stuff
-          if (h-y < mid) {
-            p.Red () = ((h-y) * 255) / mid;
-            p.Green () = 255;
-            p.Blue () = 0;
-            p.Alpha () = 255;
-          } else if (h-y < r) {
-            p.Red () = 255;
-            float t = float ((h-y) - mid) / float (mid - h);
-            p.Green () = 255.0 * (t);
-            p.Blue () = 0;
-            p.Alpha () = 255;
-          } else {
-            p.Alpha () = 0;
-          }
-        }
-        p = rowstart;
-        p.OffsetY (pdata, 1);
-      }
+      int ppos = (height - clip_size - rec_size) * l->pos;
+      if (ppos > height - 1) ppos = height - 1;
+      dc.DrawLine (0, height - ppos - rec_size, width, height - ppos - rec_size);
     } else {
-      for (y = 0; y < th; ++y) {
-        wxAlphaPixelData::Iterator rowstart = p;
-        for (x = 0; x < w; ++x, ++p) {
-          //a = ((float) p.Alpha ()) * alpha_factor;
-          // TODO: sort out alpha premultiply stuff
-          if (x < mid) {
-            p.Red () = (x * 255) / mid;
-            p.Green () = 255;
-            p.Blue () = 0;
-            p.Alpha () = 255;
-          } else if (x < r) {
-            p.Red () = 255;
-            float t = float (x - mid) / float (w - mid);
-            p.Green () = 255.0 * (1.0 - t);
-            //p.Green () = (255 * (x + 1 - mid));
-            p.Blue () = 0;
-            p.Alpha () = 255;
-          } else {
-            p.Alpha () = 0;
-          }
-        }
-        p = rowstart;
-        p.OffsetY (pdata, 1);
-      }
+      int ppos = (width - clip_size - rec_size) * l->pos;
+      if (ppos > width - 1) ppos = width - 1;
+      dc.DrawLine (ppos + rec_size, 0, ppos + rec_size, height);
     }
   }
   
-#if 0 // debug
-  // test outline
-  dc.SetPen (wxPen (wxColour (255, 255, 255, 128)));
-  dc.SetBrush (wxBrush ());
-  dc.DrawRectangle (0, 0, width, height);
-  // test diagonal red lines
-  dc.SetPen (wxPen (*wxRED));
-  if (vertical) {
-    dc.DrawLine (0, 0, width, clip_height);
-    debug ("width=%d, height=%d, rec_height=%d", width, height, rec_height);
-    dc.DrawLine (0, height - rec_height, width, height);
-  } else {
-    dc.DrawLine (0, 0, rec_width, rec_height);
-    dc.DrawLine (width - clip_width, 0, width, height);
+  render_gradient_bar ();
+  
+  // "clip" and "xrun" indicators
+  wxSize meterwarnsize [(int) meterwarn::MAX];
+  wxString meterwarntext [] = {
+    "REC",
+    "CLIP",
+    "XRUN",
+    ""
+  };
+  for (int i = 0; i < (int) meterwarn::MAX; i++) {
+    meterwarnsize [i] = dc.GetTextExtent (meterwarntext [i]);
   }
-#endif
-
-  //dc.DrawBitmap (img_bar, 0, 0);
   dc.SelectObject (wxNullBitmap);
+  if (!vertical) {
+    float ps = (float) std::min (width, height);
+    ps /= 1.6;
+    tinyfont.SetPointSize (ps);
+    dc.SetFont (tinyfont);
+    for (int i = 0; i < (int) meterwarn::MAX; i++) {
+      int w = meterwarnsize [i].x;
+      int h = meterwarnsize [i].y;
+      debug ("new bitmap, w=%d, h=%d", w, h);
+      img_warning [i] = wxBitmap (w * 4 / 3, h, 32);
+      dc.SelectObject (img_warning [i]);
+      dc.SetTextForeground (wxColour (192, 0, 0));
+      dc.SetBackground (wxColour (0, 0, 0, 0));
+      dc.Clear ();
+      dc.DrawText (meterwarntext [i], 0, 0);
+      dc.SelectObject (wxNullBitmap);
+    }
+  }
+             
   //debug ("end");
 }
 
-void c_meterwidget::draw_bar (wxDC &dc, int t, int o, bool is_r,
-                 float level, float hold, bool clip, bool xrun, bool rec) {
-  //dc.Clear ();
-  dc.SetPen (wxPen (wxColour ()));
-  dc.SetBrush (wxBrush (wxColour (255, 0, 0)));
-  
-  int m; // usable meter length
+// at: x start pos if vertical, y pos if horiz
+// ie. distance between (0,0) and meter bar
+void c_meterwidget::draw_bar (wxDC &dc, int at, int th, bool is_r,
+                              float level, float hold) {
+  if (level < 0) level = 0;
   if (level > 1) level = 1;
-  if (vertical)
-    m = height - clip_height - rec_height;
-  else
-    m = width - clip_width - rec_width;
-  int len = m * level;
-  if (len > 0) {
-    if (len > m - 2) len = m - 2;
-    /*debug ("%s o=%d, m=%d, len=%d, width=%d, height=%d",
-           vertical ? "ver" : "hor", o, m, len, width, height);*/
-    if (len > len - 2) len = len - 2;
+  int bar_len = met_len * level;
+  int x, y, w, h;
+  
+  if (bar_len > 0) {
+    dc.SetPen (wxPen (*wxBLACK));
+    dc.SetBrush (wxBrush (*wxGREEN));
     if (vertical) {
-      if (len > 0) {
-        img_bar_sub = img_bar.GetSubBitmap (wxRect (0, m - len, o, len + 2));
-        dc.DrawBitmap (img_bar_sub, t, m - len + clip_height - 4);
-      }
+      
+      int meter_top    = clip_size;
+      int meter_bottom = height - rec_size;
+      int meter_height = meter_bottom - meter_top; // == met_len
+      int bar_len = static_cast<int>(meter_height * level);
+      int bar_top = meter_bottom - bar_len;   // grow from bottom up
+      
+      x = at + tp;
+      y = bar_top + tp;//height - bar_len - rec_size - clip_size + tp;
+      w = th - (tp * 2);
+      h = bar_len /*+ clip_size*/ - (tp * 2);
     } else {
-      if (len > 0) {
-        img_bar_sub = img_bar.GetSubBitmap (wxRect (0, 0, len, o));
-        dc.DrawBitmap (img_bar_sub, rec_width + 2, t);
-      }
+      x = rec_size + tp;
+      y = at + tp;
+      w = bar_len/* + rec_size*/ - (tp * 2);
+      h = th - (tp * 2);
+      //dc.DrawRectangle (x, y, w, h);
+    }
+    //dc.DrawRectangle (x, y, w, h); //top
+    img_bar_sub = img_bar.GetSubBitmap (wxRect (x, y, w, h));
+    dc.DrawBitmap (img_bar_sub, x, y);
+  }
+  
+  // peak hold indicator
+  int holdpos = hold * met_len;
+  if (holdpos > 0 && holdpos < met_len) {
+    dc.SetPen (wxPen (wxColour (128, 128, 0)));
+    if (vertical) {
+      holdpos -= clip_size;
+      dc.DrawLine (at, y + h - holdpos, at + th, y + h - holdpos);
+    } else {
+      holdpos += rec_size;
+      dc.DrawLine (x + holdpos, at, x + holdpos, at + th);
     }
   }
-  int holdpos = m * hold;
-  if (holdpos > 0 && holdpos < m) {
-    dc.SetPen (wxColour (192, 192, 128));
+}
+
+void c_meterwidget::update (wxWindowDC &dc) {
+  c_customwidget::update (dc);
+  
+  // meter bars
+  if (stereo) {
+    draw_bar (dc, t1, t2 - t1, false, l, hold_l);
+    draw_bar (dc, t3, t4 - t3, true,  r, hold_r);
+  } else {
+    draw_bar (dc, t1, t2 - t1, false, l, hold_l);
+  }
+  
+  // clip indicator
+  dc.SetBrush (wxBrush (*wxRED));
+  dc.SetPen (wxPen (*wxRED));
+  if ((clip_l || clip_r) && clip_size > 0) {
+    if (vertical) {
+      dc.DrawRectangle (0, 0, width, clip_size);
+    } else {
+      dc.DrawRectangle (width - clip_size, 0, clip_size, height);
+    }
+  } else if ((clip_l || clip_r) && !vertical) {
+    int idx = (int) meterwarn::CLIP;
+    int w = img_warning [idx].GetWidth ();
+    int h = img_warning [idx].GetHeight ();
+    dc.DrawBitmap (img_warning [idx], width - w - 1, (height - h) / 2);
+  }
+  
+  // recording indicator (red circle)
+  int rp = (vertical ? width : height) / 4;
+  if (rec_size > 0 && rec) {
     if (vertical)
-      dc.DrawLine (t, m + clip_height - holdpos - 2,
-               t + o, m + clip_height - holdpos - 2);
+      dc.DrawEllipse (rp, height - rec_size + rp, width - (rp * 2), rec_size - (rp * 2));
     else
-      dc.DrawLine (holdpos + rec_width, t, holdpos + rec_width, t + o - 1);
+      dc.DrawEllipse (rp, rp, rec_size - (rp * 2), height - (rp * 2));
+  } else if (1||rec && !vertical) {
+    int idx = (int) meterwarn::REC;
+    int h = img_warning [idx].GetHeight ();
+    dc.DrawBitmap (img_warning [idx], 1, (height - h) / 2);
   }
 }
 
@@ -1693,105 +1798,8 @@ void c_meterwidget::set_stereo (bool b) {
   Refresh ();
 }
 
-void c_meterwidget::update (wxWindowDC &dc) {
-  //wxMemoryDC dc;
-  ////if (!img_overlay.IsOk ()) { CP; return; }
-  //dc.SelectObject (img_overlay);
-  
-  if (stereo != last_stereo) {
-    last_stereo = stereo;
-    base_image_valid = false;
-  }
-  c_customwidget::update (dc);
-  dc.SetPen (wxPen (*wxRED));
-  dc.SetBrush (wxBrush (*wxRED));
-  //debug ("lev %f,%f  hold %f,%f  clip %s,%s  xrun %s,%s",
-  //       l, r, hold_l, hold_r,
-  //       clip_l ? "t" : "f", clip_r ? "t" : "f",
-  //       xrun_l ? "t" : "f", xrun_r ? "t" : "f");
- 
-  float t, h;
-  bool clipany = clip_l||clip_r;
-  
-  if (stereo) {
-    if (vertical) {
-      t = width / 8;
-      if (t < 1) t = 1;
-      h = width / 4;
-      if (h < 1) h = 1;
-    } else {
-      t = height / 8;
-      if (t < 1) t = 1;
-      h = height / 4;
-      if (h < 1) h = 1;
-    }
-    
-    draw_bar (dc, t, h, false, l, hold_l, clipany, xrun);
-    
-    if (vertical)
-      t = width - h - t;
-    else
-      t = height - h - t;
-    draw_bar (dc, t, h, true,  r, hold_r, clipany, xrun);
-  } else {
-    if (vertical) {
-      t = width / 4;
-      h = width - (t * 2) - 1;
-    } else {
-      t = height / 4;
-      h = height - (t * 2) - 1;
-    }
-    
-    //if (height >= 0) height = 1;
-    //if (t < 0 || t > height - 1) t = 0;
-    //draw_bar (dc, t, h, false, l, hold_l, clip_l, xrun_l);
-    draw_bar (dc, t, h, false, l, hold_l, clip_l, xrun);
-  }
-  //debug ("w/h %d,%d", width, height);
-  int clipx, clipy;
-  if (vertical) {
-    clipx = ((width - clip_width) / 2) - 2;
-    clipy = height - clip_height + 2;
-  } else {
-    clipx = width - clip_width + 2;
-    clipy = ((height - clip_height) / 2) - 2;
-  }
-  if ((clipany || xrun) && show_clip) {
-    if (vertical) {
-      dc.SetPen (wxPen (*wxRED));
-      dc.SetBrush (wxBrush (*wxRED));
-      dc.DrawRectangle (0, 0, clip_width, clip_height);
-    } else {
-      dc.SetTextForeground (*wxRED);
-      dc.DrawText (xrun? "XRUN" : "CLIP", clipx, clipy);
-    }
-  } else {
-    dc.SetPen (wxPen ());
-    dc.SetBrush (wxBrush (col_default_bg));
-    dc.DrawRectangle (clipx, clipy, clip_width, clip_height);
-  }
-  
-  if (show_rec) {
-    int x, y, w, h, padding = 3;
-    
-    dc.SetPen (wxPen (*wxRED));
-    dc.SetBrush (wxBrush (*wxRED));
-    if (vertical) {
-      x = padding;
-      y = height - rec_height + padding;
-    } else {
-      x = padding;
-      y = padding;
-    }
-    w = rec_width - padding * 2;
-    h = rec_width - padding * 2;
-    dc.DrawEllipse (x, y, w, h);
-  }
-}
-
-
 void c_meterwidget::set_l (float level, float hold,
-                           bool clip, bool xr, bool rec) {
+                           bool clip, bool xr, bool _rec) {
   //debug ("lev:%f, hold=%f, clip=%s, xrun=%s", level, hold,
   //       clip ? "true" : "false", xrun ? "true": "false");
   bool needs_update = false;
@@ -1799,12 +1807,13 @@ void c_meterwidget::set_l (float level, float hold,
   l = level;
   hold_l = hold;
   clip_l = clip;
+  rec = _rec;
   xrun = xr;
   if (needs_update) Refresh ();
 }
 
 void c_meterwidget::set_r (float level, float hold,
-                           bool clip, bool xr, bool rec) {
+                           bool clip, bool xr, bool _rec) {
   //debug ("lev:%f, hold=%f, clip=%s, xrun=%s", level, hold,
   //       clip ? "true" : "false", xrun ? "true": "false");
   bool needs_update = false;
@@ -1812,10 +1821,13 @@ void c_meterwidget::set_r (float level, float hold,
   r = level;
   hold_r = hold;
   clip_r = clip;
+  rec = _rec;
   xrun = xr;
   if (needs_update) Refresh ();
 }
 
+
+////////////////////////////////////////////////////////////////////////////////
 // c_waveformwidget
 
 c_waveformwidget::c_waveformwidget (wxWindow *parent,
@@ -1838,9 +1850,9 @@ void c_waveformwidget::render_base_image () {
   int w2 = width / 2;
   int h2 = height / 2;
   wxMemoryDC dc;
-  dc.SelectObject (base_image);
+  dc.SelectObject (img_base);
   
-  if (0&&!wavdata) {
+  if (!wavdata) {
     dc.SetPen (wxPen (wxTransparentColor));
     dc.SetBrush (wxBrush (col_default_bg));
     dc.DrawRectangle (0, 0, width, height);
@@ -1848,7 +1860,7 @@ void c_waveformwidget::render_base_image () {
     dc.SetTextForeground (col_default_fg);
         
     wxFont font = GetFont ();
-    std::string msg = "No impulse response file has been generated.";
+    std::string msg = "(no impulse response file)";
     wxSize sz = dc.GetTextExtent (msg);
     dc.DrawText (msg, w2 - sz.x / 2, h2 - sz.y / 2);
     return;
@@ -1864,6 +1876,7 @@ void c_waveformwidget::render_base_image () {
   dc.DrawLine (2, 1 + height / 2, 1 + width - 4, 1 + height / 2);
   
   draw_frame (dc);
+  dc.SelectObject (wxNullBitmap);
 }
 
 void c_waveformwidget::draw_frame (wxDC &dc) {
@@ -1889,8 +1902,29 @@ void c_waveformwidget::draw_frame (wxDC &dc) {
 
 void c_waveformwidget::update (wxWindowDC &dc) {
   c_customwidget::update (dc);
+  dc.SetPen (wxPen (col_default_fg));
 }
 
+
+////////////////////////////////////////////////////////////////////////////////
+// test/minimal example usage of c_customwidget derived class
+
+void c_testwidget::render_base_image () { CP
+  c_customwidget::render_base_image ();
+  wxMemoryDC dc;
+  dc.SelectObject (img_base);
+  std::string msg = "This is an example use of c_customwidget";
+  wxSize sz = dc.GetTextExtent (msg);
+  dc.SetTextForeground (col_default_fg);
+  dc.DrawText (msg, (width - sz.x) / 2, (height - sz.y) / 2);
+  dc.SelectObject (wxNullBitmap);
+}
+
+void c_testwidget::update (wxWindowDC &dc) {
+  c_customwidget::update (dc);
+  dc.SetPen (wxPen (*wxRED));
+  dc.DrawLine (0, 0, width, height);
+}
 
 #endif // USE_WXWIDGETS
 
