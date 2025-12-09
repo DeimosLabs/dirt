@@ -140,7 +140,7 @@ bool c_mainwindow::add_ir (ir_entry &ent) { CP
 
 void c_mainwindow::on_timer (wxTimerEvent &ev) {
   static long int num_passes = 0;
-  const int update_widgets_every = 4;
+  const int update_widgets_every = 8;
   bool do_full_update = false;
   
   num_passes++;
@@ -149,6 +149,7 @@ void c_mainwindow::on_timer (wxTimerEvent &ev) {
   // animation stuff etc. that we do every pass
   // nothing yet, our custom widgets update themselves on redraw events
   //pn_meter->Refresh (); // not necessary
+  if (pn_meter->needs_redraw) pn_meter->Refresh ();
   
   // widget stuff: update only every n passes
   if (num_passes % update_widgets_every == 0) {
@@ -1761,7 +1762,7 @@ void c_meterwidget::update (wxWindowDC &dc) {
   } else {
     draw_bar (dc, t1, t2 - t1, false, l, hold_l);
   }
-  
+  /*
   // clip indicator
   dc.SetBrush (wxBrush (*wxRED));
   dc.SetPen (wxPen (*wxRED));
@@ -1789,7 +1790,7 @@ void c_meterwidget::update (wxWindowDC &dc) {
     int idx = (int) meterwarn::REC;
     int h = img_warning [idx].GetHeight ();
     dc.DrawBitmap (img_warning [idx], 1, (height - h) / 2);
-  }
+  }*/
 }
 
 void c_meterwidget::set_stereo (bool b) {
@@ -1802,28 +1803,26 @@ void c_meterwidget::set_l (float level, float hold,
                            bool clip, bool xr, bool _rec) {
   //debug ("lev:%f, hold=%f, clip=%s, xrun=%s", level, hold,
   //       clip ? "true" : "false", xrun ? "true": "false");
-  bool needs_update = false;
-  if (l != level) needs_update = true;
+  if (l != level) needs_redraw = true;
   l = level;
   hold_l = hold;
   clip_l = clip;
   rec = _rec;
   xrun = xr;
-  if (needs_update) Refresh ();
+  //if (needs_update) Refresh (); <-- BIG NO NO, THIS IS CALLED FROM THE JACK THREAD
 }
 
 void c_meterwidget::set_r (float level, float hold,
                            bool clip, bool xr, bool _rec) {
   //debug ("lev:%f, hold=%f, clip=%s, xrun=%s", level, hold,
   //       clip ? "true" : "false", xrun ? "true": "false");
-  bool needs_update = false;
-  if (r != level) needs_update = true;
+  if (r != level) needs_redraw = true;
   r = level;
   hold_r = hold;
   clip_r = clip;
   rec = _rec;
   xrun = xr;
-  if (needs_update) Refresh ();
+  //if (needs_update) Refresh (); <-- BIG NO NO (see above)
 }
 
 
