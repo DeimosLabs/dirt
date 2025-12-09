@@ -9,10 +9,12 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+
 # Options
 option(DONT_USE_JACK "Disable JACK support even if the library is available" OFF)
 option(GUI           "Enable wxWidgets GUI" OFF)
 option(DEBUG         "Debug build" OFF)
+option(NO_ASAN       "Disable asan on debug build" OFF)
 
 # Kill any -flto that wx / toolchain might sneak in
 #set(CMAKE_INTERPROCEDURAL_OPTIMIZATION OFF)
@@ -38,6 +40,11 @@ pkg_check_modules(JACK            jack)
 if (DEBUG)
     message(STATUS "DEBUG enabled: linking against readline")
     pkg_check_modules(READLINE REQUIRED readline)
+    if (NOT ASAN)
+      set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -fno-omit-frame-pointer -g")
+      set(CMAKE_C_FLAGS   "${CMAKE_C_FLAGS} -fsanitize=address -fno-omit-frame-pointer -g")
+      set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address")
+    endif()
 endif()
 
 # --- Executable target ---
