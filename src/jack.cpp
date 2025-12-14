@@ -117,12 +117,6 @@ static int jack_process_cb (jack_nframes_t nframes, void *arg) {
   
   // PLAYBACK
   if (j->port_outL) {
-  //if (!play_stereo) {
-  //  j->vu_out.acknowledge ();
-  //  j->vu_out.sample (0, 0);
-  //  j->vu_out.update ();
-  //}
-  
     auto *port_outL =
         (jack_default_audio_sample_t *) jack_port_get_buffer (j->port_outL, nframes);
     // auto *port_outR = ... in case we add it later?
@@ -175,12 +169,6 @@ static int jack_process_cb (jack_nframes_t nframes, void *arg) {
       port_inR = (jack_default_audio_sample_t *)
         jack_port_get_buffer (j->port_inR, nframes);
     }
-    
-    //if (!rec_stereo) {
-    //  j->vu_in.acknowledge ();
-    //  j->vu_in.sample (0, 0);
-    //  j->vu_in.update ();
-    //}
     
     float currentbuf_l [nframes];
     float currentbuf_r [nframes];

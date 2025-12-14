@@ -221,6 +221,11 @@ void c_mainwindow::on_timer (wxTimerEvent &ev) {
       debug ("audio: no idea what's going on");
     }
     
+    if (filedir_scanning)
+      btn_inputdir_scan->SetLabel ("Cancel");
+    else
+      btn_inputdir_scan->SetLabel ("Scan");
+    
     wxArrayInt dummy;
     if (list_inputfiles->GetSelections (dummy) > 0)
       btn_inputfiles_clear->SetLabel ("Remove");
@@ -914,14 +919,22 @@ void c_mainwindow::on_btn_dry_save (wxCommandEvent &ev) {
 void c_mainwindow::on_btn_inputdir_scan (wxCommandEvent &ev) {
   CP
   wxDir absdir (text_inputdir->GetValue ());
+  int n = 0;
   
   if (!absdir.IsOpened ())
     return;
   wxString wxabspath = absdir.GetName ();
   
   std::string abspath (wxabspath);
-  
-  int n = add_dir (abspath, chk_inputdir_recursive->GetValue ());
+  if (filedir_scanning) {
+    filedir_error = true;
+    return;
+  } else {
+    filedir_scanning = true;
+    n = add_dir (abspath, chk_inputdir_recursive->GetValue ());
+    filedir_scanning = false;
+  }
+
   char buf [32];
   snprintf (buf, 31, "%d", n);
   show_message ("Scanned:\n" + abspath + "\n\nAdded " +
@@ -1103,20 +1116,30 @@ static bool suffix_match (std::string fn, std::string suffix) {
 int c_mainwindow::add_dir (std::string dirname, bool recurs) {
   //CP
   int count = 0;
+  bool err = false;
   
   wxDir dir (dirname);
   wxString str;
   
+  filedir_error = false;
+  
   if (dir.IsOpened ()) {
     wxString wxfn;
     bool found = dir.GetFirst (&wxfn);
-    while (found) {
+    
+    while (found && !filedir_error) {
       std::string fn (wxfn);
       std::string absfn (dirname + "/" + fn.c_str ());
       if (!dir_exists (absfn)) {
         if (recurs) {
           printf ("recurs dir: %s\n", absfn.c_str ());
-          count += add_dir (absfn, recurs);
+          int c = add_dir (absfn, recurs);
+          if (c != -1) {
+            count += c;
+          } else {
+            filedir_error = true;
+            return 0;
+          }
         } else {
           printf ("found dir:  %s\n", absfn.c_str ());
         }
@@ -1131,8 +1154,20 @@ int c_mainwindow::add_dir (std::string dirname, bool recurs) {
       }
       found = dir.GetNext (&wxfn);
     }
+    wxYield ();
   } else {
-    show_error ("can't open directory " + dirname + "\n");
+    //show_error ("can't open directory " + dirname + "\n");
+    wxMessageDialog msg (this, std::string ("Can't open directory " + dirname + "\n"),
+                         "Read error", wxOK|wxCANCEL|wxICON_ERROR);
+    msg.SetOKCancelLabels ("Skip", "Cancel");
+    int ret = msg.ShowModal ();
+    if (ret != wxID_OK && ret != wxID_YES) {
+      debug ("ret=%d", ret);
+      err = true;
+      return -1;
+    } else {
+      debug ("ret=%d", ret);
+    }
   }
   
   return count;

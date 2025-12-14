@@ -161,6 +161,8 @@ private:
   long int mode = ID_FILE;
   long int prev_mode = -1;
   audiostate prev_audio_state = (audiostate) -1;
+  bool filedir_scanning = false;
+  bool filedir_error = false;
   //c_meterwidget *testwidget = NULL;
 };
 
