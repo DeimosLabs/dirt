@@ -98,8 +98,10 @@ class c_waveformwidget;
 #define ID_PROCESS 10045
 #define ID_PANEL1 10047
 #define ID_IRFILES 10056
-#define ID_BUTTON 10057
-#define ID_BUTTON1 10058
+#define ID_IR_RENAME 10057
+#define ID_IR_REMOVE 10058
+#define ID_IR_LOAD 10069
+#define ID_IR_SAVE 10070
 #define ID_WAVEFORM 10052
 #define ID_SCROLLBAR1 10054
 #define ID_SCROLLBAR 10053
@@ -218,6 +220,10 @@ public:
     wxSpinCtrl* spin_chn_offset;
     wxButton* btn_process;
     wxListBox* list_irfiles;
+    wxButton* btn_ir_rename;
+    wxButton* btn_ir_remove;
+    wxButton* btn_ir_load;
+    wxButton* btn_ir_save;
     c_waveformwidget* m_waveform;
     wxStaticText* text_statusbar;
     wxButton* btn_about;

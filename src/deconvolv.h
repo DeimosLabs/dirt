@@ -4,7 +4,7 @@
  *
  * Licensed under the GPL. See dirt.h and dirt.cpp for more info.
  */
- 
+
 #ifndef    __DIRT_DECONVOLV_H
 #define    __DIRT_DECONVOLV_H
 #define __IN_DIRT_DECONVOLV_H
@@ -23,12 +23,8 @@ struct s_prefs {
   std::string portname_wetR = "";
   bool gui = false;
 
-  long ir_length_samples = 0;    // 0 = auto
-#ifdef THRESH_RELATIVE
-  bool thresh_relative = true;
-#else
-  bool thresh_relative = false;
-#endif
+  long ir_length_samples            = 0;    // 0 = auto
+  bool thresh_relative              = false;
   bool zeropeak = DEFAULT_ZEROPEAK;
   sig_source dry_source             = sig_source::FILE;
   sig_source wet_source             = sig_source::FILE;
@@ -40,8 +36,10 @@ struct s_prefs {
   bool quiet                        = false;
 #ifdef DEBUG
   bool verbose                      = true;
+  bool debug                        = true;
 #else
   bool verbose                      = false;
+  bool debug                        = false;
 #endif
   bool dump_debug                   = false;
   std::string dump_prefix           = "dirt-debug";
@@ -54,7 +52,7 @@ struct s_prefs {
   double marker_gap_seconds    = DEFAULT_MARKGAP_SEC;
   //double regularization_db     = -120.0; // "noise floor" - see calc_ir_raw ()
   int64_t sweep_offset_smp     = DEFAULT_SWEEP_OFFSET_SMP;
-  int    sweep_sr              = DEFAULT_SAMPLE_RATE;
+  int    sweep_sr              = DEFAULT_SAMPLERATE;
   bool   sweep_sr_given        = false; // used for warning user<->file sample rate mismatch
   float  sweep_f1              = DEFAULT_F1;
   float  sweep_f2              = DEFAULT_F2; // DONE: cap to just below nyquist freq
@@ -80,122 +78,59 @@ struct s_prefs {
 class c_mainwindow;
 
 class c_deconvolver {
-friend c_audioclient;
-#ifdef USE_WXWIDGETS
-friend c_mainwindow;
-#endif
 public:
-  //c_deconvolver () = default;
-  c_deconvolver (struct s_prefs *prefs = NULL, std::string name = "");
-  virtual ~c_deconvolver ();
+  c_deconvolver (struct s_prefs *prefs);
+  ~c_deconvolver ();
   
   void set_prefs (s_prefs *prefs);
-  void set_name (std::string str);
-  bool set_stereo (bool b);
-  bool load_sweep_dry (const char *in_filename);
-  bool load_sweep_wet (const char *in_filename);
-  bool output_ir (const char *out_filename, long int ir_length_samples = 0);
-  int samplerate ();
+  bool set_samplerate (int sr);
+  int get_samplerate ();
+  void clear (bool clear_dry = true, bool clear_wet = true);
+  void clear_dry ();
+  void clear_wet ();
+  bool set_sweep_dry (c_wavebuffer &v);
+  bool set_sweep_wet (c_wavebuffer &wl, c_wavebuffer &wr);
+  bool import_file (const char *in_filename,   c_wavebuffer &in_l,
+                                               c_wavebuffer &in_r);
+  bool export_file (const char *out_filename,  c_wavebuffer &out_l,
+                                               c_wavebuffer &out_r);
+  //void align_sweeps ();
+  bool render_ir (c_wavebuffer &out_l, c_wavebuffer &out_r,
+                  size_t max_size = -1);
   bool has_dry ();
-  bool has_wet ();
+  bool has_wet_l ();
+  bool has_wet_r ();
   
-  // passthrough functions for c_audioclient & derived
-  // these just call hooks and corresponding c_audioclient functions 
-  virtual bool audio_init (std::string clientname = "",
-                     int samplerate = -1,
-                     bool stereo_out = true);
-  virtual bool audio_shutdown ();
-  virtual bool audio_ready ();
-  virtual bool audio_playback_done ();
-  virtual audiostate get_audio_state ();
-  virtual bool audio_play (const std::vector<float> &out);
-  virtual bool audio_play (const std::vector<float> &out_l,
-                     const std::vector<float> &out_r);
-  virtual bool audio_arm_record ();
-  virtual bool audio_rec ();
-  virtual bool audio_playrec (const std::vector<float> &out_l,
-                              const std::vector<float> &out_r);
-  virtual bool audio_stop ();
-  virtual bool audio_stop_playback ();
-  virtual bool audio_stop_record ();
+  s_prefs *prefs = NULL;
   
-  // UI hooks for derived classes, audio backends should call these
-  // override them for UI other than textmode
-  virtual int on_audio_idle () { return 0; }
-  virtual int on_play_start (void *data = NULL);
-  virtual int on_play_loop (void *data = NULL);
-  virtual int on_play_stop (void *data = NULL);
-  virtual int on_arm_rec_start (void *data = NULL);
-  virtual int on_arm_rec_loop (void *data = NULL);
-  virtual int on_arm_rec_stop (void *data = NULL);
-  virtual int on_record_start (void *data = NULL);
-  virtual int on_record_loop (void *data = NULL);
-  virtual int on_record_stop (void *data = NULL);
-  virtual int on_playrec_start (void *data = NULL);
-  virtual int on_playrec_loop (void *data = NULL);
-  virtual int on_playrec_stop (void *data = NULL);
-  
-  virtual void set_vu_pre ();
-  virtual void set_vu_l (float level, float hold, bool clip, bool xrun);
-  virtual void set_vu_r (float level, float hold, bool clip, bool xrun);
-  virtual void set_vu_post ();
-  
-  /*static bool calc_ir_raw (const std::vector<float> &wet,
-                          const std::vector<float>  &dry,
-                          std::vector<float>        &ir_raw,
-                          long                      ir_length_samples = 0);*/
-  bool calc_ir_raw (const std::vector<float> &wet,
-                     const std::vector<float> &dry,
-                     std::vector<float> &ir_raw,
-                     long ir_length_samples);
-                   
   void normalize_and_trim_stereo (std::vector<float> &L,
                                   std::vector<float> &R,
                                   bool zeropeak = DEFAULT_ZEROPEAK,
                                   float thr_start = DEFAULT_IR_SILENCE_THRESH_DB,
                                   float thr_end = DEFAULT_IR_SILENCE_THRESH_DB,
-                                  float fade_end = 0.05); // last 5% of IR pre-trim
-
-  bool set_dry_from_buffer (const std::vector<float>& buf, int sr);
-  bool set_wet_from_buffer (const std::vector<float>& bufL,
-                            const std::vector<float>& bufR,
-                            int sr);
-#ifdef USE_JACK
-  /*bool jack_init     (const std::string clientname,
-                      int samplerate, bool stereo);
-  bool jack_shutdown ();
-  bool jack_play     (std::vector<float> &buf);
-  bool jack_playrec  (const std::vector<float> &buf,
-                      std::vector<float> &in_l,
-                      std::vector<float> &in_r);*/
-
-  /*bool jack_playrec_sweep (const std::vector<float> &sweep,
-                           int samplerate,
-                           const char *jack_out_port,
-                           const char *jack_in_port,
-                           std::vector<float> &captured);*/
-#endif
-  bool set_samplerate_if_needed (int sr);
-  void update_peak_data ();
-
-  c_audioclient *audio = NULL;
+                                  float fade_end = 0.05); // %, pre_trim
+  
+  bool calc_ir_raw (const std::vector<float> &wet,
+                    const std::vector<float> &dry,
+                    std::vector<float> &out,
+                    long int ir_max_samples);
   
 //protected:
   
   uint64_t playrec_loop_passes = 0;
   int vu_meter_size = ANSI_VU_METER_MIN_SIZE;
   int samplerate_ = 0;
-  std::vector<float> dry_;
-  std::vector<float> wet_L_;
-  std::vector<float> wet_R_;
-  bool have_dry_ = false;
-  bool have_wet_ = false;
-  size_t dry_offset_ = 0;
-  size_t wet_offset_ = 0;
-  s_prefs *prefs_ = NULL;
-  s_prefs default_prefs_;
-  std::string audio_clientname;
+  std::vector<float> sweep_dry;
+  std::vector<float> sweep_wet_l;
+  std::vector<float> sweep_wet_r;
+  //bool have_dry_ = false;
+  //bool have_wet_ = false;
+  size_t dry_offset = 0;
+  size_t wet_offset = 0;
+  s_prefs default_prefs;
+  std::string audio_clientname;  
 };
+
 
 bool write_mono_wav (const char *path,
                       const std::vector<float> &data,
@@ -205,6 +140,15 @@ bool write_stereo_wav (const char *path,
                         const std::vector<float> &L,
                         const std::vector<float> &R,
                         int samplerate);
+                        
+bool read_wav (const char *filename,
+                std::vector<float> &left,
+                std::vector<float> &right,
+                int &sr);
+                
+bool read_wav (const char *filename,
+               c_wavebuffer &left,
+               c_wavebuffer &right);
 
 #undef  __IN_DIRT_DECONVOLV_H
 #endif  // __DIRT_DECONVOLV_H

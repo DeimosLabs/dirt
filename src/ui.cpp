@@ -52,23 +52,27 @@ wxBEGIN_EVENT_TABLE (c_mainwindow, ui_mainwindow)
   EVT_RADIOBUTTON (ID_ROUNDTRIP, c_mainwindow::on_radio_roundtrip)
   EVT_RADIOBUTTON (ID_PLAYSWEEP, c_mainwindow::on_radio_playsweep)
   EVT_CHECKBOX (ID_FORCEMONO, c_mainwindow::on_chk_forcemono)
-
   EVT_BUTTON (ID_DRYFILE_BROWSE, c_mainwindow::on_btn_dryfile_browse)
   EVT_BUTTON (ID_GENERATE, c_mainwindow::on_btn_generate)
   EVT_BUTTON (ID_DRY_SAVE, c_mainwindow::on_btn_dry_save)
-  EVT_BUTTON (ID_INPUTDIR_SCAN, c_mainwindow::on_btn_inputdir_scan)
-  EVT_BUTTON (ID_INPUTDIR_BROWSE, c_mainwindow::on_btn_inputdir_browse)
-  EVT_BUTTON (ID_OUTPUTDIR_BROWSE, c_mainwindow::on_btn_outputdir_browse)
-  EVT_BUTTON (ID_INPUTFILES_ADD, c_mainwindow::on_btn_inputfiles_add)
-  EVT_BUTTON (ID_INPUTFILES_CLEAR, c_mainwindow::on_btn_inputfiles_clear)
-  EVT_BUTTON (ID_ALIGN_MANUAL, c_mainwindow::on_btn_align_manual)
   EVT_BUTTON (ID_AUDIO, c_mainwindow::on_btn_audio)
   EVT_BUTTON (ID_PLAY, c_mainwindow::on_btn_play)
-  EVT_BUTTON (ID_PROCESS, c_mainwindow::on_btn_process)
-  
   EVT_COMBOBOX (ID_JACK_DRY, c_mainwindow::on_port_select)
   EVT_COMBOBOX (ID_JACK_WET_L, c_mainwindow::on_port_select)
   EVT_COMBOBOX (ID_JACK_WET_R, c_mainwindow::on_port_select)
+  
+  EVT_BUTTON (ID_INPUTDIR_BROWSE, c_mainwindow::on_btn_inputdir_browse)
+  EVT_BUTTON (ID_INPUTDIR_SCAN, c_mainwindow::on_btn_inputdir_scan)
+  EVT_BUTTON (ID_INPUTFILES_ADD, c_mainwindow::on_btn_inputfiles_add)
+  EVT_BUTTON (ID_INPUTFILES_CLEAR, c_mainwindow::on_btn_inputfiles_clear)
+  EVT_BUTTON (ID_OUTPUTDIR_BROWSE, c_mainwindow::on_btn_outputdir_browse)
+  EVT_BUTTON (ID_ALIGN_MANUAL, c_mainwindow::on_btn_align_manual)
+  EVT_BUTTON (ID_PROCESS, c_mainwindow::on_btn_process)
+  
+  EVT_BUTTON (ID_IR_RENAME, c_mainwindow::on_btn_irrename)
+  EVT_BUTTON (ID_IR_REMOVE, c_mainwindow::on_btn_irremove)
+  EVT_BUTTON (ID_IR_LOAD, c_mainwindow::on_btn_irload)
+  EVT_BUTTON (ID_IR_SAVE, c_mainwindow::on_btn_irsave)
 
 wxEND_EVENT_TABLE ();
 
@@ -99,8 +103,8 @@ c_mainwindow::c_mainwindow (c_deconvolver *d)
   list_align->Append ("Manual");
   list_align->Append ("None/already aligned");
   
-  if (d && d->prefs_)
-    set_prefs (d->prefs_);
+  if (d && d->prefs)
+    set_prefs (d->prefs);
   CP
   
   Layout ();
@@ -144,16 +148,16 @@ void c_mainwindow::on_timer (wxTimerEvent &ev) {
   bool do_full_update = false;
   
   num_passes++;
-  if (!dec || !dec->audio) return;
+  if (!dec || !audio) return;
   
   // animation stuff etc. that we do every pass
   // nothing yet, our custom widgets update themselves on redraw events
   //pn_meter->Refresh (); // not necessary
-  if (pn_meter->needs_redraw) pn_meter->Refresh ();
+  if (pn_meter->needs_redraw ()) pn_meter->Refresh ();
   
   // widget stuff: update only every n passes
   if (num_passes % update_widgets_every == 0) {
-    audiostate s = dec->audio->state;
+    audiostate s = audio->state;
     
     if (s != prev_audio_state) {
       debug ("prev_audio_state=%d, s=%d", (int) prev_audio_state, (int) s);
@@ -174,26 +178,33 @@ void c_mainwindow::on_timer (wxTimerEvent &ev) {
       if (!dec->has_dry ()) {           // ready to play
         disable (btn_play);
       } else {
-        //debug ("state %d", dec->audio->state);
+        //debug ("state %d", audio->state);
         enable (btn_play);
       }
       btn_play->SetLabel ((mode == ID_ROUNDTRIP) ? "Record" : "Play");
       btn_audio->SetLabel ("Disconnect");
+      pn_meter->rec = false;
     } else if (s == audiostate::PLAY ||
                s == audiostate::PLAYMONITOR ||
-               s == audiostate::PLAYREC) {   // something's playing/recording
+               s == audiostate::PLAYREC ||
+               s == audiostate::REC) {   // something's playing/recording
       if (!dec->has_dry ()) { CP             // uhhh wut
         debug ("audio: playing something but what?");
         disable (btn_play);
       } else {                               // playing dry sweep
         enable (btn_play);
-        int sr = dec->prefs_ ? dec->prefs_->sweep_sr : 
+        int sr = dec->prefs ? dec->prefs->sweep_sr : 
                                atoi (comb_samplerate->GetValue ().c_str ());
-        size_t sec_left = dec->audio->get_play_remaining () / (size_t) sr;
+        size_t sec_left = audio->get_play_remaining () / (size_t) sr;
         char buf [32];
         snprintf (buf, 31, "Stop (%ld)", sec_left);
         //debug ("sr=%d, sec_left=%d", sr, sec_left);
         btn_play->SetLabel (buf);
+        if (sr == (int) audiostate::PLAYREC ||
+            sr == (int) audiostate::REC)
+          pn_meter->rec = true;
+        else
+          pn_meter->rec = false;
       }
       btn_audio->SetLabel ("Disconnect");
     } else {
@@ -241,23 +252,23 @@ void c_mainwindow::on_timer (wxTimerEvent &ev) {
     set_mode (mode);
 }
 
-bool c_mainwindow::audio_ready () {
+bool c_mainwindow::is_ready () {
   init_audio_done = false;
   
   if (!dec) {
     debug ("no deconvolver");
     return false;
   }
-  if (!dec->audio) {
+  if (!audio) {
     debug ("deconvolver has no audio client");
     return false;
   }
-  if (dec->audio->state == audiostate::IDLE) {
+  if (audio->state == audiostate::IDLE) {
     debug ("deconvolver idle, arming record (monitor mode)");
-    dec->audio->arm_record ();
+    audio->arm_record ();
   }
-  if (dec->audio->state == audiostate::NOTREADY ||
-      dec->audio->state == audiostate::IDLE) {
+  if (audio->state == audiostate::NOTREADY ||
+      audio->state == audiostate::IDLE) {
     debug ("deconvolver audio not ready");
     return false;
   }
@@ -270,18 +281,27 @@ bool c_mainwindow::audio_ready () {
 bool c_mainwindow::init_audio (int samplerate, bool stereo) { CP
   if (init_audio_done)
     return true;
+  
+  if (!dec)
+    return false;
+  
   debug ("start, samplerate=%d, stereo=%s", samplerate, stereo ? "true" : "false");
+  
+  audio = g_app->audio;
+  if (!audio) {
+    audio = new c_jackclient (dec->prefs);
+    BP
+  }
+
+  pn_meter->set_vudata (&audio->vu);
+  audio->init ("DIRT", -1, stereo);
   
   if (!dec) {
     debug ("no deconvolver given");
     return false;
   }
   
-  if (!dec->audio) {
-    dec->audio_init ("DIRT", -1, stereo);
-  }
-  
-  if (!dec->audio) {
+  if (!audio) {
     debug ("deconvolver has no audio client");
     return false;
   }
@@ -290,19 +310,19 @@ bool c_mainwindow::init_audio (int samplerate, bool stereo) { CP
   bool st = !chk_forcemono->GetValue ();
   
   std::string jack_name = "";
-  if (dec->prefs_) jack_name = dec->prefs_->jack_name;
+  if (dec->prefs) jack_name = dec->prefs->jack_name;
   std::cout << "name: " << jack_name << "\n";
   CP
-  dec->audio->unregister ();
-  if (!dec->audio->register_output (false) ||
-      !dec->audio->register_input (dec->prefs_->request_stereo)) {
+  audio->unregister ();
+  if (!audio->register_output (false) ||
+      !audio->register_input (dec->prefs->request_stereo)) {
     CP
     debug ("audio init failed");
     return false;
   }
   
   CP
-  dec->audio_arm_record ();
+  audio->arm_record ();
   init_audio_done = true;
   
   debug ("end");
@@ -315,15 +335,15 @@ bool c_mainwindow::init_audio () {
 }
 
 bool c_mainwindow::disable_audio () { CP
-  if (!dec || !dec->audio) return false;
-  if (dec->audio->state == audiostate::NOTREADY) return false;
+  if (!dec || !audio) return false;
+  if (audio->state == audiostate::NOTREADY) return false;
   
   list_jack_dry->Clear ();
   list_jack_wet_l->Clear ();
   list_jack_wet_r->Clear ();
   init_audio_done = false;
   
-  return dec->audio->unregister ();
+  return audio->unregister ();
 }
 
 void c_mainwindow::on_quit (wxCommandEvent &ev) {
@@ -353,7 +373,7 @@ void c_mainwindow::on_chk_forcemono (wxCommandEvent &ev) { CP
   else if (radio_makesweep->GetValue ()) set_mode (ID_MAKESWEEP);
   else if (radio_roundtrip->GetValue ()) set_mode (ID_ROUNDTRIP);
   
-  if (!audio_ready ()) // don't re-enable audio on checkbox
+  if (!is_ready ()) // don't re-enable audio on checkbox
     return;
   
   CP
@@ -365,21 +385,21 @@ void c_mainwindow::on_chk_forcemono (wxCommandEvent &ev) { CP
   bool a = false;
   bool b = chk_forcemono->GetValue ();
   
-  if (!dec->audio->is_stereo == !b)
+  if (!audio->stereo_in == !b)
     a = true;
   
   debug ("a=%d, b=%d", (int) a, (int) b);
   if (b) {
     debug ("force mono");
-    dec->set_stereo (false);
+    audio->set_stereo (false);
   } else {
     debug ("stereo");
-    dec->set_stereo (true);
+    audio->set_stereo (true);
   }
   
   if (a) { 
     debug ("RE-ARMING RECORD"); 
-    dec->audio_arm_record ();
+    audio->arm_record ();
   }
 }
 
@@ -395,13 +415,13 @@ struct widget_status {
 
 void c_mainwindow::on_port_select (wxCommandEvent &ev) {
 #ifdef USE_JACK
-  if (!audio_ready () || dec->audio->backend != audio_driver::JACK) {
+  if (!is_ready () || audio->backend != audio_driver::JACK) {
     debug ("no JACK client");
     return;
   }
   
   // kludge, but meh who cares
-  c_jackclient *jc = (c_jackclient *) dec->audio;
+  c_jackclient *jc = (c_jackclient *) audio;
   
   switch (ev.GetId ()) {
     case ID_JACK_DRY: CP
@@ -484,7 +504,7 @@ void c_mainwindow::set_mode (long int _mode) {
   if (!dec) {
     debug ("no deconvolver object");
   }
-  dec->prefs_->mode = opmode::GUI;
+  dec->prefs->mode = opmode::GUI;
   
   static struct widget_status widget_status_file [] = {
     // dry sweep tab
@@ -680,22 +700,22 @@ void c_mainwindow::set_mode (long int _mode) {
   }
   
   if (do_audio) {
-    if (dec && dec->audio) {
+    if (dec && audio) {
       char buf [128];
-      snprintf (buf, 127, "%d", dec->audio->samplerate);
+      snprintf (buf, 127, "%d", audio->samplerate);
       comb_samplerate->SetValue (buf);
       CP
       bool s = !chk_forcemono->GetValue ();
-      pn_meter->set_stereo (s/*dec->audio->is_stereo*/);
-      if ((!s) != (!dec->audio->is_stereo)) { // cheap xor
+      pn_meter->set_stereo (s/*audio->is_stereo*/);
+      if ((!s) != (!audio->stereo_in)) { // cheap xor
         CP
-        //dec->audio->register_input (s);
-        //dec->audio->init_output (false);
+        //audio->register_input (s);
+        //audio->init_output (false);
       }
       update_audio_ports ();
     }
     
-    if (!audio_ready ()) {
+    if (!is_ready ()) {
       disable (list_jack_dry);
       disable (list_jack_wet_l);
       disable (list_jack_wet_r);
@@ -725,7 +745,7 @@ void c_mainwindow::update_audio_ports () {
     list_jack_dry->Clear ();
     list_jack_wet_l->Clear ();
     list_jack_wet_r->Clear ();
-  if (!audio_ready ()) {
+  if (!is_ready ()) {
     disable (list_jack_dry);
     disable (list_jack_wet_l);
     disable (list_jack_wet_r);
@@ -735,13 +755,13 @@ void c_mainwindow::update_audio_ports () {
   bool s = !chk_forcemono->GetValue ();
   
   std::vector <std::string> port_list;
-  dec->audio->get_output_ports (port_list);
+  audio->get_output_ports (port_list);
   for (i = 0; i < port_list.size (); i++) {
     list_jack_dry->Append (port_list [i]);
   }
   
   port_list.clear ();
-  dec->audio->get_input_ports (port_list);
+  audio->get_input_ports (port_list);
   for (i = 0; i < port_list.size (); i++) {
     list_jack_wet_l->Append (port_list [i]);
     if (s) list_jack_wet_r->Append (port_list [i]);
@@ -758,10 +778,12 @@ void c_mainwindow::on_btn_dryfile_browse (wxCommandEvent &ev  ) {
     std::string fn = std::string (f.GetPath ());
     text_dryfile->SetValue (fn);
     if (!dec) return;
-    bool b = dec->load_sweep_dry (fn.c_str ());
-    if (!b) {
-      show_message ("Failed to load dry sweep: " + fn);
-    }
+    int sr;
+    c_wavebuffer dummy_r;
+    //if (!read_wav (drysweep, dummy_r, &sr))
+    //  show_message ("Failed to load dry sweep: " + fn);
+    //else if (!dec->set_dry_sweep (drysweep)
+    //  show_message ("Failed to load dry sweep: " + fn);
   }
 }
 
@@ -769,25 +791,54 @@ void c_mainwindow::on_btn_generate (wxCommandEvent &ev) { CP
   make_dry_sweep ();
 }
 
+void c_mainwindow::on_btn_irremove (wxCommandEvent &ev) { CP
+}
+
+void c_mainwindow::on_btn_irrename (wxCommandEvent &ev) { CP
+}
+
+void c_mainwindow::on_btn_irload (wxCommandEvent &ev) { CP
+  std::vector<std::string> list;
+  std::string s;
+  wxFileDialog f (this, "Choose input file(s)",
+                  "", "", "*.[Ww][Aa][Vv]", wxFD_OPEN|wxFD_MULTIPLE);
+  if (cwd.size () > 0)
+    f.SetDirectory (wxString (cwd));
+  int ret = f.ShowModal ();
+  if (ret != wxID_CANCEL) {
+    cwd = f.GetDirectory ();
+    wxArrayString wxv;
+    f.GetPaths (wxv);
+    for (int i = 0; i < wxv.GetCount (); i++) {
+      list_irfiles->Append (wxv [i]);
+      /*std::cout << "got filename: " + s + "\n" << std::flush;
+      list.push_back (std::string (s));*/
+    }
+  }
+}
+
+void c_mainwindow::on_btn_irsave (wxCommandEvent &ev) { CP
+}
+
 bool c_mainwindow::make_dry_sweep (bool load_it) {
   debug ("start");
   if (!dec) return false;
-  struct s_prefs *p = dec->prefs_;
+  struct s_prefs *p = dec->prefs;
   
-  get_prefs (dec->prefs_);
+  get_prefs (dec->prefs);
   
-  generate_log_sweep(p->sweep_seconds,
-                     p->preroll_seconds,
-                     p->marker_seconds,
-                     p->marker_gap_seconds,
-                     p->sweep_sr,
-                     p->sweep_amp_db,
-                     p->sweep_f1,
-                     p->sweep_f2,
-                     drysweep);
-
+  generate_log_sweep (p->sweep_seconds,
+                      p->preroll_seconds,
+                      p->marker_seconds,
+                      p->marker_gap_seconds,
+                      p->sweep_sr,
+                      p->sweep_amp_db,
+                      p->sweep_f1,
+                      p->sweep_f2,
+                      drysweep);
+  
   if (load_it) {
-    if (!dec->set_dry_from_buffer (drysweep, p->sweep_sr)) {
+    if (!dec->set_sweep_dry (drysweep)) {
       CP
       return false;
     }
@@ -838,7 +889,9 @@ void c_mainwindow::on_btn_dry_save (wxCommandEvent &ev) {
     if (sr < SAMPLERATE_MIN || sr > SAMPLERATE_MAX) {
       show_error ("Invalid sample rate:\n" + srtext);
     } else {
-      if (!write_mono_wav (dest.c_str (), drysweep, sr)) {
+      std::vector<float> v;
+      drysweep.export_to (v);
+      if (!write_mono_wav (dest.c_str (), v, sr)) {
         show_error ("Writing failed:\n" + dest);
       } else {
       }
@@ -895,12 +948,9 @@ void c_mainwindow::on_btn_inputfiles_add (wxCommandEvent &ev) {
   if (ret != wxID_CANCEL) {
     cwd = f.GetDirectory ();
     wxArrayString wxv;
-    f.GetFilenames (wxv);
+    f.GetPaths (wxv);
     for (int i = 0; i < wxv.GetCount (); i++) {
-      s = std::string (wxv [i]);
-      list_inputfiles->Append (cwd + "/" + s);
-      /*std::cout << "got filename: " + s + "\n" << std::flush;
-      list.push_back (std::string (s));*/
+      list_inputfiles->Append (wxv [i]);
     }
   }
 }
@@ -926,14 +976,14 @@ void c_mainwindow::on_btn_align_manual (wxCommandEvent &ev) {
 }
 
 void c_mainwindow::on_btn_audio (wxCommandEvent &ev) { CP
-  if (!dec || !dec->audio) return;
+  if (!dec || !audio) return;
   
-  if (dec->audio->state == audiostate::NOTREADY) {
+  if (audio->state == audiostate::NOTREADY) {
     if (init_audio ()) {
       update_audio_ports ();
     } else {
       show_error ("Failed to initialize " + 
-                    g_backend_names [(int) dec->audio->backend] +
+                    g_backend_names [(int) audio->backend] +
                     "\n...is audio device available?\n");
     }
   } else {
@@ -942,14 +992,15 @@ void c_mainwindow::on_btn_audio (wxCommandEvent &ev) { CP
 }
 
 void c_mainwindow::on_btn_play (wxCommandEvent &ev) {
-  if (!audio_ready ()) return;
+  if (!is_ready ()) return;
   CP
   //init_audio ();
-  if (dec->audio->state == audiostate::IDLE ||
-      dec->audio->state == audiostate::MONITOR)
-    dec->audio->play (dec->dry_, false);
+  if (audio->state == audiostate::IDLE ||
+      audio->state == audiostate::MONITOR)
+    audio->play (&drysweep);
+    //audio->play (&dec->sweep_dry);
   else
-    dec->audio->stop ();
+    audio->stop ();
 }
 
 void c_mainwindow::on_btn_process (wxCommandEvent &ev) {
@@ -969,15 +1020,15 @@ void c_mainwindow::on_btn_process (wxCommandEvent &ev) {
   n = list_inputfiles->GetCount ();
   printf ("got %d files:\n", n);
   
-  dec->audio_stop ();
-  get_prefs (dec->prefs_);
-  debug ("mono: %s", dec->prefs_->request_stereo ? "true" : "false");
+  audio->stop ();
+  get_prefs (dec->prefs);
+  debug ("mono: %s", dec->prefs->request_stereo ? "true" : "false");
   //dec->set_dry_from_buffer (...);
   
   for (i = 0; i < n; i++) {
     wetfile = std::string (list_inputfiles->GetString (i));
     printf ("  %d: '%s'\n", i, wetfile.c_str ());
-    bool b = dec->load_sweep_wet (wetfile.c_str ());
+    bool b = false;//dec->set_sweep_wet (wetfile.c_str ());
     if (!b) {
       printf ("can't load file %s, ", wetfile.c_str ());
       if (chk_abort->GetValue ()) {
@@ -1076,34 +1127,34 @@ int c_mainwindow::add_dir (std::string dirname, bool recurs) {
 }
 
 // plumbing for vu data
-void c_mainwindow::set_vu_l (float level, float hold, bool clip, bool xrun) 
-  { pn_meter->set_l (level, hold, clip, xrun); }
-  
-void c_mainwindow::set_vu_r (float level, float hold, bool clip, bool xrun)
-  { pn_meter->set_r (level, hold, clip, xrun); }
+//void c_mainwindow::set_vu_l (float level, float hold, bool clip, bool xrun) 
+//  { pn_meter->set_l (level, hold, clip, xrun); CP}
+//  
+//void c_mainwindow::set_vu_r (float level, float hold, bool clip, bool xrun)
+//  { pn_meter->set_r (level, hold, clip, xrun); CP}
 
 // c_deconvolver_gui
 
-void c_deconvolver_gui::set_vu_pre () { }
-void c_deconvolver_gui::set_vu_post () { }
+//void c_deconvolver_gui::set_vu_pre () { }
+//void c_deconvolver_gui::set_vu_post () { }
 
-void c_deconvolver_gui::set_vu_l (float level, float hold, bool clip, bool xrun) {
-  c_app *app = ((c_app *) wxTheApp);
-  if (!app || !app->mainwindow) return;
-  app->mainwindow->set_vu_l (level, hold, clip, xrun);
-}
-
-void c_deconvolver_gui::set_vu_r (float level, float hold, bool clip, bool xrun) {
-  c_app *app = ((c_app *) wxTheApp);
-  if (!app || !app->mainwindow) return;
-  app->mainwindow->set_vu_r (level, hold, clip, xrun);
-}
+//void c_deconvolver_gui::set_vu_l (float level, float hold, bool clip, bool xrun) {
+//  c_app *app = ((c_app *) wxTheApp);
+//  if (!app || !app->mainwindow) return;
+//  app->mainwindow->set_vu_l (level, hold, clip, xrun);
+//}
+//
+//void c_deconvolver_gui::set_vu_r (float level, float hold, bool clip, bool xrun) {
+//  c_app *app = ((c_app *) wxTheApp);
+//  if (!app || !app->mainwindow) return;
+//  app->mainwindow->set_vu_r (level, hold, clip, xrun);
+//}
 
 
 ////////////////////////////////////////////////////////////////////////////////
 // c_app
 
-c_app::c_app (c_deconvolver *d)
+c_app::c_app (c_deconvolver_gui *d)
 : wxApp::wxApp () {
   (dec = d); if (!d) { debug ("Warning: no deconvolver given"); }
   CP
@@ -1150,14 +1201,14 @@ int c_app::FilterEvent (wxEvent &ev) {
 c_app *g_app = NULL;
 //wxIMPLEMENT_APP_NO_MAIN (c_app);
 
-int wx_main (int argc, char **argv, c_deconvolver *dec) {
+int wx_main (int argc, char **argv, c_audioclient *audio) {
   int retval = 0;
   debug ("start");
-    
-  //check_endianness ();
   
-  // THE RIGHT WAY TO DO IT:
-  g_app = new c_app (dec);
+  c_deconvolver_gui dec;
+  
+  g_app = new c_app (&dec);
+  g_app->audio = audio;
   wxApp::SetInstance (g_app);
   retval = wxEntry (argc, argv);
   //delete g_app;
@@ -1233,7 +1284,7 @@ c_customwidget::c_customwidget (wxWindow *p_parent,
                                 wxSize p_size,
                                 wxBorder border)
 : wxPanel (p_parent, p_id, pos, p_size, border) {
-  debug ("begin");
+  debug ("start");
   
   visible = true;
   parent = p_parent;
@@ -1295,40 +1346,37 @@ void c_customwidget::inspect () {
 
 /* Typically, this funciton would react on resize, or other event that
  * invalidates the base image. */
-void c_customwidget::render_base_image () {
+bool c_customwidget::render_base_image () {
+  //debug ("start");
   int i, j, k, x, y;
-  //unsigned char *pix, *pixeldata;
-  //int rowstride;
   int cr, cg, cb;
   int timeunit, timevalue;
   float alpha;
-  wxBitmap /*dummy_bitmap,*/ text_image;
   wxMemoryDC dc;
   
   GetClientSize (&width, &height);
-  //debug ("start, width=%d, height=%d", width, height);
+  if (width <= 0 || height <= 0) return false;
   
-  /*int w = width - 1;
-  int h = height - 1;*/
   int gradwidth = width / 5;
   img_base = wxBitmap (width, height, 32);
   img_overlay = wxBitmap (width, height, 32);
+  
+  if (!img_base.IsOk ()) return false;
   
   dc.SelectObject (img_base);
   dc.SetBackground (col_bg);
   dc.Clear ();
   dc.SelectObject (wxNullBitmap);
   
-  //c_misc::clear_bitmap (&img_overlay, 255, 255, 255, 32);
-  
   base_image_valid = true;
   
   //debug ("end");
+  return true;
 }
 
 /* Typically, this function would react to minor appearance changes, such
  * as visual feedback of mouse events and so on. */
-void c_customwidget::update (wxWindowDC &dc) {
+bool c_customwidget::update (wxWindowDC &dc) {
   int x, y, w, h, i, m, c;
   unsigned char new_md5 [16];
   int new_width, new_height;
@@ -1336,14 +1384,15 @@ void c_customwidget::update (wxWindowDC &dc) {
   //debug ("start");
   
   GetClientSize (&new_width, &new_height);
+  if (new_width <= 0 || new_height <= 0)
+    return false;
   
   if (!base_image_valid || new_width != width || new_height != height) {
+    width = new_width;
+    height = new_height;
     render_base_image ();
     img_overlay = wxBitmap (width, height, 32);
   }
-  
-  // ??? keeping this for reference
-  //wxGraphicsContext *gc = wxGraphicsContext::Create (dc);
   
   dc.DrawBitmap (img_base, 0, 0);
   //dc.DrawBitmap (img_overlay, 0, 0);
@@ -1352,11 +1401,14 @@ void c_customwidget::update (wxWindowDC &dc) {
    * we would need to do this AFTER render_base_image () */
   
   //debug ("end");
+  return true;
 }
 
-void c_customwidget::update () {
+bool c_customwidget::update () {
+  //debug ("start");
   wxClientDC dc (this);
-  update (dc);
+  //debug ("end");
+  return update (dc);
 }
 
 /*void c_customwidget::schedule_deletion () {
@@ -1529,11 +1581,20 @@ c_meterwidget::c_meterwidget (wxWindow *parent,
   CP
 }
 
+void c_meterwidget::set_vudata (c_vudata *v) {
+  data = v;
+}
+
+c_vudata *c_meterwidget::get_vudata () {
+  return data;
+}
+
 void c_meterwidget::on_resize_event (wxSizeEvent &ev) { CP
   c_customwidget::on_resize_event (ev);
 }
 
 void c_meterwidget::render_gradient_bar () {
+  //debug ("start");
   img_bar = wxBitmap (width, height, 32);
   int bw = img_bar.GetWidth ();
   int bh = img_bar.GetHeight ();
@@ -1561,7 +1622,7 @@ void c_meterwidget::render_gradient_bar () {
     lutG[i] = 255.0f * (1.0f - t);
     lutB [i] = 0;
   }
-  
+  CP  
   // ...now write actual pixels to bitmap
   wxAlphaPixelData pdata (img_bar);
   wxAlphaPixelData::Iterator p (pdata);
@@ -1578,11 +1639,13 @@ void c_meterwidget::render_gradient_bar () {
     p = rowstart;
     p.OffsetY (pdata, 1);
   }
+  
+  //debug ("end");
 }
 
-void c_meterwidget::render_base_image () {
+bool c_meterwidget::render_base_image () {
   //debug ("start");
-  c_customwidget::render_base_image ();
+  if (!c_customwidget::render_base_image ()) return false;
   
   //if (rec_size < 0) rec_size = (vertical ? width : height);
   //if (clip_size < 0) clip_size = (vertical ? rec_size / 2 : rec_size * 2);
@@ -1644,25 +1707,29 @@ void c_meterwidget::render_base_image () {
   } lines [] = {
     // pos    r    g    b    a 
     //{ 0.0,     0, 255,   0, 255 },
-    { 0.5,     0, 255,   0, 255 },
-    { 0.75,  255, 255,   0, 255 },
-    { 0.875, 255, 128,   0, 255 },
-    { 1.0,   255,   0,   0, 255 },
-    { -1.0,    0,   0,   0, 255 },
+    { 0.5,     0, 255,   0, 128 },
+    { 0.75,  255, 255,   0, 128 },
+    { 0.875, 255, 128,   0, 128 },
+    { 1.0,   255,   0,   0, 128 },
+    { -1.0,    0,   0,   0, 128 },
   };
   
   for (int i = 0; lines [i].pos >= 0; i++) {
     ln * l = &lines [i];
     //debug ("line: %f, rgb (%d,%d,%d)", l->pos, l->r, l->g, l->b);
-    dc.SetPen (wxPen (wxColour (l->r, l->g, l->b)));
+    dc.SetPen (wxPen (wxColour (l->r, l->g, l->b, l->a)));
     if (vertical) {
       int ppos = (height - clip_size - rec_size) * l->pos;
       if (ppos > height - 1) ppos = height - 1;
-      dc.DrawLine (0, height - ppos - rec_size, width, height - ppos - rec_size);
+      dc.DrawLine (t1, height - ppos - rec_size, t2 - 1, height - ppos - rec_size);
+      if (stereo)
+      dc.DrawLine (t3, height - ppos - rec_size, t4 - 1, height - ppos - rec_size);
     } else {
       int ppos = (width - clip_size - rec_size) * l->pos;
       if (ppos > width - 1) ppos = width - 1;
-      dc.DrawLine (ppos + rec_size, 0, ppos + rec_size, height);
+      dc.DrawLine (ppos + rec_size, t1, ppos + rec_size, t2 - 1);
+      if (stereo)
+        dc.DrawLine (ppos + rec_size, t3, ppos + rec_size, t4 - 1);
     }
   }
   
@@ -1700,12 +1767,15 @@ void c_meterwidget::render_base_image () {
   }
              
   //debug ("end");
+  return true;
 }
 
 // at: x start pos if vertical, y pos if horiz
 // ie. distance between (0,0) and meter bar
 void c_meterwidget::draw_bar (wxDC &dc, int at, int th, bool is_r,
                               float level, float hold) {
+  //debug ("start");
+  debug ("at=%d, th=%d, %s, level=%f, hold=%f", at, th, is_r ? "is_r" : "!is_r", level, hold);
   if (level < 0) level = 0;
   if (level > 1) level = 1;
   int bar_len = met_len * level;
@@ -1734,45 +1804,54 @@ void c_meterwidget::draw_bar (wxDC &dc, int at, int th, bool is_r,
       //dc.DrawRectangle (x, y, w, h);
     }
     //dc.DrawRectangle (x, y, w, h); //top
-    img_bar_sub = img_bar.GetSubBitmap (wxRect (x, y, w, h));
-    dc.DrawBitmap (img_bar_sub, x, y);
+    if (!img_bar.IsOk ()) return;
+    if (w > 0 && h > 0) {
+      debug ("x=%d y=%d, w=%d h=%d", x, y, w, h);
+      img_bar_sub = img_bar.GetSubBitmap (wxRect (x, y, w, h));
+      if (!img_bar_sub.IsOk ()) return;
+      dc.DrawBitmap (img_bar_sub, x, y);
+    }
   }
   
   // peak hold indicator
   int holdpos = hold * met_len;
-  if (holdpos > 0 && holdpos < met_len) {
-    dc.SetPen (wxPen (wxColour (128, 128, 0)));
+  if (holdpos > 1 && holdpos < met_len) {
+    dc.SetPen (wxPen (wxColour (255, 255, 255, 128)));
     if (vertical) {
       holdpos -= clip_size;
-      dc.DrawLine (at, y + h - holdpos, at + th, y + h - holdpos);
+      dc.DrawLine (at, y + h - holdpos, at + th - 1, y + h - holdpos);
+      dc.DrawLine (at, y + h - holdpos - 1, at + th - 1, y + h - holdpos - 1);
     } else {
       holdpos += rec_size;
-      dc.DrawLine (x + holdpos, at, x + holdpos, at + th);
+      dc.DrawLine (x + holdpos, at, x + holdpos, at + th - 1);
+      dc.DrawLine (x + holdpos - 1, at, x + holdpos - 1, at + th - 1);
     }
   }
+  //debug ("end");
 }
 
-void c_meterwidget::update (wxWindowDC &dc) {
-  c_customwidget::update (dc);
+bool c_meterwidget::update (wxWindowDC &dc) {
+  //debug ("start");
+  if (!c_customwidget::update (dc)) return false;
   
   // meter bars
   if (stereo) {
-    draw_bar (dc, t1, t2 - t1, false, l, hold_l);
-    draw_bar (dc, t3, t4 - t3, true,  r, hold_r);
+    draw_bar (dc, t1, t2 - t1, false, data->abs_l, data->hold_l);
+    draw_bar (dc, t3, t4 - t3, true,  data->abs_r, data->hold_r);
   } else {
-    draw_bar (dc, t1, t2 - t1, false, l, hold_l);
+    draw_bar (dc, t1, t2 - t1, false, data->abs_l, data->hold_l);
   }
-  /*
+  
   // clip indicator
   dc.SetBrush (wxBrush (*wxRED));
   dc.SetPen (wxPen (*wxRED));
-  if ((clip_l || clip_r) && clip_size > 0) {
+  if ((data->clip_l || data->clip_r) && clip_size > 0) {
     if (vertical) {
       dc.DrawRectangle (0, 0, width, clip_size);
     } else {
       dc.DrawRectangle (width - clip_size, 0, clip_size, height);
     }
-  } else if ((clip_l || clip_r) && !vertical) {
+  } else if ((data->clip_l || data->clip_r) && !vertical) {
     int idx = (int) meterwarn::CLIP;
     int w = img_warning [idx].GetWidth ();
     int h = img_warning [idx].GetHeight ();
@@ -1781,16 +1860,20 @@ void c_meterwidget::update (wxWindowDC &dc) {
   
   // recording indicator (red circle)
   int rp = (vertical ? width : height) / 4;
-  if (rec_size > 0 && rec) {
+  if (rec && rec_size > 0 && rec) {
     if (vertical)
       dc.DrawEllipse (rp, height - rec_size + rp, width - (rp * 2), rec_size - (rp * 2));
     else
       dc.DrawEllipse (rp, rp, rec_size - (rp * 2), height - (rp * 2));
-  } else if (1||rec && !vertical) {
+  } else if (rec && !vertical) {
     int idx = (int) meterwarn::REC;
     int h = img_warning [idx].GetHeight ();
     dc.DrawBitmap (img_warning [idx], 1, (height - h) / 2);
-  }*/
+  }
+  
+  data->acknowledge ();
+  //debug ("end");
+  return true;
 }
 
 void c_meterwidget::set_stereo (bool b) {
@@ -1799,31 +1882,33 @@ void c_meterwidget::set_stereo (bool b) {
   Refresh ();
 }
 
-void c_meterwidget::set_l (float level, float hold,
-                           bool clip, bool xr, bool _rec) {
-  //debug ("lev:%f, hold=%f, clip=%s, xrun=%s", level, hold,
-  //       clip ? "true" : "false", xrun ? "true": "false");
-  if (l != level) needs_redraw = true;
-  l = level;
-  hold_l = hold;
-  clip_l = clip;
-  rec = _rec;
-  xrun = xr;
-  //if (needs_update) Refresh (); <-- BIG NO NO, THIS IS CALLED FROM THE JACK THREAD
-}
-
-void c_meterwidget::set_r (float level, float hold,
-                           bool clip, bool xr, bool _rec) {
-  //debug ("lev:%f, hold=%f, clip=%s, xrun=%s", level, hold,
-  //       clip ? "true" : "false", xrun ? "true": "false");
-  if (r != level) needs_redraw = true;
-  r = level;
-  hold_r = hold;
-  clip_r = clip;
-  rec = _rec;
-  xrun = xr;
-  //if (needs_update) Refresh (); <-- BIG NO NO (see above)
-}
+//void c_meterwidget::set_l (float level, float hold, bool clip, bool xr) { CP
+//  //debug ("lev:%f, hold=%f, clip=%s, xrun=%s", level, hold,
+//  //       clip ? "true" : "false", xrun ? "true": "false");
+//  if (l != level ||
+//      hold_l != hold ||
+//      clip_l != clip) { needs_redraw = true; }
+//  l = level;
+//  hold_l = hold;
+//  clip_l = clip;
+//  //rec = _rec;
+//  xrun = xr;
+//  //if (needs_update) Refresh (); <-- BIG NO NO, THIS IS CALLED FROM THE JACK THREAD
+//}
+//
+//void c_meterwidget::set_r (float level, float hold, bool clip, bool xr) { CP
+//  //debug ("lev:%f, hold=%f, clip=%s, xrun=%s", level, hold,
+//  //       clip ? "true" : "false", xrun ? "true": "false");
+//  if (r != level ||
+//      hold_r != hold ||
+//      clip_r != clip) { needs_redraw = true; }
+//  r = level;
+//  hold_r = hold;
+//  clip_r = clip;
+//  //rec = _rec;
+//  xrun = xr;
+//  //if (needs_update) Refresh (); <-- BIG NO NO (see above)
+//}
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1843,8 +1928,8 @@ c_waveformwidget::c_waveformwidget (wxWindow *parent,
   col_fg = wxColour (0, 128, 32);
 }
 
-void c_waveformwidget::render_base_image () {
-  c_customwidget::render_base_image ();
+bool c_waveformwidget::render_base_image () {
+  if (!c_customwidget::render_base_image ()) return false;
   // draw grid
   int w2 = width / 2;
   int h2 = height / 2;
@@ -1862,7 +1947,7 @@ void c_waveformwidget::render_base_image () {
     std::string msg = "(no impulse response file)";
     wxSize sz = dc.GetTextExtent (msg);
     dc.DrawText (msg, w2 - sz.x / 2, h2 - sz.y / 2);
-    return;
+    return true;
   }
   
   // background
@@ -1874,11 +1959,12 @@ void c_waveformwidget::render_base_image () {
   dc.SetPen (wxPen (col_fg));
   dc.DrawLine (2, 1 + height / 2, 1 + width - 4, 1 + height / 2);
   
-  draw_frame (dc);
+  draw_border (dc);
   dc.SelectObject (wxNullBitmap);
+  return true;
 }
 
-void c_waveformwidget::draw_frame (wxDC &dc) {
+void c_waveformwidget::draw_border (wxDC &dc) {
   // bezel/frame, this gives a nice gradient effect: line at a slight
   // angle, sandwitched between two lines of system background color
   dc.SetPen (wxPen (col_bezel1));
@@ -1899,17 +1985,18 @@ void c_waveformwidget::draw_frame (wxDC &dc) {
   dc.DrawLine (width - 1, height - 1, 0, height - 1);
 }
 
-void c_waveformwidget::update (wxWindowDC &dc) {
-  c_customwidget::update (dc);
+bool c_waveformwidget::update (wxWindowDC &dc) {
+  if (!c_customwidget::update (dc)) return false;
   dc.SetPen (wxPen (col_default_fg));
+  return true;
 }
 
 
 ////////////////////////////////////////////////////////////////////////////////
 // test/minimal example usage of c_customwidget derived class
 
-void c_testwidget::render_base_image () { CP
-  c_customwidget::render_base_image ();
+bool c_testwidget::render_base_image () { CP
+  if (!c_customwidget::render_base_image ()) return false;
   wxMemoryDC dc;
   dc.SelectObject (img_base);
   std::string msg = "This is an example use of c_customwidget";
@@ -1917,12 +2004,14 @@ void c_testwidget::render_base_image () { CP
   dc.SetTextForeground (col_default_fg);
   dc.DrawText (msg, (width - sz.x) / 2, (height - sz.y) / 2);
   dc.SelectObject (wxNullBitmap);
+  return true;
 }
 
-void c_testwidget::update (wxWindowDC &dc) {
-  c_customwidget::update (dc);
+bool c_testwidget::update (wxWindowDC &dc) {
+  if (!c_customwidget::update (dc)) return false;
   dc.SetPen (wxPen (*wxRED));
   dc.DrawLine (0, 0, width, height);
+  return true;
 }
 
 #endif // USE_WXWIDGETS

@@ -156,6 +156,10 @@ void ui_mainwindow::Init()
     spin_chn_offset = NULL;
     btn_process = NULL;
     list_irfiles = NULL;
+    btn_ir_rename = NULL;
+    btn_ir_remove = NULL;
+    btn_ir_load = NULL;
+    btn_ir_save = NULL;
     m_waveform = NULL;
     text_statusbar = NULL;
     btn_about = NULL;
@@ -607,13 +611,22 @@ void ui_mainwindow::CreateControls()
     list_irfiles = new wxListBox( itemPanel3, ID_IRFILES, wxDefaultPosition, wxDefaultSize, list_irfilesStrings, wxLB_SINGLE );
     itemBoxSizer22->Add(list_irfiles, 1, wxGROW|wxALL, 5);
 
-    wxBoxSizer* itemBoxSizer23 = new wxBoxSizer(wxHORIZONTAL);
-    itemBoxSizer22->Add(itemBoxSizer23, 0, wxGROW|wxALL, 0);
-    wxButton* itemButton24 = new wxButton( itemPanel3, ID_BUTTON, _("Rename"), wxDefaultPosition, wxDefaultSize, 0 );
-    itemBoxSizer23->Add(itemButton24, 1, wxALIGN_CENTER_VERTICAL|wxALL, 5);
+    wxFlexGridSizer* itemFlexGridSizer4 = new wxFlexGridSizer(0, 2, 0, 0);
+    itemBoxSizer22->Add(itemFlexGridSizer4, 0, wxGROW|wxALL, 0);
+    btn_ir_rename = new wxButton( itemPanel3, ID_IR_RENAME, _("Rename"), wxDefaultPosition, wxDefaultSize, 0 );
+    itemFlexGridSizer4->Add(btn_ir_rename, 1, wxGROW|wxALL, 5);
 
-    wxButton* itemButton26 = new wxButton( itemPanel3, ID_BUTTON1, _("Remove"), wxDefaultPosition, wxDefaultSize, 0 );
-    itemBoxSizer23->Add(itemButton26, 1, wxALIGN_CENTER_VERTICAL|wxALL, 5);
+    btn_ir_remove = new wxButton( itemPanel3, ID_IR_REMOVE, _("Remove"), wxDefaultPosition, wxDefaultSize, 0 );
+    itemFlexGridSizer4->Add(btn_ir_remove, 1, wxGROW|wxALL, 5);
+
+    btn_ir_load = new wxButton( itemPanel3, ID_IR_LOAD, _("Load..."), wxDefaultPosition, wxDefaultSize, 0 );
+    itemFlexGridSizer4->Add(btn_ir_load, 0, wxGROW|wxALL, 5);
+
+    btn_ir_save = new wxButton( itemPanel3, ID_IR_SAVE, _("Save..."), wxDefaultPosition, wxDefaultSize, 0 );
+    itemFlexGridSizer4->Add(btn_ir_save, 0, wxGROW|wxALL, 5);
+
+    itemFlexGridSizer4->AddGrowableCol(0);
+    itemFlexGridSizer4->AddGrowableCol(1);
 
     wxFlexGridSizer* itemFlexGridSizer1 = new wxFlexGridSizer(0, 3, 0, 0);
     itemBoxSizer20->Add(itemFlexGridSizer1, 3, wxGROW|wxALL, 5);

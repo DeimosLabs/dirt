@@ -16,42 +16,42 @@
 
 class c_jackclient : public c_audioclient {
 public:
-  c_jackclient (c_deconvolver *dec);
+  c_jackclient (s_prefs *prefs);
   ~c_jackclient ();
 
   virtual bool init (std::string clientname = "",
                      int samplerate = -1,
                      bool stereo = true);
-  
+  virtual bool shutdown ();
   virtual bool register_input (bool stereo);
   virtual bool register_output (bool stereo);
   virtual bool set_stereo (bool stereo);
   virtual bool connect_ports (bool in = true, bool out = true);
+  virtual int disconnect_all (jack_port_t *port);
+  virtual bool connect (jack_port_t *port, std::string port_name);
   
   virtual bool unregister ();
   //virtual bool shutdown ();
   virtual bool ready ();
-  virtual bool play (const std::vector<float> &out,
-                     bool block);
-  virtual bool play (const std::vector<float> &out_l,
-                     const std::vector<float> &out_r,
-                     bool block);
+  virtual bool play (c_wavebuffer *out);
+  virtual bool play (c_wavebuffer *out_l,
+                     c_wavebuffer *out_r);
   virtual bool arm_record ();
-  virtual bool rec ();
-  virtual bool playrec (const std::vector<float> &out_l,
-                        const std::vector<float> &out_r);
-  virtual bool stop ();
+  virtual bool rec (c_wavebuffer *in_l,
+                    c_wavebuffer *in_r);
+  virtual bool playrec (c_wavebuffer *out_l,
+                        c_wavebuffer *out_r,
+                        c_wavebuffer *in_l,
+                        c_wavebuffer *in_r);
+  virtual bool stop (bool also_stop_monitor = false);
   virtual bool stop_playback ();
-  virtual bool stop_record ();
+  virtual bool stop_record (bool also_stop_monitor = false);
   
   virtual int get_input_ports (std::vector<std::string> &v);
   virtual int get_output_ports (std::vector<std::string> &v);
-  //virtual int get_samplerate ();
-  //virtual int get_bufsize ();
-  //virtual int get_bitdepth ();
-  virtual int disconnect_all (jack_port_t *port);
-  virtual bool connect (jack_port_t *port, std::string port_name);
-  
+  virtual int get_samplerate ();
+  virtual int get_bufsize ();
+  virtual int get_bitdepth ();
   jack_client_t *client = NULL;
   jack_port_t   *port_inL  = NULL;
   jack_port_t   *port_inR  = NULL;

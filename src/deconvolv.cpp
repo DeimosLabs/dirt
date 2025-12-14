@@ -21,33 +21,45 @@
 #define BP
 #endif
 
+////////////////////////////////////////////////////////////////////////////////
+// GLOBAL / STATIC FUNCTIONS
 
-size_t find_first_nonsilent (const std::vector<float> &buf,
-                                   float silence_thresh_db) {
+size_t find_first_nonsilent_from (const std::vector<float> &buf,
+                                   float silence_thresh_db,
+                                   size_t from) { CP
   float silence_thresh = db_to_linear (silence_thresh_db);
-  debug ("silence_thresh db=%f lin=%f", silence_thresh_db, silence_thresh);
-  
   for (size_t i = 0; i < buf.size (); i++) {
     if (std::fabs (buf [i]) > silence_thresh) return i;
   }
   return buf.size ();
 }
 
-size_t find_last_nonsilent (const std::vector<float> &buf,
-                                   float silence_thresh_db) {
+size_t find_last_nonsilent_from (const std::vector<float> &buf,
+                                   float silence_thresh_db,
+                                   size_t from) { CP
   float silence_thresh = db_to_linear (silence_thresh_db);
-  debug ("silence_thresh db=%f lin=%f", silence_thresh_db, silence_thresh);
-  
   //for (size_t i = 0; i < buf.size (); ++i) {
-  for (ssize_t i = (ssize_t) buf.size () - 1; i >= 0; --i) {
+  size_t start_from = std::min (from, (size_t) buf.size () - 1);
+  for (ssize_t i = start_from; i >= 0; --i) {
     if (std::fabs (buf [i]) > silence_thresh) return (size_t) i;
   }
   return buf.size ();
 }
 
+inline size_t find_first_nonsilent (const std::vector<float> &buf,float thr) { CP
+  return find_first_nonsilent_from (buf, thr, 0);
+}
+
+inline size_t find_last_nonsilent (const std::vector<float> &buf, float thr) { CP
+  return find_last_nonsilent_from (buf, thr, buf.size () - 1);
+}
+
 size_t find_peak (const std::vector<float> &buf) {
-  int i = 0, len = buf.size (), peakpos = 0;
+  int i = 0;
+  int len = buf.size ();
+  int peakpos = 0;
   float peak = 0;
+  
   for (i = 0; i < len; i++) {
     float abs = fabs (buf [i]);
     if (abs > peak) {
@@ -239,7 +251,7 @@ void dc_kill(std::vector<float>& irf, float samplerate)
         prev = v;
     }
 
-    // reverse pass to make it zero-phase
+    // reverse pass to (supposedly) make it zero phase
     prev = irf.back();
     for (size_t i = irf.size() - 2; i > 0; --i) {
         float v = irf[i];
@@ -267,10 +279,10 @@ size_t detect_sweep_start_with_marker (const std::vector<float> &buf,
   // default outputs
   if (out_marker_len) *out_marker_len = 0;
   if (out_gap_len)    *out_gap_len    = 0;
-
+  
   if (buf.empty ()) return 0;
   
-  // 1) first non-silent sample in the whole file
+  // first non-silent sample in the whole file
   size_t i0 = find_first_nonsilent (buf, silence_thresh_db);
   if (i0 >= buf.size ()) return 0; // all silent, fall back
 
@@ -284,7 +296,7 @@ size_t detect_sweep_start_with_marker (const std::vector<float> &buf,
     return i0;
   }
 
-  // 2) analyze a short window after i0 to see if it's our marker square wave
+  // analyze a short window after i0 to see if it's our marker square wave
   const double max_marker_window_sec = (marker_seconds_hint > 0.0)
                                        ? marker_seconds_hint
                                        : 5;
@@ -302,7 +314,7 @@ size_t detect_sweep_start_with_marker (const std::vector<float> &buf,
     return i0;
   }
 
-  // Count sign flips above some amplitude
+  // count sign flips above some amplitude
   const float amp_thresh = 0.5f * sweep_amp_linear; // strong signal only
   int last_sign = 0;
   size_t last_flip_idx = 0;
@@ -326,7 +338,7 @@ size_t detect_sweep_start_with_marker (const std::vector<float> &buf,
   }
 
   if (flip_count < 4) {
-    // Not enough flips for a clean square wave, treat as no marker
+    // not enough flips for a clean square wave, treat as no marker
     if (verbose) {
       std::cerr << "Not enough marker sign flips ("
                 << flip_count << "), using first non-silent at "
@@ -335,14 +347,14 @@ size_t detect_sweep_start_with_marker (const std::vector<float> &buf,
     debug ("return");
     return i0;
   }
-
+  
   double avg_samples_per_flip =
       (double) (last_flip_idx - first_flip_idx) / flip_count;
 
-  // For a square wave, 2 flips per full period
+  // for a square wave, 2 flips per full period
   double est_period = 2.0 * avg_samples_per_flip;
   double est_freq   = (est_period > 0.0)
-                      ? (double)samplerate / est_period
+                      ? (double) samplerate / est_period
                       : 0.0;
 
   double rel_err = std::fabs (est_freq - marker_freq) / marker_freq;
@@ -362,8 +374,8 @@ size_t detect_sweep_start_with_marker (const std::vector<float> &buf,
     debug ("return");
     return i0;
   }
-
-  // 3) marker looks valid -> decide where it ends
+  
+  // marker looks valid -> decide where it ends
   size_t marker_end = i0;
   if (marker_seconds_hint > 0.0) {
     marker_end = i0 + (size_t)(marker_seconds_hint * samplerate);
@@ -390,7 +402,7 @@ size_t detect_sweep_start_with_marker (const std::vector<float> &buf,
               << " to " << marker_end << " samples\n";
   }
 
-  // 4) Skip gap (silence) after marker
+  // skip gap (silence) after marker
   size_t gap_start = marker_end;
   size_t gap_end   = gap_start;
 
@@ -422,7 +434,7 @@ size_t detect_sweep_start_with_marker (const std::vector<float> &buf,
       silent_run = 0;
     }
   }
-
+  
   size_t sweep_start = 0;
   if (gap_end > gap_start && gap_end < buf.size ()) {
     sweep_start = gap_end;
@@ -432,9 +444,9 @@ size_t detect_sweep_start_with_marker (const std::vector<float> &buf,
     size_t rel = find_first_nonsilent (tail, silence_thresh_db);
     sweep_start = rel + marker_end;
   }
-
+  
   if (sweep_start >= buf.size ()) sweep_start = i0; // fallback
-
+  
   // Compute marker_len and gap_len in samples,
   // defined relative to first non-silent (i0)
   if (sweep_start != i0 && marker_end > i0) {
@@ -455,6 +467,9 @@ size_t detect_sweep_start_with_marker (const std::vector<float> &buf,
   }
 
   debug ("end");
+  
+  sweep_start--;
+  if (sweep_start < 0) return 0;
   return sweep_start;
 }
 
@@ -522,6 +537,8 @@ size_t detect_sweep_start (const std::vector<float> &buf,
     }
   
     debug("end");
+    
+    if (buf [0] <= 0.00001 && start <= 1) return 0; // avoid offsets of 1 silent sample
     return start;
 }
 
@@ -534,35 +551,71 @@ size_t detect_dry_sweep_start (const std::vector<float> &dry,
 
 // WET: if align_method::MARKER_DRY, reuse cached dry preroll;
 // otherwise just use normal logic on wet
-size_t detect_wet_sweep_start (const std::vector<float> &wet,
+size_t detect_wet_sweep_start (const std::vector<float> &wet_l,
+                               const std::vector<float> &wet_r,
                                       int samplerate,
                                       s_prefs &prefs) {
-    debug("detect_wet_sweep_start: start");
-
-    size_t start = 0;
-
-    if (prefs.align == align_method::MARKER_DRY) {
-        // 1) where does wet actually start?
-        size_t wet_first = find_first_nonsilent (wet, prefs.sweep_silence_db);
-
-        // 2) skip the same marker+gap duration we found in dry
-        start = wet_first
-              + prefs.cache_dry_marker_len
-              + prefs.cache_dry_gap_len;
-
-        if (prefs.verbose) {
-            std::cerr << "wet: first_nonsilent=" << wet_first
-                      << " using cached marker_len=" << prefs.cache_dry_marker_len
-                      << " gap_len=" << prefs.cache_dry_gap_len
-                      << " -> start=" << start << "\n";
-        }
-    } else {
-        // plain marker / silence / none logic on wet buffer
-        start = detect_sweep_start (wet, samplerate, prefs, /*ignore_marker=*/false);
+  debug("detect_wet_sweep_start: start");
+  
+  std::vector<float> mix;
+  
+  if (!wet_r.empty ()) {
+    const size_t n = std::min (wet_l.size (), wet_r.size ());
+    mix.resize (n);
+    for (size_t i = 0; i < n; ++i) {
+      mix [i] = 0.5f * (wet_l [i] + wet_r [i]);
     }
+    return detect_sweep_start (mix, samplerate, prefs);
+  } else {
+    return detect_sweep_start (wet_l, samplerate, prefs);
+  }
+    
 
-    debug("detect_wet_sweep_start: end");
-    return start;
+  size_t start = 0;
+
+  if (prefs.align == align_method::MARKER_DRY) {
+    // 1) where does wet actually start?
+    size_t wet_first = find_first_nonsilent (mix, prefs.sweep_silence_db);
+
+    // 2) skip the same marker+gap duration we found in dry
+    start = wet_first
+          + prefs.cache_dry_marker_len
+          + prefs.cache_dry_gap_len;
+
+    if (prefs.verbose) {
+        std::cerr << "mix: first_nonsilent=" << wet_first
+                  << " using cached marker_len=" << prefs.cache_dry_marker_len
+                  << " gap_len=" << prefs.cache_dry_gap_len
+                  << " -> start=" << start << "\n";
+    }
+  } else {
+    // plain marker / silence / none logic on wet buffer
+    start = detect_sweep_start (mix, samplerate, prefs, /*ignore_marker=*/false);
+  }
+
+  debug("detect_wet_sweep_start: end");
+  return start;
+}
+
+// wrapper functions to convert our data to/from c_wavebuffer<->vectors of floats
+bool read_wav (const char *filename,
+               c_wavebuffer &left,
+               c_wavebuffer &right) {
+  debug ("start");
+
+  std::vector<float> vl;
+  std::vector<float> vr;
+  int sr;
+  
+  int ret = read_wav (filename, vl, vr, sr);
+  left.import_from (vl);
+  right.import_from (vr);  
+  
+  left.set_samplerate (sr);
+  right.set_samplerate (sr);
+  
+  return ret;
+  debug ("end");
 }
 
 bool read_wav (const char *filename,
@@ -572,15 +625,17 @@ bool read_wav (const char *filename,
   debug ("start");
   
   left.clear ();
+  
   right.clear ();
-
+  
   SF_INFO info {};
+  
   SNDFILE *f = sf_open (filename, SFM_READ, &info);
   if (!f) {
     std::cerr << "Error: failed to open WAV file: " << filename << "\n";
     return false;
   }
-
+  
   sr = info.samplerate;
   int chans = info.channels;
   sf_count_t frames = info.frames;
@@ -599,15 +654,16 @@ bool read_wav (const char *filename,
     std::cerr << "Error: no samples read from " << filename << "\n";
     return false;
   }
-
+  
   if (chans == 1) {
     // mono: store in left channel only
     left.assign (buf.begin (), buf.begin () + readFrames);
     // right stays empty
-    debug ("return (mono)");
+    debug ("return (mono), readFrames=%d, got %ld",
+           readFrames, (long int) left.size ());
     return true;
   }
-
+  
   if (chans == 2) {
     // stereo: split into left/right
     left.resize (readFrames);
@@ -617,8 +673,9 @@ bool read_wav (const char *filename,
       left[i]  = buf [2 * i + 0];
       right[i] = buf [2 * i + 1];
     }
-
-    debug ("return (stereo)");
+    
+    debug ("return (stereo), readFrames=%d, got %d, %d", readFrames,
+           (long int) left.size (), (long int) right.size ());
     return true;
   }
 
@@ -631,7 +688,7 @@ bool read_wav (const char *filename,
 bool write_mono_wav (const char *path,
                             const std::vector<float> &data,
                             int samplerate) {
-  debug ("start");
+  debug ("start, samplerate=%d", samplerate);
   SF_INFO info { };
   info.channels   = 1;
   info.samplerate = samplerate;
@@ -790,611 +847,138 @@ void align_stereo_joint_no_chop (std::vector<float> &L,
     shift_ir_right(R, shift);
 }
 
-#define DONT_USE_ANSI
 
-#ifdef DONT_USE_ANSI
 
-#ifdef DEBUG
-#define ANSI_DUMMY //CP
-#else
-#define ANSI_DUMMY
-#endif
+////////////////////////////////////////////////////////////////////////////////
+// c_deconvolver
 
-static void print_vu_meter (float level, float hold,
-                             bool clip, bool xrun)
-                                            { ANSI_DUMMY }
-static void ansi_cursor_move_x (int n)      { ANSI_DUMMY }
-static void ansi_cursor_move_to_x (int n)   { ANSI_DUMMY }
-static void ansi_cursor_move_y (int n)      { ANSI_DUMMY }
-static void ansi_cursor_hide ()             { ANSI_DUMMY }
-static void ansi_cursor_show ()             { ANSI_DUMMY }
-static void ansi_cursor_save ()             { ANSI_DUMMY }
-static void ansi_cursor_restore ()          { ANSI_DUMMY }
-static void ansi_clear_screen ()            { ANSI_DUMMY }
-static void ansi_clear_to_endl ()           { ANSI_DUMMY }
+bool c_deconvolver::set_sweep_dry (c_wavebuffer &buf) {
+  debug ("start, size=%ld", buf.size ());
+  if (buf.empty()) {
+    std::cerr << "Got empty dry buffer\n";
+    return false;
+  }
+  int sr = buf.get_samplerate ();
+  if (!set_samplerate (sr)) {
+    std::cerr << "Samplerate mismatch for dry buffer: already got wet " << sr
+              << " Hz, new (dry) " << buf.get_samplerate () << " Hz\n";
+    return false;
+  }
 
-#define FUCK char*//(char*)std::string("") //const
+  //sweep_dry = buf;
+  buf.export_to (sweep_dry);
+  //have_dry_ = true;
 
-char *g_ansi_colors [32] = { NULL };
-  //FUCK, FUCK, FUCK, FUCK, FUCK, FUCK, FUCK, FUCK, 
-  //FUCK, FUCK, FUCK, FUCK, FUCK, FUCK, FUCK, FUCK, 
-  //FUCK, FUCK, FUCK, FUCK, FUCK, FUCK, FUCK, FUCK, 
-  //FUCK, FUCK, FUCK, FUCK, FUCK, FUCK, FUCK, FUCK };
-#else
-
-#ifndef __CMDLINE_H
-char ANSI_BLACK [] =          "\x1B[0;30m";  //  0
-char ANSI_DARK_RED [] =       "\x1B[0;31m";  //  1
-char ANSI_DARK_GREEN [] =     "\x1B[0;32m";  //  2
-char ANSI_DARK_YELLOW [] =    "\x1B[0;33m";  //  3
-char ANSI_DARK_BLUE [] =      "\x1B[0;34m";  //  4
-char ANSI_DARK_MAGENTA [] =   "\x1B[0;35m";  //  5
-char ANSI_DARK_CYAN [] =      "\x1B[0;36m";  //  6
-char ANSI_GREY [] =           "\x1B[0;37m";  //  7
-char ANSI_DARK_GREY [] =      "\x1B[1;30m";  //  8
-char ANSI_RED [] =            "\x1B[1;31m";  //  9
-char ANSI_GREEN [] =          "\x1B[1;32m";  // 10
-char ANSI_YELLOW [] =         "\x1B[1;33m";  // 11
-char ANSI_BLUE [] =           "\x1B[1;34m";  // 12
-char ANSI_MAGENTA [] =        "\x1B[1;35m";  // 13
-char ANSI_CYAN [] =           "\x1B[1;36m";  // 14
-char ANSI_WHITE [] =          "\x1B[1;37m";  // 15
-char ANSI_RESET [] =          "\x1B[0m";
-
-#endif
-
-char *g_ansi_colors [] = {
-  ANSI_BLACK,       ANSI_DARK_RED,       ANSI_DARK_GREEN,     ANSI_DARK_YELLOW,
-  ANSI_DARK_BLUE,   ANSI_DARK_MAGENTA,   ANSI_DARK_CYAN,      ANSI_DARK_GREY,
-  ANSI_GREY,        ANSI_RED,            ANSI_GREEN,          ANSI_YELLOW,
-  ANSI_BLUE,        ANSI_MAGENTA,        ANSI_CYAN,           ANSI_WHITE,
-  ANSI_RESET  
-};
-
-static void ansi_cursor_move_x (int n) {
-  if (n == 0)
-    printf ("\x1b[G"); // special case: start of line
-  else if (n < 0)
-    printf ("\x1b[%dD", -n); // left
-  else
-    printf ("\x1b[%dC", n); // right
-}
-
-static void ansi_cursor_move_y (int n) {
-  if (n < 0)
-    printf ("\x1b[%dA", -n);
-  else if (n > 0)
-    printf ("\x1b[%dB", n);
-}
-
-static void ansi_cursor_move_to_x (int n) { printf ("\x1b[%dG", n); }
-static void ansi_clear_screen ()    { printf ("\x1b[2J");   }
-static void ansi_clear_to_endl ()   { printf ("\x1b[K");    }
-static void ansi_cursor_hide ()     { printf ("\x1b[?25l"); }
-static void ansi_cursor_show ()     { printf ("\x1b[?25h"); }
-static void ansi_cursor_save ()     { printf ("\x1b[s");    }
-static void ansi_cursor_restore ()  { printf ("\x1b[u");    }
-
-static void print_vu_meter (float level, float hold, bool clip, bool xrun) {
-  if (level < 0) level = 0;
-  if (level > 1) level = 1;
-  if (hold > 1) hold = 1;
-  //debug ("level=%f hold=%f, %s, %s", level, hold,
-  //       clip ? "clip" : "!clip", xrun ? "xrun" : "!xrun");
-  //return;
-  int i, size = ANSI_VU_METER_MIN_SIZE;
-  char buf [size] = { ' ' };
-  char colors [size] = { 8 };
-  int right = size - 6;
-  int yellow = (right * 2) / 3;
-  int red = (right * 5) / 6;
-  int n = (int) ((float) (level) * (float) (right));
-  if (n > size) n = size;
-  if (n < 0) n = 0;
-  
-  for (i = 1; i < n && i < yellow; i++)    { buf [i] = '='; colors [i] = 10; }
-  for (; i < n && i < red; i++)            { buf [i] = '='; colors [i] = 11; }
-  for (; i < n && i < right; i++)          { buf [i] = '='; colors [i] = 9; }
-  for (i = n; i < yellow; i++)             { buf [i] = '-'; colors [i] = 2; }   
-  for (; i < red; i++)                     { buf [i] = '-'; colors [i] = 3; }
-  for (; i < right; i++)                   { buf [i] = '-'; colors [i] = 1; }
-  //for (; i < size - 5; i++)  { buf [i] = '-'; colors [i] = 0x07; }
-  int holdpos = (int) (hold * (float) right);
-  if (holdpos > right - 1) holdpos = right - 1;
-  if (holdpos > 0) { 
-    if (holdpos > 0 && holdpos < right) {
-      buf [holdpos] = (holdpos == right - 1) ? '!' : '|';
-      colors [holdpos] = (holdpos == right - 1) ? 9 : 16;
+  /*if (prefs->align != align_method::NONE) {
+    dry_offset = detect_dry_sweep_start (sweep_dry, samplerate_, *prefs);
+    if (prefs->verbose) {
+      std::cerr << "Dry sweep start offset (buffer): "
+                << dry_offset << " samples\n";
     }
-  }
+  }*/
 
-  
-  // lazyyyyyy... who cares
-  if (xrun) {
-    buf [right + 1] = 'X';
-    buf [right + 2] = 'R';
-    buf [right + 3] = 'U';
-    buf [right + 4] = 'N';
-  } else if (clip) {
-    buf [right + 1] = 'C';
-    buf [right + 2] = 'L';
-    buf [right + 3] = 'I';
-    buf [right + 4] = 'P';
-  } else  {
-    buf [right + 1] = ' ';
-    buf [right + 2] = 'O';
-    buf [right + 3] = 'K';
-    buf [right + 4] = ' ';
-    colors [right + 1] = 10;
-    colors [right + 2] = 10;
-    colors [right + 3] = 10;
-    colors [right + 4] = 10;
-  }
-  if (xrun || clip) {
-    colors [right + 1] = 9;
-    colors [right + 2] = 9;
-    colors [right + 3] = 9;
-    colors [right + 4] = 9;
-  }
+  debug ("end");
+  return true;
+}
 
-  buf [0] = '[';
-  buf [right] = ']';
-  colors [0] = 16;
-  colors [right] = 16;
-  
-  buf [size - 1] = 0;
-  
-  std::string output = ""; 
-  int col = -1;
-  for (i = 0; buf [i]; i++) {
-    if (colors [i] != col) {
-      output += g_ansi_colors [colors [i]];
-      col = colors [i];
-    }
-    output += buf [i];
+bool c_deconvolver::set_sweep_wet (c_wavebuffer &buf_l,
+                                   c_wavebuffer &buf_r) {
+  debug ("start, sizes=%ld,%ld", buf_l.size (), buf_r.size ());
+  if (buf_l.empty () && buf_r.empty ()) {
+    std::cerr << (prefs->request_stereo ? "Wet buffers are empty.\n" :
+                                          "Wet buffer is empty.\n");
+    return false;
+  }
+  if (buf_r.size () > 0 && buf_l.get_samplerate () != buf_l.get_samplerate ()) {
+    std::cerr << "Samplerate mismatch between wet buffer channels.\n";
+    return false;
+  }
+  int sr = buf_l.get_samplerate ();
+  if (!set_samplerate (sr)) {
+    std::cerr << "Samplerate mismatch: audio backend refused " << sr
+              << " Hz for wet)\n";
+    return false;
   }
   
-  output += ANSI_RESET;
-    
-  //printf ("%s", buf);
-  std::cout << output << " \n" << std::flush;
-}
-
-#endif // DONT_USE_ANSI
-
-
-// c_deconvolver "passthrough" red tape for audio backend
-
-bool c_deconvolver::audio_init (std::string clientname,
-           int samplerate, bool stereo_out) {
-  debug ("start, clientname=%s, samplerate=%d, stereo_out=%s",
-         clientname.c_str (), samplerate, stereo_out ? "true" : "false");
-#ifdef USE_JACK
-  debug ("prefs_->portname_dry=%s", prefs_->portname_dry.c_str ());
-  debug ("prefs_->portname_wetL=%s", prefs_->portname_wetL.c_str ());
-  debug ("prefs_->portname_wetR=%s", prefs_->portname_wetR.c_str ());
-  audio = new c_jackclient (this);
-  CP
-  if (audio && audio->init (clientname, samplerate, stereo_out)) {
-    debug ("return (true)");
-    return true;
-  }
-  set_stereo (prefs_->request_stereo);
-#endif
+  //sweep_wet_l = buf_l;
+  //sweep_wet_r = buf_r;
+  buf_l.export_to (sweep_wet_l);
+  buf_r.export_to (sweep_wet_r);
   
-  debug ("end (false)");
-  return false;
-}
-
-bool c_deconvolver::set_stereo (bool b) { CP 
-  if (prefs_) { CP prefs_->request_stereo = b; }
-  if (!audio) { CP return false; }
-  if (audio->is_stereo == b) { CP return true; }
-  debug ("b=%d", (int) b);
-  
-  bool rs = audio->set_stereo (b);
-  //audio->unregister ();
-  //bool ri = audio->register_input (b);
-  //bool ro = audio->register_output (false);
-  //bool ret = ri && ro;
-  //debug ("rs=%d, ri=%d, ro=%d, ret=%d", (int) rs, (int) ri, (int) ro, (int) ret);
-  return rs;//ret;
-}
-
-bool c_deconvolver::audio_shutdown () {CP
-  if (audio) delete audio;
-  return true; // for now
-}
-
-bool c_deconvolver::audio_ready () {
-  bool ret = audio && audio->ready ();
-  debug ("ret=%d", (int) ret);
-  return ret;
-}
-
-bool c_deconvolver::audio_playback_done () {
-  //debug ("play_go=%d", audio->play_go);
-  return !audio->play_go;
-}
-
-audiostate c_deconvolver::get_audio_state () {CP
-  return audio->state;
-}
-
-bool c_deconvolver::audio_play (const std::vector<float> &out) {CP
-  return audio && audio->play (out);
-}
-
-bool c_deconvolver::audio_play (const std::vector<float> &out_l,
-           const std::vector<float> &out_r) {CP
-  return audio && audio->play (out_l, out_r);
-}
-
-bool c_deconvolver::audio_arm_record () {CP
-  return audio && audio->arm_record ();
-}
-
-bool c_deconvolver::audio_rec () {
-  return audio && audio->rec ();
-}
-
-bool c_deconvolver::audio_playrec (const std::vector<float> &out_l,
-                      const std::vector<float> &out_r) {CP
-  return audio && audio->playrec (out_l, out_r);
-}
-
-bool c_deconvolver::audio_stop () {CP
-  return audio->stop ();
-}
-
-bool c_deconvolver::audio_stop_playback () {CP
-  return audio->stop_playback ();
-}
-
-bool c_deconvolver::audio_stop_record () {CP
-  return audio->stop_record ();
-}
-
-// TODO: these should just print messages like "recording/playing",
-// "done" etc to stdout
-
-int c_deconvolver::on_play_loop (void *data)         { return 0; }
-int c_deconvolver::on_arm_rec_start (void *data)     { return 0; }
-int c_deconvolver::on_arm_rec_stop (void *data)      { return 0; }
-int c_deconvolver::on_record_start (void *data)      { return 0; }
-int c_deconvolver::on_record_loop (void *data)       { return 0; }
-
-int c_deconvolver::on_record_stop (void *data) {
-  audio_stop_playback ();
-  return 0;
-}
-
-int c_deconvolver::on_play_start (void *data)        {
-  std::cout << "Playing sweep via " << audio-> backend_name << "... " << std::flush;
-  return 0;
-}
-
-int c_deconvolver::on_play_stop (void *data)         {
-  std::cout << "done.\n" << std::flush;
-  return 0;
-}
-int c_deconvolver::on_playrec_start (void *data)     {
-  ansi_cursor_move_y (-1);
-  ansi_cursor_move_x (0);
-  //std::cout << "Playing + recording sweep via JACK... " << std::flush;
-  return 0; 
-}
-
-void c_deconvolver::set_vu_pre () {
-  //printf ("\n\n\n\n\n");
-  ansi_cursor_move_y (audio->is_stereo ? -3 : -2);
-}
-
-void c_deconvolver::set_vu_l (float l, float h, bool c, bool x) {
-  ansi_cursor_move_x (0);
-  ansi_clear_to_endl ();
-  print_vu_meter (l, h, c, x);
-  ansi_cursor_move_x (0);
-}
-
-void c_deconvolver::set_vu_r (float l, float h, bool c, bool x) {
-  ansi_cursor_move_x (0);
-  ansi_clear_to_endl ();
-  print_vu_meter (l, h, c, x);
-  ansi_cursor_move_x (0);
-}
-
-void c_deconvolver::set_vu_post () {
-    ansi_clear_to_endl ();
-    if (audio->state == audiostate::PLAYREC) {
-      int timeleft = audio->get_play_remaining () / audio->samplerate;
-      std::cout << "Recording, " << timeleft << " seconds left\n";
+  /*if (prefs->align != align_method::NONE) {
+    if (!sweep_wet_r.empty ()) {
+      const size_t n = std::min (sweep_wet_l.size (), sweep_wet_r.size ());
+      std::vector<float> mix (n);
+      for (size_t i = 0; i < n; ++i) {
+        mix[i] = 0.5f * (sweep_wet_l[i] + sweep_wet_r[i]);
+      }
+      wet_offset = detect_wet_sweep_start (mix, samplerate_, *prefs);
     } else {
-      std::cout << "Press enter to play and record sweep...\n";
-    }
-    //ansi_cursor_move_y (audio->is_stereo ? -2 : -3);
-}
-
-int c_deconvolver::on_playrec_loop (void *data) {
-  static float show_l = 0;
-  static float show_r = 0;
-  static float hold_l = 0;
-  static float hold_r = 0;
-  static uint32_t hold_l_timestamp = 0;
-  static uint32_t hold_r_timestamp = 0;
-  static uint32_t clip_l_timestamp = 0;
-  static uint32_t clip_r_timestamp = 0;
-  static uint32_t xrun_timestamp = 0;
-  
-  float pl, pr;
-  int bufs_sec = 0;
-  if (audio->bufsize > 0)
-    bufs_sec = audio->samplerate / audio->bufsize;
-  
-  if (audio->bufsize == 0) return -1;
-  
-  const float sec_per_redraw = VU_REDRAW_EVERY;
-  int redraw_every = (int) (sec_per_redraw * bufs_sec);
-  if (redraw_every < 1)
-    redraw_every = 1;
-  
-  if (playrec_loop_passes % redraw_every == 0) {
-    int peak_hold_frames = (VU_PEAK_HOLD * bufs_sec / redraw_every);
-    int clip_hold_frames = (VU_CLIP_HOLD * bufs_sec / redraw_every);
-    int xrun_hold_frames = (VU_XRUN_HOLD * bufs_sec / redraw_every);
-    
-    pl = std::max (std::fabs (audio->peak_plus_l), std::fabs (audio->peak_minus_l));
-    pr = std::max (std::fabs (audio->peak_plus_r), std::fabs (audio->peak_minus_r));
-    uint32_t now = playrec_loop_passes / redraw_every;
-    bool show_xrun = false, show_clip_l = false, show_clip_r = false;
-    
-    if (pl > show_l) show_l = pl;
-    if (pr > show_r) show_r = pr;
-    if (now - hold_l_timestamp > peak_hold_frames) hold_l = 0;
-    if (now - hold_r_timestamp > peak_hold_frames) hold_r = 0;
-    if (pl > hold_l) { hold_l = pl; hold_l_timestamp = now; }
-    if (pr > hold_r) { hold_r = pr; hold_r_timestamp = now; }
-    if (pl > 0.999) clip_l_timestamp = now;
-    if (pr > 0.999) clip_r_timestamp = now;
-    if (audio->xrun) xrun_timestamp = now;
-    
-    if (clip_l_timestamp && now - clip_l_timestamp < clip_hold_frames) show_clip_l = true;
-    if (clip_r_timestamp && now - clip_r_timestamp < clip_hold_frames) show_clip_r = true;
-    if (xrun_timestamp && now - xrun_timestamp < xrun_hold_frames)     show_xrun = true;
-    
-    set_vu_pre ();
-    set_vu_l (show_l, hold_l, show_clip_l, show_xrun);
-    if (audio->is_stereo) {  // 2 vu meters
-      set_vu_r (show_r, hold_r, show_clip_r, show_xrun);
-    }
-    set_vu_post ();
-    if (pl > show_l)
-      show_l = pl;
-    else {
-      show_l -= VU_FALL_SPEED;
-      if (show_l < 0) show_l = 0;
+      wet_offset = detect_wet_sweep_start (sweep_wet_l, samplerate_, *prefs);
     }
 
-    if (pr > show_r)
-      show_r = pr;
-    else {
-      show_r -= VU_FALL_SPEED;
-      if (show_r < 0) show_r = 0;
+    if (prefs->verbose) {
+      std::cerr << "Wet sweep (buffer) start offset: "
+                << wet_offset << " samples\n";
     }
-    
-    audio->peak_acknowledge ();
-    //std::cout << "peak L=" << pl << ",R=" << pr << " hold L=" 
-    //                     << hold_l << ", R=" << hold_r << std::endl << std::flush;
-  }
-  
-  playrec_loop_passes++;
-  return 0; 
+  }*/
+
+  debug ("end");
+  return true;
 }
 
-int c_deconvolver::on_playrec_stop (void *data) {
-  std::cout << "\n\nDone.\n" << std::flush;
-  return 0;
+bool c_deconvolver::has_wet_l () {
+  return (sweep_wet_l.size () > 0);
 }
 
-void c_deconvolver::update_peak_data () {
+bool c_deconvolver::has_wet_r () {
+  return (sweep_wet_r.size () > 0);
 }
 
-int c_deconvolver::on_arm_rec_loop (void *data) {
-  return on_playrec_loop (data);
+// passthrough functions for c_audioclient & derived
+// these just call hooks and corresponding c_audioclient functions 
+
+
+
+////////////////////////////////////////////////////////////////////////////////
+// c_deconvolver
+
+
+c_deconvolver::c_deconvolver (struct s_prefs *prefs) { CP
+  set_prefs (prefs);
+}
+
+c_deconvolver::~c_deconvolver () { CP
 }
 
 bool c_deconvolver::has_dry () {
-  bool ret = have_dry_ && (dry_.size () > 0);
+  bool ret = /*have_dry_ && */(sweep_dry.size () > 0);
   //debug ("ret=%d", (int) ret);
   return ret;
 }
 
-// other c_deconvolver member functions
- 
-c_deconvolver::c_deconvolver (struct s_prefs *prefs, std::string name) { CP
-  set_prefs (prefs);
-  set_name (name);
-}
-
-c_deconvolver::~c_deconvolver () { CP
-  if (audio) delete audio;
-}
-
-void c_deconvolver::set_name (std::string name) {
-  audio_clientname = name;
-}
-
-void c_deconvolver::set_prefs (struct s_prefs *prefs) {
-  if (prefs)
-    prefs_ = prefs;
+void c_deconvolver::set_prefs (struct s_prefs *_prefs) {
+  if (_prefs)
+    prefs = _prefs;
   else
-    prefs_ = &default_prefs_;
+    prefs = &default_prefs;
 }
 
-bool c_deconvolver::load_sweep_dry (const char *in_filename) {
-  debug ("start");
-  int sr = 0;
-  std::vector<float> tmp, tmp_r;
-
-  if (!read_wav (in_filename, tmp, tmp_r, sr)) {
-    std::cerr << "Failed to load dry sweep: " << in_filename << "\n";
-    return false;
-  }
-  if (!set_samplerate_if_needed (sr)) {
-    std::cerr << "Samplerate mismatch in dry sweep: " << in_filename << "\n";
-    return false;
-  }
-
-  dry_ = std::move (tmp);
-  have_dry_ = true;
-
-  if (prefs_->align != align_method::NONE) {
-    // NEW: detect sweep start using marker+gap, also caches marker/gap in prefs_
-    dry_offset_ = detect_dry_sweep_start (dry_, samplerate_, *prefs_);
-    if (prefs_->verbose) {
-      std::cerr << "Dry sweep start offset: " << dry_offset_ << " samples\n";
-    }
-  }
-  
-  debug ("end");
-  return true;
-}
-
-bool c_deconvolver::load_sweep_wet (const char *in_filename) {
-  debug ("start");
-
-  int sr = 0;
-  std::vector<float> left;
-  std::vector<float> right;
-
-  if (!read_wav (in_filename, left, right, sr)) {
-    std::cerr << "Failed to load wet sweep: " << in_filename << "\n";
+bool c_deconvolver::render_ir (c_wavebuffer &out_l,
+                               c_wavebuffer &out_r,
+                               size_t max_length) {
+  debug ("start, max_length=%ld, got dry=%ld, wet=%ld,%ld", max_length,
+         sweep_dry.size (), sweep_wet_l. size (), sweep_wet_r.size ());
+  if (!prefs) {
+    std::cerr << "No prefs structure, aborting\n";
     return false;
   }
   
-  bool is_stereo = (prefs_->request_stereo && right.size () > 1);
-
-  if (!set_samplerate_if_needed (sr)) {
-    std::cerr << "Samplerate mismatch in wet sweep: " << in_filename << "\n";
-    return false;
-  }
-
-  wet_L_.clear ();
-  wet_R_.clear ();
-
-  if (!is_stereo) {
-    // --- MONO WET: only L channel is used ---
-    wet_L_ = std::move (left);
-
-    if (prefs_->align != align_method::NONE) {
-      wet_offset_ = detect_wet_sweep_start (wet_L_, samplerate_, *prefs_);
-      if (prefs_->verbose) {
-        std::cerr << "Wet sweep (mono) start offset: "
-                  << wet_offset_ << " samples\n";
-      }
-    }
-  } else {
-    // --- STEREO WET: L/R in separate vectors ---
-    wet_L_ = std::move (left);
-    wet_R_ = std::move (right);
-
-    if (prefs_->align != align_method::NONE) {
-      // for detection, use a mono mix so we get a single start index
-      // kind of hackish, but meh
-      const sf_count_t frames = std::min (wet_L_.size (), wet_R_.size ());
-      std::vector<float> mix (frames);
-      for (sf_count_t i = 0; i < frames; ++i) {
-        mix [i] = 0.5f * (wet_L_ [i] + wet_R_ [i]);
-      }
-      
-      wet_offset_ = detect_wet_sweep_start (mix, samplerate_, *prefs_);
-      if (prefs_->verbose) {
-        std::cerr << "Wet sweep (stereo) start offset: "
-                  << wet_offset_ << " samples\n";
-      }
-    }
-  }
-
-  have_wet_ = true;
-
-  debug ("end");
-  return true;
-}
-
-bool c_deconvolver::set_dry_from_buffer (const std::vector<float>& buf, int sr) {
-  debug ("start");
-  if (buf.empty()) {
-    std::cerr << "Dry buffer is empty.\n";
-    return false;
-  }
-  if (!set_samplerate_if_needed (sr)) {
-    std::cerr << "Samplerate mismatch for dry buffer.\n";
-    return false;
-  }
-
-  dry_ = buf;
-  have_dry_ = true;
-
-  if (prefs_->align != align_method::NONE) {
-    dry_offset_ = detect_dry_sweep_start (dry_, samplerate_, *prefs_);
-    if (prefs_->verbose) {
-      std::cerr << "Dry sweep start offset (buffer): "
-                << dry_offset_ << " samples\n";
-    }
-  }
-
-  debug ("end");
-  return true;
-}
-
-bool c_deconvolver::set_wet_from_buffer (const std::vector<float>& bufL,
-                                         const std::vector<float>& bufR,
-                                         int sr) {
-  debug ("start");
-  if (bufL.empty () && bufR.empty ()) {
-    std::cerr << (prefs_->request_stereo ? "Wet buffers are empty.\n" :
-                                           "Wet buffer is empty.\n");
-    return false;
-  }
-  if (!set_samplerate_if_needed (sr)) {
-    std::cerr << "Samplerate mismatch for wet buffer.\n";
-    return false;
-  }
+  std::vector<float> ir_l, ir_r;
   
-  wet_L_ = bufL;
-  wet_R_ = bufR;
-  
-  if (prefs_->align != align_method::NONE) {
-    if (!wet_R_.empty ()) {
-      const size_t n = std::min(wet_L_.size (), wet_R_.size ());
-      std::vector<float> mix (n);
-      for (size_t i = 0; i < n; ++i) {
-        mix[i] = 0.5f * (wet_L_[i] + wet_R_[i]);
-      }
-      wet_offset_ = detect_wet_sweep_start(mix, samplerate_, *prefs_);
-    } else {
-      wet_offset_ = detect_wet_sweep_start(wet_L_, samplerate_, *prefs_);
-    }
-
-    if (prefs_->verbose) {
-      std::cerr << "Wet sweep (buffer) start offset: "
-                << wet_offset_ << " samples\n";
-    }
-  }
-
-  have_wet_ = true;
-  debug ("end");
-  return true;
-}
-
-bool c_deconvolver::output_ir (const char *out_filename, long ir_length_samples) {
-  debug ("start, ir_length_samples=%ld", ir_length_samples);
-  std::vector<float> irL;
-  std::vector<float> irR;
-  
-  if (prefs_->align == align_method::NONE) {
-    dry_offset_ = 0;
-    wet_offset_ = 0;
+  if (prefs->align == align_method::NONE) {
+    dry_offset = 0;
+    wet_offset = 0;
   }
   
   std::string align_names [] = {
@@ -1404,54 +988,61 @@ bool c_deconvolver::output_ir (const char *out_filename, long ir_length_samples)
     "no alignment"
   };
   
-  if ((int) prefs_->align < 0 || prefs_->align >= align_method::MAX) {
-    std::cerr << "Error: invalid alignment method id: " << (int) prefs_->align;
+  //align_sweeps ();
+  debug ("Detecting sweep offsets:");
+  dry_offset = detect_dry_sweep_start (sweep_dry, samplerate_, *prefs);
+  wet_offset = detect_wet_sweep_start (sweep_wet_l, sweep_wet_r, samplerate_, *prefs);
+  
+  if ((int) prefs->align < 0 || prefs->align >= align_method::MAX) {
+    std::cerr << "Error: invalid alignment method id: " << (int) prefs->align;
     return false;
   } else {
-    std::cerr << "Alignment method: " << align_names [(int) prefs_->align] << " (id "
-              << (int) prefs_->align << ")\n";
+    std::cerr << "Alignment method: " << align_names [(int) prefs->align] << " (id "
+              << (int) prefs->align << ")\n";
   }
   
-  std::cerr << "\nDry offset: " << dry_offset_
-            << "\nWet offset: " << wet_offset_ << "\n\n";
+  float dry_sec = (float) dry_offset / (float) samplerate_;
+  float wet_sec = (float) wet_offset / (float) samplerate_;
+  std::cerr << "\nDry offset: " << dry_offset << " (" << dry_sec << " sec)"
+            << "\nWet offset: " << wet_offset << " (" << wet_sec << " sec) \n\n";
 
   // --- deconvolve left ---
-  if (!calc_ir_raw (wet_L_, dry_, irL, ir_length_samples)) {
+  if (!calc_ir_raw (sweep_wet_l, sweep_dry, ir_l, max_length)) { CP
     std::cerr << "Error: calc_ir_raw failed for "
-              << (prefs_->request_stereo ? "left" : "mono")
+              << (prefs->request_stereo ? "left" : "mono")
               << " channel.\n";
     return false;
   }
-
+  
   // --- deconvolve right if we have input data ---
-  const bool have_right_channel = !wet_R_.empty ();
+  const bool have_right_channel = !sweep_wet_r.empty ();
   if (have_right_channel) {
-    if (!calc_ir_raw (wet_R_, dry_, irR, ir_length_samples)) {
+    if (!calc_ir_raw (sweep_wet_r, sweep_dry, ir_r, max_length)) {  CP
       std::cerr << "Error: calc_ir_raw failed for right channel.\n";
       return false;
     }
   }
   
   // get rid of junk above hearing threshold, say 90% of nyquist freq
-  float cutoff = (prefs_->sweep_sr / 2) * 0.9;
+  float cutoff = (prefs->sweep_sr / 2) * 0.9;
   // ...or just a fixed frequency
   //float cutoff = 18000;
   float lp_cut = std::min ((float) LOWPASS_F, cutoff);
-
-  if (irL.size () > 0) {
+  
+  if (ir_l.size () > 0) {
 #ifdef HIGHPASS_F
-    highpass_ir (irL, prefs_->sweep_sr, HIGHPASS_F);
+    highpass_ir (ir_l, prefs->sweep_sr, HIGHPASS_F);
 #endif
 #ifdef LOWPASS_F
-    lowpass_ir (irL, prefs_->sweep_sr, lp_cut);
+    lowpass_ir (ir_l, prefs->sweep_sr, lp_cut);
 #endif
   }
-  if (irR.size () > 0) {
+  if (ir_r.size () > 0) {
 #ifdef HIGHPASS_F
-    highpass_ir (irR, prefs_->sweep_sr, HIGHPASS_F);
+    highpass_ir (ir_r, prefs->sweep_sr, HIGHPASS_F);
 #endif
 #ifdef LOWPASS_F
-    lowpass_ir (irR, prefs_->sweep_sr, lp_cut);
+    lowpass_ir (ir_r, prefs->sweep_sr, lp_cut);
 #endif
   }
   
@@ -1461,54 +1052,102 @@ bool c_deconvolver::output_ir (const char *out_filename, long ir_length_samples)
   /*if (!irL.empty () || !irR.empty ()) {
     align_stereo_joint_no_chop (irL, irR, 0); // move reference peak to index 0
   }*/
-  //normalize_and_trim_stereo (irL, irR, prefs_->zeropeak);
-  normalize_and_trim_stereo (irL,
-                             irR,
-                             prefs_->zeropeak,
-                             prefs_->ir_start_silence_db, // start trim
-                             prefs_->ir_silence_db,       // tail trim (from -T)
-                             0.05f);                      // 5% fade
-                           
+  //normalize_and_trim_stereo (irL, irR, prefs->zeropeak);
+  normalize_and_trim_stereo (ir_l,
+                             ir_r,
+                             prefs->zeropeak,
+                             prefs->ir_start_silence_db,  // start trim
+                             prefs->ir_silence_db,        // tail trim (from -T)
+                             0.05f);             // 5% length fade at end
+  
+  out_l.import_from (ir_l);
+  out_r.import_from (ir_r);
+  out_l.set_samplerate (prefs->sweep_sr);
+  out_r.set_samplerate (prefs->sweep_sr);
+  
+  debug ("end");
+  return true;
+}
+
+bool c_deconvolver::import_file (const char *in_filename,
+                                      c_wavebuffer &in_l,
+                                      c_wavebuffer &in_r) {
+  
+  debug ("start in_filename=%s", in_filename);
+
+  int sr = 0;
+  
+  std::vector<float> vl, vr;
+  if (!read_wav (in_filename, vl, vr, sr)) {
+    std::cerr << "Failed to load wav file: " << in_filename << "\n";
+    return false;
+  }
+  debug ("read %ld, %ld", (long int) vl.size (), (long int) vr.size ());
+  bool is_stereo = (prefs->request_stereo && in_r.size () > 1);
+
+  if (!set_samplerate (sr)) {
+    std::cerr << "Samplerate mismatch in sweep file: " << in_filename << "\n";
+    return false;
+  }
+
+  debug ("end");
+  return true;
+}
+
+bool c_deconvolver::export_file (const char *out_filename,
+                                      c_wavebuffer &out_l,
+                                      c_wavebuffer &out_r) {
+  debug ("start, got sizes %ld, %ld", (long int) out_l.size (), (long int) out_r.size ());
+  std::vector<float> vl, vr;
+  out_l.export_to (vl);
+  out_r.export_to (vr);
+  int samplerate = out_l.get_samplerate ();
+  
   // Decide mono vs stereo based on whether right has any energy left
+  bool have_right_channel = !sweep_wet_r.empty ();
   bool have_right_energy = false;
   const float thr = db_to_linear (-90);
-  for (float v : irR) {
+  for (float v : vr) {
     if (std::fabs (v) > thr) {
       have_right_energy = true;
       break;
     }
   }
+  debug ("buffer sizes: %d, %d", vl.size (), vr.size ());
   
-  debug ("have_right_channel=%d, have_right_energy=%d, irR.empty=%d",
-         (int) have_right_channel, have_right_energy, irR.empty ());
+  debug ("have_right_channel=%d, have_right_energy=%d, vr.empty=%d",
+         (int) have_right_channel, (int) have_right_energy, (int) vr.empty ());
          
-  if (prefs_->verbose && have_right_channel && !have_right_energy) {
-      std::cerr << "Note: Right channel silent, writing MONO IR\n";
+  if (prefs->verbose && have_right_channel && !have_right_energy) {
+      std::cerr << "Note: Right channel silent, writing MONO wav file\n";
   }
-  if (!have_right_channel || !have_right_energy || irR.empty ()) {
+  
+  
+  if (!have_right_channel || !have_right_energy || vr.empty ()) {
     // MONO IR
-    if (!write_mono_wav (out_filename, irL, samplerate_)) {
-      std::cerr << "Error: failed to write mono IR to " << out_filename << "\n";
+    if (!write_mono_wav (out_filename, vl, samplerate)) {
+      std::cerr << "Error: failed to write mono wav file to " << out_filename << "\n";
       return false;
     }
-    std::cout << "Wrote MONO IR: " << out_filename
-              << " (" << irL.size () << " samples @ " << samplerate_ << " Hz)\n";
+    std::cout << "Wrote MONO wav file: " << out_filename
+              << " (" << vl.size () << " samples @ " << samplerate << " Hz)\n";
     debug ("return");
     return true;
   }
   
   // STEREO IR
-  size_t len = std::max (irL.size (), irR.size ());
-  irL.resize (len, 0.0f);
-  irR.resize (len, 0.0f);
+  size_t len = std::max (vl.size (), vr.size ());
+  vl.resize (len, 0.0f);
+  vr.resize (len, 0.0f);
 
-  if (!write_stereo_wav (out_filename, irL, irR, samplerate_)) {
-    std::cerr << "Error: failed to write stereo IR to " << out_filename << "\n";
+  if (!write_stereo_wav (out_filename, vl, vr, samplerate)) {
+    std::cerr << "Error: failed to write stereo wav file to " << out_filename << "\n";
     return false;
   }
+  
+  std::cout << "Wrote STEREO wav file: " << out_filename
+            << " (" << len << " samples @ " << samplerate << " Hz)\n";  
 
-  std::cout << "Wrote STEREO IR: " << out_filename
-            << " (" << len << " samples @ " << samplerate_ << " Hz)\n";
   debug ("end");
   return true;
 }
@@ -1518,21 +1157,26 @@ bool c_deconvolver::calc_ir_raw (const std::vector<float> &wet,
                                  const std::vector<float> &dry,
                                  std::vector<float>       &ir_raw,
                                  long                     ir_length_samples) {
-  debug ("start, ir_length_samples=%ld", ir_length_samples);
-  if (wet.empty () || dry.empty ()) {
-    std::cerr << "Error: wet or dry buffer is empty.\n";
+  debug ("start, wet: %d, dry:%d, ir_length_samples=%ld",
+         wet.size (), dry.size (), ir_length_samples);
+  if (dry.empty ()) {
+    std::cerr << "Error: dry buffer is empty.\n";
     return false;
   }
-
+  if (wet.empty ()) {
+    std::cerr << "Error: wet buffer is empty.\n";
+    return false;
+  }
+  
   // Use class member offsets.
-  // For stereo, wet_offset_ is the "common" silence we decided to skip.
+  // For stereo, wet_offset is the "common" silence we decided to skip.
   // Use initial offsets detected from sweeps
-  size_t wet_offset = wet_offset_;
-  size_t dry_offset = dry_offset_;
+  size_t wet_offset = wet_offset;
+  size_t dry_offset = dry_offset;
   size_t out_offset = 0;
-
+  
   // Apply user offset (positive delays wet, negative delays dry)
-  int offs = prefs_->sweep_offset_smp;
+  int offs = prefs->sweep_offset_smp;
   if (offs > 0) {
       size_t pos = (size_t) offs;
       if (wet_offset > pos)
@@ -1598,20 +1242,20 @@ bool c_deconvolver::calc_ir_raw (const std::vector<float> &wet,
   
   // nope, we're overwriting user's -n / --length parameter
   //ir_length_samples = std::max ((size_t) ir_length_samples,
-  //                              (size_t) (MAX_IR_LEN * prefs_->sweep_sr));
-
-  if (prefs_->dump_debug) {
-    std::string prefix = prefs_->dump_prefix;
+  //                              (size_t) (MAX_IR_LEN * prefs->sweep_sr));
+  
+  if (prefs->dump_debug) {
+    std::string prefix = prefs->dump_prefix;
 
     std::string dryname = prefix + "-dry.wav";
     std::string wetname = prefix + "-wet.wav";
 
     debug ("Dumping debug buffers: %s, %s", dryname.c_str (), wetname.c_str ());
 
-    dump_double_wav (dryname, xTime, prefs_->sweep_sr, usable_dry);
-    dump_double_wav (wetname, yTime, prefs_->sweep_sr, usable_wet);
+    dump_double_wav (dryname, xTime, prefs->sweep_sr, usable_dry);
+    dump_double_wav (wetname, yTime, prefs->sweep_sr, usable_wet);
   }
-
+  
   // Frequency-domain buffers
   fftw_complex *X = (fftw_complex *) fftw_malloc (sizeof (fftw_complex) * nFreq);
   fftw_complex *Y = (fftw_complex *) fftw_malloc (sizeof (fftw_complex) * nFreq);
@@ -1623,14 +1267,14 @@ bool c_deconvolver::calc_ir_raw (const std::vector<float> &wet,
     if (H) fftw_free (H);
     return false;
   }
-
+  
   std::vector<double> hTime (N, 0.0);
-
+  
   // Plans
   fftw_plan planX   = fftw_plan_dft_r2c_1d ((int) N, xTime.data (), X, FFTW_ESTIMATE);
   fftw_plan planY   = fftw_plan_dft_r2c_1d ((int) N, yTime.data (), Y, FFTW_ESTIMATE);
   fftw_plan planInv = fftw_plan_dft_c2r_1d ((int) N, H, hTime.data (), FFTW_ESTIMATE);
-
+  
   if (!planX || !planY || !planInv) {
     std::cerr << "Error: FFTW plan creation failed.\n";
     if (planX) fftw_destroy_plan (planX);
@@ -1641,13 +1285,13 @@ bool c_deconvolver::calc_ir_raw (const std::vector<float> &wet,
     fftw_free (H);
     return false;
   }
-
+  
   // Forward FFTs
   fftw_execute (planX);
   fftw_execute (planY);
-
+  
   // H = Y * conj(X) / (|X|^2 + eps)
-
+  
   double maxMag2 = 0.0;
   for (size_t k = 0; k < nFreq; ++k) {
     double xr = X [k] [0];
@@ -1730,7 +1374,7 @@ bool c_deconvolver::calc_ir_raw (const std::vector<float> &wet,
   if (usable_wet < irLen) irLen = usable_wet;
 
   // Hard cap based on MAX_IR_LEN (seconds), unless user asked for shorter
-  size_t max_ir_samples = (size_t) std::llround (MAX_IR_LEN * prefs_->sweep_sr);
+  size_t max_ir_samples = (size_t) std::llround (MAX_IR_LEN * prefs->sweep_sr);
   if (max_ir_samples > 0 && irLen > max_ir_samples) {
       irLen = max_ir_samples;
   }
@@ -1751,9 +1395,9 @@ bool c_deconvolver::calc_ir_raw (const std::vector<float> &wet,
   }
 
   // Convert headroom_seconds to samples
-  if (prefs_ && prefs_->headroom_seconds > 0.0f) {
+  if (prefs && prefs->headroom_seconds > 0.0f) {
     out_offset = (size_t) std::llround (
-        (double) prefs_->headroom_seconds * (double) samplerate_);
+        (double) prefs->headroom_seconds * (double) samplerate_);
   }
 
   ir_raw.resize (irLen + out_offset);
@@ -1765,7 +1409,7 @@ bool c_deconvolver::calc_ir_raw (const std::vector<float> &wet,
 
   // copy IR starting at out_offset
   for (size_t i = 0; i < irLen; ++i) {
-    ir_raw [i + out_offset] = (float) hTime[i];
+    ir_raw [i + out_offset] = (float) hTime [i];
   }
 
   // Cleanup
@@ -1781,17 +1425,34 @@ bool c_deconvolver::calc_ir_raw (const std::vector<float> &wet,
 }
 
 // returns index of |largest| sample
-bool c_deconvolver::set_samplerate_if_needed (int sr) {
+bool c_deconvolver::set_samplerate (int sr) {
   if (samplerate_ == 0) {
     samplerate_ = sr;
-    if (prefs_) prefs_->sweep_sr = sr;
+    if (prefs) prefs->sweep_sr = sr;
     return true;
   }
   return (samplerate_ == sr);
 }
 
-int c_deconvolver::samplerate () {
-  return samplerate_; //prefs_->sweep_sr;
+int c_deconvolver::get_samplerate () {
+  return samplerate_; //prefs->sweep_sr;
+}
+
+void c_deconvolver::clear_dry () {
+  sweep_dry.clear ();
+  if (!has_wet_l () && !has_wet_r ())
+    samplerate_ = 0;
+}
+
+void c_deconvolver::clear_wet () {
+  sweep_wet_r.clear ();
+  if (!has_dry ())
+    samplerate_ = 0;
+}
+
+void c_deconvolver::clear (bool dry, bool wet) {
+  if (dry) clear_wet ();
+  if (wet) clear_wet ();
 }
 
 void c_deconvolver::normalize_and_trim_stereo (std::vector<float> &L,
@@ -1802,7 +1463,7 @@ void c_deconvolver::normalize_and_trim_stereo (std::vector<float> &L,
                                                float fade_end_percent) {
   debug ("start, zeropeak=%s, thr_start=%f, thr_end=%f, fade_end_percent=%f",
         zeropeak ? "true" : "false", thr_start_db, thr_end_db, fade_end_percent);
-  const size_t tail_pad       = 32;
+  const size_t tail_pad       = 32; // some IR loaders choke without this
   //const float  silence_thresh = 1e-5f;  // relative to peak (~ -100 dB)
   const bool hasR = !R.empty ();
   
@@ -1828,8 +1489,7 @@ void c_deconvolver::normalize_and_trim_stereo (std::vector<float> &L,
     return;
   }
   
-  const float norm = prefs_->normalize_amp / peak;
-  
+  const float norm = prefs->normalize_amp / peak;
   
   // 2) Apply same gain to both channels
   for (float &v : L) v *= norm;
@@ -1869,7 +1529,7 @@ void c_deconvolver::normalize_and_trim_stereo (std::vector<float> &L,
       firstr = hasR ? find_first_nonsilent(R, thr_start_db) : firstl;
       first_nonsilent = std::min(firstl, firstr);
     }
-    first_nonsilent = std::max (first_nonsilent, prefs_->sweep_offset_smp);
+    first_nonsilent = std::max (first_nonsilent, prefs->sweep_offset_smp);
   } else {
     // new behavior: place the peak at ~= sweep_offset_smp by trimming to
     // the first "non-silent" sample at orafter (peak_idx - sweep_offset_smp).
@@ -1886,8 +1546,8 @@ void c_deconvolver::normalize_and_trim_stereo (std::vector<float> &L,
 
     // where we *want* the peak to end up, after shifting
     size_t desired_peak_pos =
-        (prefs_ && prefs_->sweep_offset_smp > 0)
-        ? (size_t) prefs_->sweep_offset_smp
+        (prefs && prefs->sweep_offset_smp > 0)
+        ? (size_t) prefs->sweep_offset_smp
         : 0;
 
     // start scanning for "first non-silent" sample
@@ -1946,7 +1606,7 @@ void c_deconvolver::normalize_and_trim_stereo (std::vector<float> &L,
     // everything below threshold even after norm -> just keep 1 sample of silence
     L.assign(1, 0.0f);
     if (hasR) R.assign(1, 0.0f);
-    debug ("return (all silence after norm");
+    debug ("return (all silence after norm)");
     return;
   }
   

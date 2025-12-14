@@ -41,9 +41,9 @@ extern int64_t get_unique_id ();
 class ir_entry {
 public:
   int64_t id = 0;
-  int samplerate = 48000;
-  std::vector<float> l;
-  std::vector<float> r;
+  int samplerate = DEFAULT_SAMPLERATE;
+  c_wavebuffer l;
+  c_wavebuffer r;
   std::string path;
   bool dirty = false;
   ir_entry () { id = ::get_unique_id (); }
@@ -51,6 +51,7 @@ public:
 
 class c_customwidget;
 class c_meterwidget;
+class c_deconvolver_gui;
 
 enum class meterwarn {
   REC,
@@ -59,6 +60,28 @@ enum class meterwarn {
   MAX
 };
 
+// app
+class c_app : public wxApp {
+public:
+  c_app (c_deconvolver_gui *d);
+  ~c_app ();
+  bool OnInit ();
+  //int OnRun ();
+  int OnExit ();
+
+  c_mainwindow *mainwindow = NULL;
+  c_deconvolver *dec = NULL;
+  c_audioclient *audio = NULL;
+  
+protected:
+  virtual int FilterEvent (wxEvent &ev);
+  
+private:
+};
+
+wxDECLARE_APP (c_app);
+
+// main window
 class c_mainwindow : public ui_mainwindow {
 public:
   c_mainwindow (c_deconvolver *d = NULL);
@@ -67,7 +90,7 @@ public:
   bool init_audio ();
   bool init_audio (int samplerate, bool stereo);
   bool disable_audio ();
-  bool audio_ready ();
+  bool is_ready ();
   void set_statustext (const char *str, ...);
   void set_mode (long int mode);
   void set_prefs (s_prefs *prefs);
@@ -105,6 +128,10 @@ public:
   void on_btn_play (wxCommandEvent &ev);
   void on_btn_audio (wxCommandEvent &ev);
   void on_btn_process (wxCommandEvent &ev);
+  void on_btn_irrename (wxCommandEvent &ev);
+  void on_btn_irremove (wxCommandEvent &ev);
+  void on_btn_irload (wxCommandEvent &ev);
+  void on_btn_irsave (wxCommandEvent &ev);
   void on_port_select (wxCommandEvent &ev);
   void on_timer (wxTimerEvent &ev);
   
@@ -112,7 +139,8 @@ public:
   void set_vu_r (float level, float hold, bool clip = false, bool xrun = false);
   
   c_deconvolver *dec = NULL;
-  std::vector <float> drysweep;
+  c_audioclient *audio = NULL;
+  c_wavebuffer drysweep;
 
 private:
   wxDECLARE_EVENT_TABLE ();
@@ -138,35 +166,13 @@ private:
 
 class c_deconvolver_gui : public c_deconvolver {
 public:
-  c_deconvolver_gui (struct s_prefs *prefs = NULL, std::string name = "")
-    : c_deconvolver (prefs, name) {}
+  c_deconvolver_gui (struct s_prefs *prefs = NULL)
+    : c_deconvolver (prefs) {}
   
-  virtual void set_vu_pre ();
-  virtual void set_vu_l (float level, float hold, bool clip, bool xrun);
-  virtual void set_vu_r (float level, float hold, bool clip, bool xrun);
-  virtual void set_vu_post ();
+  //void set_vu_l (float level, float hold, bool clip, bool xrun);
+  //void set_vu_r (float level, float hold, bool clip, bool xrun);
 
 };
-
-class c_app : public wxApp {
-public:
-  c_app (c_deconvolver *d);
-  ~c_app ();
-  bool OnInit ();
-  //int OnRun ();
-  int OnExit ();
-
-  c_mainwindow *mainwindow = NULL;
-  c_deconvolver *dec = NULL;
-  
-protected:
-  virtual int FilterEvent (wxEvent &ev);
-  
-private:
-};
-
-wxDECLARE_APP (c_app);
-
 
 /*
  * Custom widget example/template - (usually) base class.
@@ -202,9 +208,9 @@ public:
   //signal1 <c_customwidget *> sig_mouse_enter;
   //signal1 <c_customwidget *> sig_mouse_leave;
   
-  virtual void render_base_image ();
+  virtual bool render_base_image ();
   //virtual void render_base_image (wxMemoryDC *dc);
-  virtual void update (wxWindowDC &dc);
+  virtual bool update (wxWindowDC &dc);
   //void schedule_deletion ();
   
   static wxBitmap render_text_label (char *text, wxFont &font, const wxColour &fg, const wxColour &bg, 
@@ -221,7 +227,7 @@ public:
   wxFont smallboldfont;
   
 protected:
-  virtual void update ();
+  virtual bool update ();
   // event handler boilerplate - might be more to come if needed
   virtual void on_paint_event (wxPaintEvent &evt);
   virtual void on_resize_event (wxSizeEvent &evt);
@@ -275,35 +281,36 @@ public:
                   int wtfisthis = -1);
   ~c_meterwidget () {}
   
-  virtual void render_base_image ();
-  virtual void update (wxWindowDC &dc);
-  virtual void on_resize_event (wxSizeEvent &ev);
-  
-  virtual void render_gradient_bar ();
+  bool render_base_image ();
+  bool update (wxWindowDC &dc);
+  void on_resize_event (wxSizeEvent &ev);
+  void render_gradient_bar ();
+  void set_vudata (c_vudata *v);
+  c_vudata *get_vudata ();
+  bool needs_redraw () { return data ? data->needs_redraw : false; }
   
   //void set_audio_client (c_audioclient *cli);
   void set_stereo (bool b);
-  void set_l (float level, float hold, bool clip = false, 
-              bool xrun = false, bool rec = false);
-  void set_r (float level, float hold, bool clip = false,
-              bool xrun = false, bool rec = false);
+  void set_l (float level, float hold, bool clip = false, bool xrun = false);
+  void set_r (float level, float hold, bool clip = false, bool xrun = false);
 
   bool vertical = false;
-  float l       = 0.0;
-  float r       = 0.0;
+  //float l       = 0.0;
+  //float r       = 0.0;
 
   wxFont tinyfont;
   //bool  show_rec    = false;  // enable red circle / recording indicator
   //bool  show_clip   = false;  // warn when clipping, (for now) also used for xruns
   int   clip_size    = 0;
   int   rec_size     = 0;
-  float hold_l       = 0.0;
+  /*float hold_l       = 0.0;
   float hold_r       = 0.0;
   bool  clip_l       = false;
   bool  clip_r       = false;
-  bool  rec          = true;
-  bool  xrun         = false;
-  bool  needs_redraw = false;
+  bool  xrun         = false;*/
+  bool  rec          = false;
+  //bool  needs_redraw = false;
+  c_vudata *data     = NULL;
 
 protected:
 private:
@@ -344,19 +351,19 @@ public:
                     int wtfisthis = -1);
   ~c_waveformwidget () {}
   
-  virtual void render_base_image ();
+  virtual bool render_base_image ();
   //virtual void update ();
-  virtual void update (wxWindowDC &dc);
+  virtual bool update (wxWindowDC &dc);
   
   wxFont tinyfont;
   
 protected:
 private:
-  void draw_frame (wxDC &dc);
-  std::vector<float> *wavdata = NULL;
+  void draw_border (wxDC &dc);
+  c_wavebuffer *wavdata = NULL;
 };
 
-int wx_main (int argc, char **argv, c_deconvolver *p);
+int wx_main (int argc, char **argv, c_audioclient *audio);
 
 extern c_app *g_app;
 
@@ -371,8 +378,8 @@ public:
                 int border = -1)
   : c_customwidget (parent, id) {}
   
-  virtual void render_base_image ();
-   void update (wxWindowDC &dc);
+  virtual bool render_base_image ();
+   bool update (wxWindowDC &dc);
 };
 
 
