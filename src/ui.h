@@ -306,7 +306,7 @@ public:
   bool  rec_enabled  = false;
   //bool  needs_redraw = false;
   c_vudata *data     = NULL;
-
+  
 protected:
 private:
   

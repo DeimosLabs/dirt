@@ -65,7 +65,7 @@ class c_waveformwidget;
 #define ID_JACK_DRY 10024
 #define ID_JACK_WET_L 10025
 #define ID_JACK_WET_R 10026
-#define ID_METER 10051
+#define ID_METER_OUT 10051
 #define ID_PLAY 10031
 #define ID_TAB2 10040
 #define ID_INPUTDIR_RECURSIVE 10006
@@ -187,7 +187,8 @@ public:
     wxComboBox* list_jack_wet_l;
     wxComboBox* list_jack_wet_r;
     wxBoxSizer* sizer_meters;
-    c_meterwidget* pn_meter;
+    c_meterwidget* pn_meter_out;
+    c_meterwidget* pn_meter_in;
     wxButton* btn_play;
     wxPanel* tab_deconvolv;
     wxBoxSizer* staticbox_deconvolv;

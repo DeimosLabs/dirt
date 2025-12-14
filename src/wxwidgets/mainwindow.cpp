@@ -123,7 +123,8 @@ void ui_mainwindow::Init()
     list_jack_wet_l = NULL;
     list_jack_wet_r = NULL;
     sizer_meters = NULL;
-    pn_meter = NULL;
+    pn_meter_out = NULL;
+    pn_meter_in = NULL;
     btn_play = NULL;
     tab_deconvolv = NULL;
     staticbox_deconvolv = NULL;
@@ -348,29 +349,31 @@ void ui_mainwindow::CreateControls()
     sizer_meters = new wxBoxSizer(wxVERTICAL);
     itemBoxSizer33->Add(sizer_meters, 0, wxGROW|wxALL, 5);
 
-    wxFlexGridSizer* itemFlexGridSizer3 = new wxFlexGridSizer(0, 3, 0, 0);
-    itemBoxSizer14->Add(itemFlexGridSizer3, 1, wxGROW|wxALL, 5);
-    itemFlexGridSizer3->Add(5, 5, 0, wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTER_VERTICAL|wxALL, 5);
+    itemBoxSizer14->Add(5, 5, 1, wxALIGN_CENTER_HORIZONTAL|wxALL, 5);
 
-    itemFlexGridSizer3->Add(5, 5, 0, wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTER_VERTICAL|wxALL, 5);
+    wxBoxSizer* itemBoxSizer23 = new wxBoxSizer(wxHORIZONTAL);
+    itemBoxSizer14->Add(itemBoxSizer23, 0, wxGROW|wxLEFT|wxRIGHT|wxTOP, 10);
+    wxStaticText* itemStaticText27 = new wxStaticText( tab_drysweep, wxID_STATIC, _("Out"), wxDefaultPosition, wxDefaultSize, 0 );
+    itemBoxSizer23->Add(itemStaticText27, 1, wxALIGN_CENTER_VERTICAL|wxALL, 0);
 
-    itemFlexGridSizer3->Add(5, 5, 0, wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTER_VERTICAL|wxALL, 5);
+    wxStaticText* itemStaticText9 = new wxStaticText( tab_drysweep, wxID_STATIC, _(" "), wxDefaultPosition, wxDefaultSize, 0 );
+    itemBoxSizer23->Add(itemStaticText9, 0, wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
-    wxStaticText* itemStaticText7 = new wxStaticText( tab_drysweep, wxID_STATIC, wxEmptyString, wxDefaultPosition, wxDefaultSize, 0 );
-    itemFlexGridSizer3->Add(itemStaticText7, 0, wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTER_VERTICAL|wxALL, 5);
+    wxStaticText* itemStaticText36 = new wxStaticText( tab_drysweep, wxID_STATIC, _("In"), wxDefaultPosition, wxDefaultSize, 0 );
+    itemBoxSizer23->Add(itemStaticText36, 1, wxALIGN_CENTER_VERTICAL|wxALL, 0);
 
-    pn_meter = new c_meterwidget( tab_drysweep, ID_METER, wxDefaultPosition, wxDefaultSize, wxNO_BORDER|wxTAB_TRAVERSAL );
-    pn_meter->SetExtraStyle(wxWS_EX_VALIDATE_RECURSIVELY);
-    itemFlexGridSizer3->Add(pn_meter, 0, wxGROW|wxALIGN_TOP|wxALL, 5);
+    wxBoxSizer* itemBoxSizer37 = new wxBoxSizer(wxHORIZONTAL);
+    itemBoxSizer14->Add(itemBoxSizer37, 0, wxGROW|wxLEFT|wxRIGHT|wxBOTTOM, 5);
+    pn_meter_out = new c_meterwidget( tab_drysweep, ID_METER_OUT, wxDefaultPosition, wxDefaultSize, wxNO_BORDER|wxTAB_TRAVERSAL );
+    pn_meter_out->SetExtraStyle(wxWS_EX_VALIDATE_RECURSIVELY);
+    itemBoxSizer37->Add(pn_meter_out, 1, wxGROW|wxALL, 5);
 
-    itemFlexGridSizer3->Add(5, 5, 0, wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTER_VERTICAL|wxALL, 5);
+    wxStaticText* itemStaticText7 = new wxStaticText( tab_drysweep, wxID_STATIC, _(" "), wxDefaultPosition, wxDefaultSize, 0 );
+    itemBoxSizer37->Add(itemStaticText7, 0, wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
-    itemFlexGridSizer3->Add(5, 5, 0, wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTER_VERTICAL|wxALL, 5);
-
-    itemFlexGridSizer3->Add(5, 5, 0, wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTER_VERTICAL|wxALL, 5);
-
-    itemFlexGridSizer3->AddGrowableRow(2);
-    itemFlexGridSizer3->AddGrowableCol(1);
+    pn_meter_in = new c_meterwidget( tab_drysweep, ID_METER_OUT, wxDefaultPosition, wxDefaultSize, wxNO_BORDER|wxTAB_TRAVERSAL );
+    pn_meter_in->SetExtraStyle(wxWS_EX_VALIDATE_RECURSIVELY);
+    itemBoxSizer37->Add(pn_meter_in, 1, wxGROW|wxALL, 5);
 
     btn_play = new wxButton( tab_drysweep, ID_PLAY, wxEmptyString, wxDefaultPosition, wxDefaultSize, 0 );
     itemBoxSizer14->Add(btn_play, 0, wxGROW|wxALL, 5);

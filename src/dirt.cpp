@@ -1324,6 +1324,8 @@ int main (int argc, char **argv) {
   std::vector<float> v_drysweep, v_drysweep_l, v_drysweep_r, v_dummy_r;
   int sr_dry, sr_wet;
   
+  if (p.gui) p.mode = opmode::GUI;
+  
   switch (p.mode) {
     case opmode::MAKESWEEP:
       {

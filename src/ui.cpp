@@ -153,7 +153,8 @@ void c_mainwindow::on_timer (wxTimerEvent &ev) {
   // animation stuff etc. that we do every pass
   // nothing yet, our custom widgets update themselves on redraw events
   //pn_meter->Refresh (); // not necessary
-  if (pn_meter->needs_redraw ()) pn_meter->Refresh ();
+  if (pn_meter_in->needs_redraw ()) pn_meter_in->Refresh ();
+  if (pn_meter_out->needs_redraw ()) pn_meter_out->Refresh ();
   
   // widget stuff: update only every n passes
   if (num_passes % update_widgets_every == 0) {
@@ -169,6 +170,14 @@ void c_mainwindow::on_timer (wxTimerEvent &ev) {
       do_full_update = true;
     } //else {CP}
     
+    if (dec->has_dry ()) {
+      enable (radio_roundtrip);
+    } else {
+      disable (radio_roundtrip);
+      if (mode == ID_ROUNDTRIP)
+        set_mode (ID_GENERATE);
+    }
+    
     if (s == audiostate::NOTREADY) {    // audio offline
       disable (btn_play);
       btn_audio->SetLabel ("Connect");
@@ -183,7 +192,8 @@ void c_mainwindow::on_timer (wxTimerEvent &ev) {
       }
       btn_play->SetLabel ((mode == ID_ROUNDTRIP) ? "Record" : "Play");
       btn_audio->SetLabel ("Disconnect");
-      pn_meter->rec_enabled = false;
+      pn_meter_in->rec_enabled = false;
+      pn_meter_out->rec_enabled = false;
     } else if (s == audiostate::PLAY ||
                s == audiostate::PLAYMONITOR ||
                s == audiostate::PLAYREC ||
@@ -202,9 +212,9 @@ void c_mainwindow::on_timer (wxTimerEvent &ev) {
         btn_play->SetLabel (buf);
         if (sr == (int) audiostate::PLAYREC ||
             sr == (int) audiostate::REC)
-          pn_meter->rec_enabled = true;
+          pn_meter_in->rec_enabled = true;
         else
-          pn_meter->rec_enabled = false;
+          pn_meter_in->rec_enabled = false;
       }
       btn_audio->SetLabel ("Disconnect");
     } else {
@@ -293,7 +303,8 @@ bool c_mainwindow::init_audio (int samplerate, bool stereo) { CP
     BP
   }
 
-  pn_meter->set_vudata (&audio->vu_in);
+  pn_meter_in->set_vudata (&audio->vu_in);
+  pn_meter_out->set_vudata (&audio->vu_out);
   audio->init ("DIRT", -1, stereo);
   
   if (!dec) {
@@ -706,7 +717,8 @@ void c_mainwindow::set_mode (long int _mode) {
       comb_samplerate->SetValue (buf);
       CP
       bool s = !chk_forcemono->GetValue ();
-      pn_meter->set_stereo (s/*audio->is_stereo*/);
+      pn_meter_in->set_stereo (s/*audio->is_stereo*/);
+      pn_meter_out->set_stereo (false);
       if ((!s) != (!audio->stereo_in)) { // cheap xor
         CP
         //audio->register_input (s);
@@ -1808,6 +1820,7 @@ void c_meterwidget::draw_bar (wxDC &dc, int at, int th, bool is_r,
 bool c_meterwidget::update (wxWindowDC &dc) {
   //debug ("start");
   if (!c_customwidget::update (dc)) return false;
+  if (!data) return false;
   
   // meter bars
   if (stereo) {

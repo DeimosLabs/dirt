@@ -136,17 +136,18 @@ static int jack_process_cb (jack_nframes_t nframes, void *arg) {
       for (jack_nframes_t i = 0; i < nframes; ++i) {
         float vL = 0.0f;
         
-        j->vu_out.sample (vL, 0);
         if (j->play_index < limit) {
           vL = (*j->sig_out_l) [j->play_index++]; // our overloaded operator
           // if stereo-out later: vR = j->sig_out_r[j->play_index-1];
         } else {
             vL = 0.0f;
         }
+        j->vu_out.sample (vL, 0);
         
         port_outL [i] = vL;
         // if (port_outR) port_outR [i] = vR;
       }
+      j->vu_out.update ();
       
       // finished playback?
       if (j->play_index >= limit) {
@@ -209,7 +210,7 @@ static int jack_process_cb (jack_nframes_t nframes, void *arg) {
         }
       }
     }
-    j->vu_out.update ();
+    j->vu_in.update ();
     
     if (j->sig_in_l) {
       // copy this buffer to target c_wavebuffer(s)
@@ -227,8 +228,6 @@ static int jack_process_cb (jack_nframes_t nframes, void *arg) {
         j->sig_in_r->append (currentbuf_r, rec_n);
       }
     }
-    
-    j->vu_in.update ();
   }
   
   //debug ("end");
@@ -755,7 +754,8 @@ bool c_jackclient::play (c_wavebuffer *sig_l,
     limit = std::min (sig_out_l.size (), sig_out_r.size ());
   */
   play_go = true;
-  rec_go = false;
+  //if (!monitor_only)
+  //  rec_go = false;
   debug ("state: %d", (int) state);
   //if (block)                         // TODO: fix
   //  while (index < sig_out_l.size () /*&& ((!is_stereo) || index < sig_out_r.size ())*/) {
@@ -815,6 +815,8 @@ bool c_jackclient::playrec (c_wavebuffer *out_l,
   
   if (!play (out_l, out_r) || !rec (in_l, in_r))
     return false;
+  play_go = true;
+  rec_go = true;
   
   // prepare state
   play_index = 0;
