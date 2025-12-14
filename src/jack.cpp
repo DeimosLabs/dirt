@@ -164,7 +164,7 @@ static int jack_process_cb (jack_nframes_t nframes, void *arg) {
     j->play_go = false;
     j->play_index = 0;
   }
-
+  
   // RECORDING
   if (j->rec_go && j->port_inL /*&& j->sig_in_l*/) {
     auto *port_inL =

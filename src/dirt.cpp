@@ -35,9 +35,9 @@
 #include "cmdline/cmdline.h"
 #define debug(...) cmdline_debug(stderr,ANSI_RED,__FILE__,__LINE__,__FUNC__,__VA_ARGS__)
 #else
-//#define debug(...)
-//#define CP
-//#define BP
+#define debug(...)
+#define CP
+#define BP
 #endif
 
 
@@ -139,7 +139,8 @@ static void print_vu_meter (float level, float hold, bool clip, bool xrun) {
   int i, size = ANSI_VU_METER_MIN_SIZE;
   char buf [size];
   for (i = 0; i < size; i++) buf [i] = ' ';
-  char colors [size] = { 8 };
+  char colors [size];
+  for (i = 0; i < size; i++) colors [i] = 8;
   int right = size - 6;
   int yellow = (right * 2) / 3;
   int red = (right * 5) / 6;
