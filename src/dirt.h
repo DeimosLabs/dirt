@@ -57,6 +57,7 @@
 class c_jackclient;
 #endif
 
+#ifdef DEBUG
 #ifdef BP
 #undef BP
 #endif
@@ -64,6 +65,10 @@ void __bp ();
 void __die ();
 #define BP {debug("\x1B[1;31m\x1B[5m____BREAKPOINT____\x1B[0;37m\x1B\25[m");__bp();}
 #define DIE {debug("\x1B[1;31m\x1B[5m____!!!DIE!!!____\x1B[1;37m\x1B\25[m");__die();}
+#else
+#define BP
+#define CP
+#endif
 
 #define DEFAULT_SAMPLERATE             48000
 #define SAMPLERATE_MIN                  8000
