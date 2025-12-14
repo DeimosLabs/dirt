@@ -183,7 +183,7 @@ void c_mainwindow::on_timer (wxTimerEvent &ev) {
       }
       btn_play->SetLabel ((mode == ID_ROUNDTRIP) ? "Record" : "Play");
       btn_audio->SetLabel ("Disconnect");
-      pn_meter->rec = false;
+      pn_meter->rec_enabled = false;
     } else if (s == audiostate::PLAY ||
                s == audiostate::PLAYMONITOR ||
                s == audiostate::PLAYREC ||
@@ -202,9 +202,9 @@ void c_mainwindow::on_timer (wxTimerEvent &ev) {
         btn_play->SetLabel (buf);
         if (sr == (int) audiostate::PLAYREC ||
             sr == (int) audiostate::REC)
-          pn_meter->rec = true;
+          pn_meter->rec_enabled = true;
         else
-          pn_meter->rec = false;
+          pn_meter->rec_enabled = false;
       }
       btn_audio->SetLabel ("Disconnect");
     } else {
@@ -293,7 +293,7 @@ bool c_mainwindow::init_audio (int samplerate, bool stereo) { CP
     BP
   }
 
-  pn_meter->set_vudata (&audio->vu);
+  pn_meter->set_vudata (&audio->vu_in);
   audio->init ("DIRT", -1, stereo);
   
   if (!dec) {
@@ -825,7 +825,7 @@ bool c_mainwindow::make_dry_sweep (bool load_it) {
   if (!dec) return false;
   struct s_prefs *p = dec->prefs;
   
-  get_prefs (dec->prefs);
+  get_prefs (p);
   
   generate_log_sweep (p->sweep_seconds,
                       p->preroll_seconds,
@@ -1125,31 +1125,6 @@ int c_mainwindow::add_dir (std::string dirname, bool recurs) {
   
   return count;
 }
-
-// plumbing for vu data
-//void c_mainwindow::set_vu_l (float level, float hold, bool clip, bool xrun) 
-//  { pn_meter->set_l (level, hold, clip, xrun); CP}
-//  
-//void c_mainwindow::set_vu_r (float level, float hold, bool clip, bool xrun)
-//  { pn_meter->set_r (level, hold, clip, xrun); CP}
-
-// c_deconvolver_gui
-
-//void c_deconvolver_gui::set_vu_pre () { }
-//void c_deconvolver_gui::set_vu_post () { }
-
-//void c_deconvolver_gui::set_vu_l (float level, float hold, bool clip, bool xrun) {
-//  c_app *app = ((c_app *) wxTheApp);
-//  if (!app || !app->mainwindow) return;
-//  app->mainwindow->set_vu_l (level, hold, clip, xrun);
-//}
-//
-//void c_deconvolver_gui::set_vu_r (float level, float hold, bool clip, bool xrun) {
-//  c_app *app = ((c_app *) wxTheApp);
-//  if (!app || !app->mainwindow) return;
-//  app->mainwindow->set_vu_r (level, hold, clip, xrun);
-//}
-
 
 ////////////////////////////////////////////////////////////////////////////////
 // c_app
@@ -1775,7 +1750,8 @@ bool c_meterwidget::render_base_image () {
 void c_meterwidget::draw_bar (wxDC &dc, int at, int th, bool is_r,
                               float level, float hold) {
   //debug ("start");
-  debug ("at=%d, th=%d, %s, level=%f, hold=%f", at, th, is_r ? "is_r" : "!is_r", level, hold);
+  //debug ("at=%d, th=%d, %s, level=%f, hold=%f", at, th,
+  //       is_r ? "is_r" : "!is_r", level, hold);
   if (level < 0) level = 0;
   if (level > 1) level = 1;
   int bar_len = met_len * level;
@@ -1804,9 +1780,8 @@ void c_meterwidget::draw_bar (wxDC &dc, int at, int th, bool is_r,
       //dc.DrawRectangle (x, y, w, h);
     }
     //dc.DrawRectangle (x, y, w, h); //top
-    if (!img_bar.IsOk ()) return;
-    if (w > 0 && h > 0) {
-      debug ("x=%d y=%d, w=%d h=%d", x, y, w, h);
+    if (img_bar.IsOk () && w > 0 && h > 0) {
+      //debug ("x=%d y=%d, w=%d h=%d", x, y, w, h);
       img_bar_sub = img_bar.GetSubBitmap (wxRect (x, y, w, h));
       if (!img_bar_sub.IsOk ()) return;
       dc.DrawBitmap (img_bar_sub, x, y);
@@ -1860,12 +1835,12 @@ bool c_meterwidget::update (wxWindowDC &dc) {
   
   // recording indicator (red circle)
   int rp = (vertical ? width : height) / 4;
-  if (rec && rec_size > 0 && rec) {
+  if (rec_enabled && rec_size > 0) {
     if (vertical)
       dc.DrawEllipse (rp, height - rec_size + rp, width - (rp * 2), rec_size - (rp * 2));
     else
       dc.DrawEllipse (rp, rp, rec_size - (rp * 2), height - (rp * 2));
-  } else if (rec && !vertical) {
+  } else if (rec_enabled && !vertical) {
     int idx = (int) meterwarn::REC;
     int h = img_warning [idx].GetHeight ();
     dc.DrawBitmap (img_warning [idx], 1, (height - h) / 2);
@@ -1881,35 +1856,6 @@ void c_meterwidget::set_stereo (bool b) {
   base_image_valid = false;
   Refresh ();
 }
-
-//void c_meterwidget::set_l (float level, float hold, bool clip, bool xr) { CP
-//  //debug ("lev:%f, hold=%f, clip=%s, xrun=%s", level, hold,
-//  //       clip ? "true" : "false", xrun ? "true": "false");
-//  if (l != level ||
-//      hold_l != hold ||
-//      clip_l != clip) { needs_redraw = true; }
-//  l = level;
-//  hold_l = hold;
-//  clip_l = clip;
-//  //rec = _rec;
-//  xrun = xr;
-//  //if (needs_update) Refresh (); <-- BIG NO NO, THIS IS CALLED FROM THE JACK THREAD
-//}
-//
-//void c_meterwidget::set_r (float level, float hold, bool clip, bool xr) { CP
-//  //debug ("lev:%f, hold=%f, clip=%s, xrun=%s", level, hold,
-//  //       clip ? "true" : "false", xrun ? "true": "false");
-//  if (r != level ||
-//      hold_r != hold ||
-//      clip_r != clip) { needs_redraw = true; }
-//  r = level;
-//  hold_r = hold;
-//  clip_r = clip;
-//  //rec = _rec;
-//  xrun = xr;
-//  //if (needs_update) Refresh (); <-- BIG NO NO (see above)
-//}
-
 
 ////////////////////////////////////////////////////////////////////////////////
 // c_waveformwidget

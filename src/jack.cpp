@@ -113,11 +113,16 @@ static int jack_process_cb (jack_nframes_t nframes, void *arg) {
   }
   
   bool rec_stereo = (j->stereo_in && j->port_inR != NULL);
-  //debug ("j->stereo_in=%d, j->port_inR=%ld, rec_stereo=%d",
-  //(int) j->stereo_in, (size_t) j->port_inR, (int) rec_stereo);
+  bool play_stereo = (j->stereo_out && j->port_inL != NULL);
   
   // PLAYBACK
   if (j->port_outL) {
+  //if (!play_stereo) {
+  //  j->vu_out.acknowledge ();
+  //  j->vu_out.sample (0, 0);
+  //  j->vu_out.update ();
+  //}
+  
     auto *port_outL =
         (jack_default_audio_sample_t *) jack_port_get_buffer (j->port_outL, nframes);
     // auto *port_outR = ... in case we add it later?
@@ -131,6 +136,7 @@ static int jack_process_cb (jack_nframes_t nframes, void *arg) {
       for (jack_nframes_t i = 0; i < nframes; ++i) {
         float vL = 0.0f;
         
+        j->vu_out.sample (vL, 0);
         if (j->play_index < limit) {
           vL = (*j->sig_out_l) [j->play_index++]; // our overloaded operator
           // if stereo-out later: vR = j->sig_out_r[j->play_index-1];
@@ -164,22 +170,22 @@ static int jack_process_cb (jack_nframes_t nframes, void *arg) {
     auto *port_inL =
         (jack_default_audio_sample_t *) jack_port_get_buffer(j->port_inL, nframes);
     jack_default_audio_sample_t *port_inR = nullptr;
-    if (j->port_inR && j->sig_in_r) {
+    if (j->port_inR /*&& j->sig_in_r*/) {
       port_inR = (jack_default_audio_sample_t *)
         jack_port_get_buffer (j->port_inR, nframes);
     }
     
-    if (!j->stereo_in || !rec_stereo) {
-      j->vu.plus_r  = 0;
-      j->vu.minus_r = 0;
-      j->vu.clip_r       = false;
-    }
+    //if (!rec_stereo) {
+    //  j->vu_in.acknowledge ();
+    //  j->vu_in.sample (0, 0);
+    //  j->vu_in.update ();
+    //}
     
     float currentbuf_l [nframes];
     float currentbuf_r [nframes];
     size_t rec_n = std::min ((size_t) nframes, (size_t) (j->rec_max - j->rec_index));
     size_t oldsize_l = j->sig_in_l ? j->sig_in_l->size () : 0;
-    size_t oldsize_r = 0;
+    size_t oldsize_r = j->sig_in_r ? j->sig_in_r->size () : 0;
     //debug ("rec_n=%ld, nframes=%ld, oldsize %ld,%ld", (long int) rec_n,
     //       (long int) nframes, (long int) oldsize_l, (long int) oldsize_r);
     
@@ -188,7 +194,7 @@ static int jack_process_cb (jack_nframes_t nframes, void *arg) {
       float vL = port_inL [i];
       float vR = port_inR ? port_inR [i] : vL;
       //debug ("vL=%f, vR=%f", vL, vR);
-      j->vu.sample (vL, vR);
+      j->vu_in.sample (vL, vR);
       // store data only if actually recording
       if (!j->monitor_only && j->sig_in_l) {
         currentbuf_l [i] = vL;
@@ -203,6 +209,7 @@ static int jack_process_cb (jack_nframes_t nframes, void *arg) {
         }
       }
     }
+    j->vu_out.update ();
     
     if (j->sig_in_l) {
       // copy this buffer to target c_wavebuffer(s)
@@ -221,8 +228,8 @@ static int jack_process_cb (jack_nframes_t nframes, void *arg) {
       }
     }
     
-    j->vu.update (); // the recording one
-  } // here would be vu_out.update (); or similar. TODO: implement
+    j->vu_in.update ();
+  }
   
   //debug ("end");
   return 0;

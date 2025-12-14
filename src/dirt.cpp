@@ -219,10 +219,10 @@ static void print_vu_meter (float level, float hold, bool clip, bool xrun) {
 static void vu_wait (c_vudata &vu, std::string str) {
   ansi_cursor_move_x (0);
   int move_up = 2;
-  print_vu_meter (vu.abs_l, vu.abs_r, vu.clip_l, vu.xrun);
+  print_vu_meter (vu.abs_l, vu.hold_l, vu.clip_l, vu.xrun);
   if (vu.is_stereo) {
     move_up++;
-    print_vu_meter (vu.abs_r, vu.abs_r, vu.clip_r, vu.xrun);
+    print_vu_meter (vu.abs_r, vu.hold_r, vu.clip_r, vu.xrun);
   }
   ansi_clear_to_endl ();
   std::cout << str << std::endl;
@@ -312,17 +312,17 @@ void c_wavebuffer::export_to (std::vector<sample_t> &vec) const {
 ////////////////////////////////////////////////////////////////////////////////
 // c_vudata
 
-// called for each input sample
+// called for each input sample.
 bool c_vudata::sample (float l, float r) {
   bool ret = false;
+  
+  //debug ("registering %f,%f", l, r);
   
   if (l > plus_l)    { plus_l   = l; ret = true; }
   if (l < minus_l)   { minus_l  = l; ret = true; }
   
-  if (is_stereo) {
-    if (r > plus_r)  { plus_r   = r; ret = true; }
-    if (r < minus_r) { minus_r  = r; ret = true; }
-  }
+  if (r > plus_r)    { plus_r   = r; ret = true; }
+  if (r < minus_r)   { minus_r  = r; ret = true; }
   
   return ret;
 }
@@ -331,7 +331,6 @@ bool c_vudata::sample (float l, float r) {
 bool c_vudata::update () {
   //debug ("this=%lx", (long int) this);
   bool ret = false;
-  float pl, pr;
   int bufs_sec = 0;
   if (bufsize > 0)
     bufs_sec = samplerate / bufsize;
@@ -349,27 +348,31 @@ bool c_vudata::update () {
     int clip_hold_frames = (VU_CLIP_HOLD * bufs_sec / redraw_every);
     int xrun_hold_frames = (VU_XRUN_HOLD * bufs_sec / redraw_every);
     
-    pl = std::max (std::fabs (plus_l), std::fabs (minus_l));
-    pr = std::max (std::fabs (plus_r), std::fabs (minus_r));
+    abs_l = std::max (std::fabs (plus_l), std::fabs (minus_l));
+    abs_r = std::max (std::fabs (plus_r), std::fabs (minus_r));
     uint32_t now = bufcount / redraw_every;
     
-    if (pl > abs_l) abs_l = pl; //else abs_l -= VU_FALL_SPEED;
-    if (pr > abs_r) abs_r = pr; //else abs_r -= VU_FALL_SPEED;
     if (abs_l < 0) abs_l = 0;
+    if (abs_l > 1) abs_l = 1;
     if (abs_r < 0) abs_r = 0;
+    if (abs_r > 1) abs_r > 1;
     if (now - timestamp_hold_l > peak_hold_frames) hold_l = 0;
     if (now - timestamp_hold_r > peak_hold_frames) hold_r = 0;
-    if (pl > hold_l) { hold_l = pl; timestamp_hold_l = now; }
-    if (pr > hold_r) { hold_r = pr; timestamp_hold_r = now; }
-    if (pl > 0.999) timestamp_clip_l = now;
-    if (pr > 0.999) timestamp_clip_r = now;
+    if (abs_l > hold_l) { hold_l = abs_l; timestamp_hold_l = now; }
+    if (abs_r > hold_r) { hold_r = abs_r; timestamp_hold_r = now; }
+    if (abs_l > 0.999) timestamp_clip_l = now;
+    if (abs_r > 0.999) timestamp_clip_r = now;
     if (xrun) timestamp_xrun = now;
     
+    //debug ("hold %f,%f", hold_l, hold_r);
+    
+    // YES, this looks backwards
     if (timestamp_clip_l && now - timestamp_clip_l < clip_hold_frames) clip_l = true;
     if (timestamp_clip_r && now - timestamp_clip_r < clip_hold_frames) clip_r = true;
     if (timestamp_xrun && now - timestamp_xrun < xrun_hold_frames)     xrun = true;
   }
   
+  debug ("levels %f,%f, peaks %f,%f", abs_l, abs_r, hold_l, hold_r);
   bufcount++;
   return ret; 
 }
@@ -1301,7 +1304,7 @@ int main (int argc, char **argv) {
       }
     }
 #else
-  std::cerr << argv [0] << " was built without JACK support\n");
+  std::cerr << argv [0] << " was built without JACK support\n";
   ret = 1;
 #endif
   }
@@ -1403,7 +1406,7 @@ int main (int argc, char **argv) {
         //std::getline (std::cin, str);
         usleep (100000);
         while (!stdin_has_enter ()) {
-          vu_wait (audio->vu, "Press ENTER to play+record sweep...");
+          vu_wait (audio->vu_in, "Press ENTER to play+record sweep...");
         }
       }
       
@@ -1427,7 +1430,7 @@ int main (int argc, char **argv) {
         int sec_left = audio->get_play_remaining () / audio->get_samplerate ();
         char txtbuf [128];
         snprintf (txtbuf, 127, "Playing and recording (%d)...  ", sec_left);
-        vu_wait (audio->vu, txtbuf);
+        vu_wait (audio->vu_in, txtbuf);
       }
       audio->stop ();
       debug ("(after recording) sweep lengths: dry %ld, wet %ld, %ld",
@@ -1436,7 +1439,9 @@ int main (int argc, char **argv) {
     break;
     
     case opmode::GUI:
+#ifdef USE_WXWIDGETS
       ret = wx_main (1, argv, audio);
+#endif
       main_done = true;
     break;
     
@@ -1497,6 +1502,7 @@ int main (int argc, char **argv) {
     }
   }
   
+  usleep (100000); // make sure all callbacks are done before destroying stuff
   //if (dec) delete dec;
   
   debug ("end");

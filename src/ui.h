@@ -303,12 +303,7 @@ public:
   //bool  show_clip   = false;  // warn when clipping, (for now) also used for xruns
   int   clip_size    = 0;
   int   rec_size     = 0;
-  /*float hold_l       = 0.0;
-  float hold_r       = 0.0;
-  bool  clip_l       = false;
-  bool  clip_r       = false;
-  bool  xrun         = false;*/
-  bool  rec          = false;
+  bool  rec_enabled  = false;
   //bool  needs_redraw = false;
   c_vudata *data     = NULL;
 

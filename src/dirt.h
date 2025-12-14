@@ -356,7 +356,7 @@ public:
   c_wavebuffer       *sig_out_l  = NULL;  // sweep to play
   c_wavebuffer       *sig_out_r  = NULL;  // sweep to play
   
-  c_vudata vu;
+  c_vudata vu_in, vu_out;
   //float peak_plus_l  = 0;
   //float peak_plus_r  = 0;
   //float peak_minus_l = 0;
