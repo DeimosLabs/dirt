@@ -26,7 +26,7 @@ find_package(PkgConfig REQUIRED)
 # --- wxWidgets (only if GUI) ---
 if (GUI)
     message(STATUS "GUI enabled: linking against wxWidgets")
-    find_package(wxWidgets REQUIRED COMPONENTS adv core base)
+    find_package(wxWidgets COMPONENTS adv core base)
     include(${wxWidgets_USE_FILE})
 else()
     message(STATUS "GUI disabled: building CLI only")
