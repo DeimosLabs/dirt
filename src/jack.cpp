@@ -870,8 +870,10 @@ bool c_jackclient::stop_record (bool also_stop_monitor) {
   return true;
 }
 
+#ifdef DEBUG
 #undef debug
 #define debug(...) cmdline_debug(stderr,ANSI_RED,__FILE__,__LINE__,__FUNC__,__VA_ARGS__)
+#endif
 
 int jack_test_main (int argc, char **argv) {
   debug ("start");
