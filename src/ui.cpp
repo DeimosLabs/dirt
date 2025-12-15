@@ -1493,19 +1493,19 @@ int wx_main (int argc, char **argv, c_audioclient *audio) {
 
 c_irlist::c_irlist (wxWindow *parent, int id, 
                     wxPoint pos, wxSize size, int border)
-: wxListCtrl (parent, id, pos, size, border) {
+: wxListCtrl (parent, id, pos, size, border) { CP
   
 }
 
-void c_irlist::clear () {
+void c_irlist::clear () { CP
   
 }
 
-void c_irlist::append (c_ir_entry &ir) {
+void c_irlist::append (c_ir_entry &ir) { CP
   
 }
 
-int c_irlist::get_count () {
+int c_irlist::get_count () { CP
   return 0;
 }
 

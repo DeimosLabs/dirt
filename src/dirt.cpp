@@ -669,6 +669,9 @@ static void print_usage (const char *prog, bool full = false) {
   out <<
     (full ? "Usage:\n" :
             "Usage: (see --help for full list of options)\n") <<
+#ifdef GUI
+    "  " << prog << " (runs GUI, or optionally add --gui to command line)\n"
+#endif
     "  " << prog << " [options] dry_sweep.wav wet_sweep.wav out_ir.wav\n"
     "  " << prog << " [options] -d dry_sweep.wav -w wet_sweep.wav -o out_ir.wav\n"
     "  " << prog << " [options] --makesweep dry_sweep.wav\n"
