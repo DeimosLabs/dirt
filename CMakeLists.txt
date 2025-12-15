@@ -12,7 +12,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Options
 option(DONT_USE_JACK "Disable JACK support even if the library is available" OFF)
-option(GUI           "Enable wxWidgets GUI" OFF)
+option(GUI           "Enable wxWidgets GUI" ON)
 option(DEBUG         "Debug build" OFF)
 option(NO_ASAN       "Disable asan on debug build" OFF)
 
