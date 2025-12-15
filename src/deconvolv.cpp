@@ -601,7 +601,7 @@ size_t detect_wet_sweep_start (const std::vector<float> &wet_l,
 bool read_wav (const char *filename,
                c_wavebuffer &left,
                c_wavebuffer &right) {
-  debug ("start");
+  debug ("start, filename=%s", filename);
 
   std::vector<float> vl;
   std::vector<float> vr;
@@ -753,6 +753,24 @@ bool write_stereo_wav (const char *path,
   debug ("end");
   return true;
 }
+
+bool write_mono_wav (const char *path,
+                     c_wavebuffer &data) { CP
+  std::vector<float> datav;
+  data.export_to (datav);
+  return write_mono_wav (path, datav, data.get_samplerate ());
+}
+                            
+bool write_stereo_wav (const char *path,
+                       c_wavebuffer &l,
+                       c_wavebuffer &r) { CP
+  std::vector<float> lv;
+  std::vector<float> rv;
+  l.export_to (lv);
+  r.export_to (rv);
+  return write_stereo_wav (path, lv, rv, l.get_samplerate ());
+}
+
 
 bool dump_double_wav(const std::string& path,
                      const std::vector<double>& buf,
@@ -973,7 +991,6 @@ bool c_deconvolver::render_ir (c_wavebuffer &out_l,
     std::cerr << "No prefs structure, aborting\n";
     return false;
   }
-  
   std::vector<float> ir_l, ir_r;
   
   if (prefs->align == align_method::NONE) {

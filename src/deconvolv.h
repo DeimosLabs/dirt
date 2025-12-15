@@ -22,7 +22,7 @@ struct s_prefs {
   std::string portname_wetL = "";
   std::string portname_wetR = "";
   bool gui = false;
-
+  
   long ir_length_samples            = 0;    // 0 = auto
   bool thresh_relative              = false;
   bool zeropeak = DEFAULT_ZEROPEAK;
@@ -101,6 +101,7 @@ public:
   bool has_wet_l ();
   bool has_wet_r ();
   
+  //bool busy = false; // UI takes care of this
   s_prefs *prefs = NULL;
   
   void normalize_and_trim_stereo (std::vector<float> &L,
@@ -140,6 +141,13 @@ bool write_stereo_wav (const char *path,
                         const std::vector<float> &L,
                         const std::vector<float> &R,
                         int samplerate);
+                        
+bool write_mono_wav (const char *path,
+                     c_wavebuffer &data);
+                            
+bool write_stereo_wav (const char *path,
+                       c_wavebuffer &l,
+                       c_wavebuffer &r);
                         
 bool read_wav (const char *filename,
                 std::vector<float> &left,

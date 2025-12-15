@@ -91,7 +91,8 @@ public:
   bool init_audio (int samplerate, bool stereo);
   bool disable_audio ();
   bool is_ready ();
-  void set_statustext (const char *str, ...);
+  bool  process_one_file (std::string str);
+  void set_statustext (const wxString str);
   void set_mode (long int mode);
   void set_prefs (s_prefs *prefs);
   void get_prefs (s_prefs *prefs);
@@ -141,6 +142,8 @@ public:
   c_deconvolver *dec = NULL;
   c_audioclient *audio = NULL;
   c_wavebuffer drysweep;
+  //c_wavebuffer wetsweep_l;
+  //c_wavebuffer wetsweep_r;
 
 private:
   wxDECLARE_EVENT_TABLE ();
@@ -161,8 +164,11 @@ private:
   long int mode = ID_FILE;
   long int prev_mode = -1;
   audiostate prev_audio_state = (audiostate) -1;
+  bool busy = false;
   bool filedir_scanning = false;
   bool filedir_error = false;
+  int num_files_ok = 0;
+  int num_files_error = 0;
   //c_meterwidget *testwidget = NULL;
 };
 

@@ -415,7 +415,7 @@ static inline bool file_exists (const std::string &path) {
 
 static inline bool dir_exists (const std::string &path) {
   struct stat st {};
-  return (::stat (path.c_str (), &st) == 0 && S_ISREG (st.st_mode));
+  return (::stat (path.c_str (), &st) == 0 && S_ISDIR (st.st_mode));
 }
 
 static inline size_t next_pow2 (size_t n) {

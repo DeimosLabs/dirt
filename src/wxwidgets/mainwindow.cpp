@@ -190,7 +190,7 @@ void ui_mainwindow::CreateControls()
 
     wxBoxSizer* itemBoxSizer4 = new wxBoxSizer(wxVERTICAL);
     staticbox_drysweep->Add(itemBoxSizer4, 1, wxGROW|wxALL, 5);
-    wxStaticText* itemStaticText5 = new wxStaticText( tab_drysweep, wxID_STATIC, _("Dry sweep source:"), wxDefaultPosition, wxDefaultSize, 0 );
+    wxStaticText* itemStaticText5 = new wxStaticText( tab_drysweep, wxID_STATIC, _("Dry sweep\nsource:"), wxDefaultPosition, wxDefaultSize, 0 );
     itemBoxSizer4->Add(itemStaticText5, 0, wxALIGN_LEFT|wxALL, 5);
 
     wxGridSizer* itemGridSizer1 = new wxGridSizer(0, 1, 0, 0);

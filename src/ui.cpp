@@ -76,7 +76,6 @@ wxBEGIN_EVENT_TABLE (c_mainwindow, ui_mainwindow)
 
 wxEND_EVENT_TABLE ();
 
-
 c_mainwindow::c_mainwindow (c_deconvolver *d)
 : ui_mainwindow (NULL, wxID_ANY) {
   dec = d;
@@ -146,6 +145,7 @@ void c_mainwindow::on_timer (wxTimerEvent &ev) {
   static long int num_passes = 0;
   const int update_widgets_every = 8;
   bool do_full_update = false;
+  char buf [256];
   
   num_passes++;
   if (!dec || !audio) return;
@@ -206,7 +206,6 @@ void c_mainwindow::on_timer (wxTimerEvent &ev) {
         int sr = dec->prefs ? dec->prefs->sweep_sr : 
                                atoi (comb_samplerate->GetValue ().c_str ());
         size_t sec_left = audio->get_play_remaining () / (size_t) sr;
-        char buf [32];
         snprintf (buf, 31, "Stop (%ld)", sec_left);
         //debug ("sr=%d, sec_left=%d", sr, sec_left);
         btn_play->SetLabel (buf);
@@ -221,10 +220,29 @@ void c_mainwindow::on_timer (wxTimerEvent &ev) {
       debug ("audio: no idea what's going on");
     }
     
-    if (filedir_scanning)
+    int numfiles = list_inputfiles->GetCount ();
+    
+    if (filedir_scanning) {
       btn_inputdir_scan->SetLabel ("Cancel");
-    else
+      set_statustext ("Scanning...");
+    } else if (num_files_ok || num_files_error) {
+      snprintf (buf, 255, "Files processed: %d, errors: %d",
+                num_files_ok, num_files_error);
+      set_statustext (std::string (buf));
+    }else {
       btn_inputdir_scan->SetLabel ("Scan");
+      if (drysweep.size () == 0) {
+        set_statustext ("Ready: Please load or generate a dry sweep");
+      } else if (list_inputfiles->GetCount () == 0) {
+        set_statustext ("Ready: Please load or record wet sweep(s) to process");
+      } else if (!busy) {
+        snprintf (buf, 255, "Ready to process %d %s", 
+                  numfiles, numfiles == 1 ? "file" : "files");
+        set_statustext (std::string (buf));
+      } else {
+        set_statustext ("Deconvolving...");
+      }
+    }
     
     wxArrayInt dummy;
     if (list_inputfiles->GetSelections (dummy) > 0)
@@ -245,13 +263,14 @@ void c_mainwindow::on_timer (wxTimerEvent &ev) {
     if (list_inputfiles->GetCount () > 0 && dec->has_dry ())
       enable (btn_process);
     else
-      {}//disable (btn_process); TEMP!!!!
+      disable (btn_process);
     
     if (chk_autosave->GetValue ()) {
       enable (chk_overwrite);
     } else {
       disable (chk_overwrite);
     }
+    
   
     int n = ir_files.size ();
     if (n != last_ir_count) {
@@ -265,6 +284,10 @@ void c_mainwindow::on_timer (wxTimerEvent &ev) {
   }
   if (do_full_update)
     set_mode (mode);
+}
+
+void c_mainwindow::set_statustext (const wxString str) {
+  text_statusbar->SetLabel (str);
 }
 
 bool c_mainwindow::is_ready () {
@@ -797,15 +820,16 @@ void c_mainwindow::on_btn_dryfile_browse (wxCommandEvent &ev  ) {
     if (!dec) return;
     int sr;
     c_wavebuffer dummy_r;
-    //if (!read_wav (drysweep, dummy_r, &sr))
-    //  show_message ("Failed to load dry sweep: " + fn);
-    //else if (!dec->set_dry_sweep (drysweep)
-    //  show_message ("Failed to load dry sweep: " + fn);
+    if (!read_wav (f.GetPath ().c_str (), drysweep, dummy_r))
+      show_message ("Failed to load file: " + fn);
+    else if (!dec->set_sweep_dry (drysweep))
+      show_message ("Deconvolver refused dry sweep: " + fn);
   }
 }
 
 void c_mainwindow::on_btn_generate (wxCommandEvent &ev) { CP
   make_dry_sweep ();
+  text_dryfile->Clear ();
 }
 
 void c_mainwindow::on_btn_irremove (wxCommandEvent &ev) { CP
@@ -1038,6 +1062,13 @@ void c_mainwindow::on_btn_process (wxCommandEvent &ev) {
     return;
   }
   
+  std::string dirname = std::string (text_outputdir->GetValue ());
+  debug ("dirname='%s'", dirname.c_str ());
+  if (!dir_exists (dirname)) {
+    show_error ("Please select an output directory.\n");
+    return;
+  }
+  
   if (!dec->has_dry ()) {
     show_message ("No DRY sweep has been loaded yet");
   }
@@ -1050,23 +1081,90 @@ void c_mainwindow::on_btn_process (wxCommandEvent &ev) {
   debug ("mono: %s", dec->prefs->request_stereo ? "true" : "false");
   //dec->set_dry_from_buffer (...);
   
-  for (i = 0; i < n; i++) {
+  num_files_ok = 0;
+  num_files_error = 0;
+  busy = true;
+  
+  for (i = 0; i < list_inputfiles->GetCount ();) {
     wetfile = std::string (list_inputfiles->GetString (i));
     printf ("  %d: '%s'\n", i, wetfile.c_str ());
-    bool b = false;//dec->set_sweep_wet (wetfile.c_str ());
-    if (!b) {
-      printf ("can't load file %s, ", wetfile.c_str ());
-      if (chk_abort->GetValue ()) {
-        printf ("aborting\n");
-        i = n;
-      } else {
-        printf ("skipping\n");
-      }
-      break;
+    wxYield ();
+    if (process_one_file (wetfile)) {
+      list_inputfiles->Delete (i);
     } else {
-      debug ("loaded '%s'", wetfile.c_str ());
+      debug ("Failed to process file: %s", wetfile.c_str ());
+      if (chk_abort->GetValue ()) {
+        i = n; // skip to end
+      } else {
+        i++;  // skip this file
+      }
     }
   }
+  busy = false;
+}
+
+bool c_mainwindow::process_one_file (std::string filename) {
+  bool ret = true;
+  debug ("start, filename='%s'", filename.c_str());
+  
+  set_statustext ("Processing file: " + filename);
+  usleep (10000);
+  
+  c_wavebuffer wl, wr, ir_l, ir_r;
+  
+  std::string basename;
+  std::string strippedname;
+  std::string outputname;
+  
+  int a = filename.find_last_of ("/");
+  if (a > 0)
+    basename = filename.substr (a + 1, filename.size () - 1 - a);
+  else
+    basename = filename;
+    
+  int b = basename.find_last_of (".");
+  if (b > 1)
+    strippedname = basename.substr (0, b);
+  else
+    strippedname = basename;
+  
+  outputname = text_outputdir->GetValue () + "/" + strippedname + "-ir.wav";
+    
+  debug ("filename: %s", filename.c_str ());
+  debug ("basename: %s", basename.c_str ());
+  debug ("strippedname: %s", strippedname.c_str ());
+  debug ("outputname: %s", outputname.c_str ());
+  
+  if (!read_wav (filename.c_str (), wl, wr)) {
+    set_statustext ("Failed to open " + filename);
+    ret = false;
+  } else if (!dec->set_sweep_wet (wl, wr)) {
+    debug ("deconvolver refused file: %s", filename.c_str ());
+    ret = false;
+  } else if (!dec->render_ir (ir_l, ir_r)) {
+      debug ("deconvolver failed to process: %s", filename.c_str ());
+      ret = false;
+  } else if (!ir_l.size ()) {
+    debug ("deconvolver output zero length IR: %s", filename.c_str ());
+  } else {
+    if (ir_r.size ()) {
+      if (!write_stereo_wav (outputname.c_str (), ir_l, ir_r)) {
+        debug ("can't write stereo output file: %s", outputname.c_str ());
+        ret = false;
+      }
+    } else {
+      if (!write_mono_wav (outputname.c_str (), ir_l)) {
+        debug ("can't write mono output file: %s", outputname.c_str ());
+        ret = false;
+      }
+    }
+  }
+  
+  if (ret)  num_files_ok++;
+  else      num_files_error++;
+  
+  debug ("end, ret=%d", (int) ret);
+  return ret;
 }
 
 int c_mainwindow::add_files (std::vector<std::string> list) {
