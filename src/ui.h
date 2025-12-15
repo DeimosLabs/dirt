@@ -38,15 +38,17 @@
 
 extern int64_t get_unique_id ();
 
-class ir_entry {
+class c_ir_entry {
 public:
   int64_t id = 0;
-  int samplerate = DEFAULT_SAMPLERATE;
+  int64_t timestamp = 0;
+  //int samplerate = DEFAULT_SAMPLERATE;
   c_wavebuffer l;
   c_wavebuffer r;
   std::string path;
   bool dirty = false;
-  ir_entry () { id = ::get_unique_id (); }
+  bool loaded = false;
+  c_ir_entry () { id = ::get_unique_id (); }
 };
 
 class c_customwidget;
@@ -91,13 +93,14 @@ public:
   bool init_audio (int samplerate, bool stereo);
   bool disable_audio ();
   bool is_ready ();
-  bool  process_one_file (std::string str);
+  bool process_one_file (std::string str);
   void set_statustext (const wxString str);
   void set_mode (long int mode);
   void set_prefs (s_prefs *prefs);
   void get_prefs (s_prefs *prefs);
   void update_audio_ports ();
   bool make_dry_sweep (bool load_it = true);
+  bool load_ir_file (std::string file);
   void show_error (std::string str);
   void show_message (std::string str);
   
@@ -135,6 +138,7 @@ public:
   void on_btn_irsave (wxCommandEvent &ev);
   void on_port_select (wxCommandEvent &ev);
   void on_timer (wxTimerEvent &ev);
+  void on_recording_done ();
   
   void set_vu_l (float level, float hold, bool clip = false, bool xrun = false);
   void set_vu_r (float level, float hold, bool clip = false, bool xrun = false);
@@ -142,20 +146,20 @@ public:
   c_deconvolver *dec = NULL;
   c_audioclient *audio = NULL;
   c_wavebuffer drysweep;
-  //c_wavebuffer wetsweep_l;
-  //c_wavebuffer wetsweep_r;
+  c_wavebuffer wetsweep_l;
+  c_wavebuffer wetsweep_r;
 
 private:
   wxDECLARE_EVENT_TABLE ();
   void set_enable (wxWindow *w, bool b);
   void disable (wxWindow *w) { set_enable (w, false); }
   void enable (wxWindow *w) { set_enable (w, true); }
-  int add_files (std::vector<std::string> list);
   int add_dir (std::string dir, bool recurs);
   int update_ir_list ();
-  bool add_ir (ir_entry &entry);
+  bool add_ir (c_ir_entry &entry);
+  bool ask_overwrite (std::string filename);
   
-  std::vector <ir_entry> ir_files;
+  std::vector <c_ir_entry> ir_files;
   wxTimer timer;
   std::string cwd;
   bool init_audio_done = false;
@@ -180,6 +184,21 @@ public:
   //void set_vu_l (float level, float hold, bool clip, bool xrun);
   //void set_vu_r (float level, float hold, bool clip, bool xrun);
 
+};
+
+class c_irlist : public wxListCtrl {
+public:
+  c_irlist (wxWindow *parent = NULL,
+            int id = -1,
+            wxPoint pos = wxDefaultPosition,
+            wxSize size = wxDefaultSize,
+            int border = wxSIMPLE_BORDER);
+            
+  void clear ();
+  void append (c_ir_entry &ir);
+  int get_count ();
+  
+private:
 };
 
 /*
@@ -289,6 +308,8 @@ public:
                   int wtfisthis = -1);
   ~c_meterwidget () {}
   
+  void set_db_scale (float f);
+  
   bool render_base_image ();
   bool update (wxWindowDC &dc);
   void on_resize_event (wxSizeEvent &ev);
@@ -314,6 +335,7 @@ public:
   bool  rec_enabled  = false;
   //bool  needs_redraw = false;
   c_vudata *data     = NULL;
+  float   db_scale   = DEFAULT_VU_DB;
   
 protected:
 private:
@@ -357,13 +379,15 @@ public:
   virtual bool render_base_image ();
   //virtual void update ();
   virtual bool update (wxWindowDC &dc);
+  bool select_data (c_ir_entry *entry);
   
   wxFont tinyfont;
   
 protected:
 private:
-  void draw_border (wxDC &dc);
-  c_wavebuffer *wavdata = NULL;
+  void draw_border (wxDC &dc, int x = -1, int y = -1, int w = -1, int h = -1);
+  //c_wavebuffer *wavdata = NULL;
+  c_ir_entry *entry = NULL;
 };
 
 int wx_main (int argc, char **argv, c_audioclient *audio);

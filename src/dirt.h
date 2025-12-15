@@ -42,6 +42,9 @@
 #include <cmath>
 #include <algorithm>
 #include <cstdlib>
+#include <chrono>
+#include <iomanip>
+#include <sstream>
 #include <stdio.h>
 #include <stdint.h>
 #include <unistd.h>
@@ -70,13 +73,15 @@ void __die ();
 #define CP
 #endif
 
-#define DEFAULT_SAMPLERATE             48000
+#define DEFAULT_SAMPLERATE              48000
 #define SAMPLERATE_MIN                  8000
 #define SAMPLERATE_MAX                  192000
 #define MARKER_FREQ                     1000 // in Hz
 #define MAX_IR_LEN                      10.0
-#define LOWPASS_F                       22000 // gets clamped to nyquist freq
-//#define HIGHPASS_F                      40 TODO: fix highpass
+#define DEFAULT_LPF                     22000 // gets clamped to nyquist freq
+#define DEFAULT_HPF                     40    // TODO: fix highpass
+#define DEFAULT_LPF_MODE                1
+#define DEFAULT_HPF_MODE                0
 #define DEFAULT_F1                      20
 #define DEFAULT_F2                      22000
 #define DEFAULT_JACK_NAME               "Dirt_IR_sweep" // %s becomes argv [0]
@@ -96,6 +101,7 @@ void __die ();
 #define VU_PEAK_HOLD                    0.5
 #define VU_CLIP_HOLD                    1.0
 #define VU_XRUN_HOLD                    5.0
+#define DEFAULT_VU_DB                   -48
 
 //#define THRESH_RELATIVE // relative to peak, comment out for absolute
 //#define DISABLE_LEADING_SILENCE_DETECTION // for debugging
@@ -164,6 +170,12 @@ enum class sig_source {
   FILE,
   JACK,
   GENERATE,
+  MAX
+};
+
+enum class filtermode {
+  OFF,
+  NORMAL,
   MAX
 };
 
@@ -248,18 +260,24 @@ public:
   bool sample (float l, float r);
   bool update (); // normally called once per buffer from rt thread
   void acknowledge (); // from ui: tells it to reset peak/hold data
+  float l ();
+  float r ();
+  float peak_l ();
+  float peak_r ();
+  void set_db_scale (float f);
   //c_audioclient *audio ();
   
   // set/get these at each frame & call update () from audio thread
-  float abs_l   = 0;
-  float abs_r   = 0;
-  float minus_l = 0; // keeping both + and - for drawing waveforms from vu data
-  float minus_r = 0;
-  float plus_l  = 0;
-  float plus_r  = 0;
+  float abs_l     = 0;
+  float abs_r     = 0;
+  float minus_l   = 0; // keeping both + and - for drawing waveforms from vu data
+  float minus_r   = 0;
+  float plus_l    = 0;
+  float plus_r    = 0;
+  float db_scale  = DEFAULT_VU_DB;
   
-  float hold_l = 0;
-  float hold_r = 0;
+  float hold_l        = 0;
+  float hold_r        = 0;
   bool  clip_l        = false;
   bool  clip_r        = false;
   bool  xrun          = false;
@@ -280,6 +298,7 @@ public:
   size_t bufcount = 0;
 
 protected:
+  float db_scaled (float f);
   int bufs_per_sec = 1;
   int redraw_every = 0;
 };
@@ -423,6 +442,18 @@ static inline size_t next_pow2 (size_t n) {
   while (p < n) p <<= 1;
   return p;
 }
+
+inline uint64_t epoch_sec () {
+return std::chrono::system_clock::to_time_t(
+            std::chrono::system_clock::now ());
+}
+
+inline uint64_t epoch_us () {
+  return std::chrono::duration_cast<std::chrono::microseconds>(
+         std::chrono::system_clock::now ().time_since_epoch ()).count ();
+}
+
+std::string readable_timestamp (int64_t epoch);
 
 static inline double db_to_linear (double db) {
   // clamp so we don't get crazy values

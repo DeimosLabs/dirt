@@ -62,12 +62,10 @@ struct s_prefs {
   float  ir_start_silence_db   = DEFAULT_IR_SILENCE_THRESH_DB;
   float  headroom_seconds      = 0.0f;
   float  normalize_amp         = DEFAULT_NORMALIZE_AMP; // TODO: command line opt for this 
-#ifdef HIGHPASS_F
-  int    hpf                   = HIGHPASS_F;
-#endif
-#ifdef LOWPASS_F
-  int    lpf                   = LOWPASS_F;
-#endif
+  int    hpf                   = DEFAULT_HPF;
+  int    lpf                   = DEFAULT_LPF;
+  int    hpf_mode              = DEFAULT_HPF_MODE;
+  int    lpf_mode              = DEFAULT_LPF_MODE;
   
   std::string jack_name = DEFAULT_JACK_NAME;
   

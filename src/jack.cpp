@@ -29,6 +29,9 @@ static audiostate determine_state_from_flags (c_jackclient *j) {
     //j->force_notready = false;
     return audiostate::NOTREADY;
   }
+  
+  if (!j->monitor_only && j->rec_go && j->play_go)
+    return audiostate::PLAYREC;
     
   if (!j->play_go && !j->rec_go)
     return audiostate::IDLE;
@@ -44,7 +47,7 @@ static audiostate determine_state_from_flags (c_jackclient *j) {
 
   if (!j->monitor_only && j->rec_go && !j->play_go)
     return audiostate::REC;
-
+  
   return (!j->monitor_only) ? audiostate::PLAYREC : audiostate::MONITOR;
 }
 
@@ -200,7 +203,7 @@ static int jack_process_cb (jack_nframes_t nframes, void *arg) {
     }
     j->vu_in.update ();
     
-    if (j->sig_in_l) {
+    if (j->sig_in_l && !j->monitor_only) {
       // copy this buffer to target c_wavebuffer(s)
       if (rec_stereo)
         oldsize_r = j->sig_in_r->size ();
@@ -493,17 +496,17 @@ bool c_jackclient::set_stereo (bool b) {
   debug ("start, b=%d", (int) b);
   if (b != stereo_in) {
     if (!unregister ())               { 
-      debug ("unregister failed"); BP
+      debug ("unregister failed");
       //return false;
     }
     
     if (!register_input (b)) {
-      debug ("register input failed"); BP
+      debug ("register input failed");
       return false;
     }
     
     if (!register_output (false)) {
-      debug ("register output failed"); BP
+      debug ("register output failed");
       return false;
     }
     
@@ -699,7 +702,6 @@ bool c_jackclient::unregister () {
 }
 
 bool c_jackclient::ready () {
-  BP
   //if (client != NULL) { CP return false;} <--- wtf?
   //if (state != audiostate::NOTREADY) { CP return false;}
   if (!client) { CP return false; }
@@ -765,7 +767,7 @@ bool c_jackclient::play (c_wavebuffer *sig) {
 
 bool c_jackclient::rec (c_wavebuffer *in_l, c_wavebuffer *in_r) {
   debug ("start");
-  if (!client || rec_go)
+  if (!client || (rec_go && !monitor_only))
     return false;
   
   //stereo_in = false;
@@ -801,11 +803,18 @@ bool c_jackclient::playrec (c_wavebuffer *out_l,
     //}
   }
   
-  if (!play (out_l, out_r) || !rec (in_l, in_r))
+  if (!play (out_l, out_r)) {
+    debug ("play failed");
     return false;
+  }
+  if (!rec (in_l, in_r)) {
+    debug ("rec failed");
+    return false;
+  }
+  
   play_go = true;
   rec_go = true;
-  
+  CP
   // prepare state
   play_index = 0;
   rec_index = 0;
@@ -840,13 +849,16 @@ bool c_jackclient::playrec (c_wavebuffer *out_l,
 }
 
 bool c_jackclient::stop (bool also_stop_monitor) { CP
-  return stop_playback () && stop_record (also_stop_monitor);
+  bool a = stop_playback ();
+  bool b = stop_record (also_stop_monitor);
+  
+  return a && b;
 }
 
 bool c_jackclient::stop_playback () {
   debug ("start");
-  if (!play_go)
-    return false;
+  /*if (!play_go)
+    return false;*/
     
   play_go = false;
 
@@ -855,7 +867,7 @@ bool c_jackclient::stop_playback () {
 }
 
 bool c_jackclient::stop_record (bool also_stop_monitor) {
-  debug ("end");
+  debug ("start");
   
   if (also_stop_monitor) {
     rec_go = false;

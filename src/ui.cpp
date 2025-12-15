@@ -83,12 +83,6 @@ c_mainwindow::c_mainwindow (c_deconvolver *d)
     debug ("No deconvolver given!");
   }
   
-  ir_entry ir;
-  ir.path = "abcd";
-  ir.samplerate = 48000;
-  ir.dirty = true;
-  add_ir (ir);
-  
   comb_samplerate->Append ("44100");
   comb_samplerate->Append ("48000");
   comb_samplerate->Append ("96000");
@@ -101,6 +95,11 @@ c_mainwindow::c_mainwindow (c_deconvolver *d)
   list_align->Append ("Silence detection");
   list_align->Append ("Manual");
   list_align->Append ("None/already aligned");
+  
+  list_hpf_mode->Append ("Off");
+  list_hpf_mode->Append ("Normal");
+  list_lpf_mode->Append ("Off");
+  list_lpf_mode->Append ("Normal");
   
   if (d && d->prefs)
     set_prefs (d->prefs);
@@ -123,12 +122,15 @@ c_mainwindow::~c_mainwindow () {
   CP
 }
 
-bool c_mainwindow::add_ir (ir_entry &ent) { CP
+bool c_mainwindow::add_ir (c_ir_entry &ent) { CP
   debug ("got IR entry '%s' size l=%d,r=%d, %dHz, %s", 
-         ent.path.c_str (), ent.l.size (), ent.r.size (), ent.samplerate,
+         ent.path.c_str (), ent.l.size (), ent.r.size (), ent.l.get_samplerate (),
          ent.dirty ? "dirty" : "not dirty");
-  if (1||ent.path.size () > 0 && ent.l.size () > 0) {
-    //ir_entry newir;
+         
+  if (ent.path.size () <= 0)
+    ent.path = readable_timestamp (epoch_sec ());
+  if (ent.path.size () > 0 && ent.l.size () > 0) {
+    //c_ir_entry newir;
     ir_files.push_back (ent);
     //int i = ir_files.size () - 1;
     //ir_files [i].path = ent.path;
@@ -141,12 +143,30 @@ bool c_mainwindow::add_ir (ir_entry &ent) { CP
   return false;
 }
 
+void c_mainwindow::on_recording_done () { CP
+  c_ir_entry ir;
+  
+  if (!dec->set_sweep_wet (wetsweep_l, wetsweep_r)) {
+    show_error ("Deconvolver failed to load wet sweep");
+  } else if (!dec->render_ir (ir.l, ir.r)) {
+    show_error ("Deconvolver failed to render IR");
+  } else {
+    debug ("done rendering IR, yayyy");
+    ir.timestamp = epoch_sec ();
+    ir.dirty = true;
+    ir.loaded = true;
+    add_ir (ir);
+  }
+}
+
 void c_mainwindow::on_timer (wxTimerEvent &ev) {
   static long int num_passes = 0;
   const int update_widgets_every = 8;
   bool do_full_update = false;
   char buf [256];
   
+  //debug ("drysweep: %ld, wetsweep: %ld,%ld",
+  //       drysweep.size (), wetsweep_l.size (), wetsweep_r.size ());
   num_passes++;
   if (!dec || !audio) return;
   
@@ -156,15 +176,26 @@ void c_mainwindow::on_timer (wxTimerEvent &ev) {
   if (pn_meter_in->needs_redraw ()) pn_meter_in->Refresh ();
   if (pn_meter_out->needs_redraw ()) pn_meter_out->Refresh ();
   
+  audiostate s = audio->state;
+  
+  if (s != prev_audio_state) {
+    debug ("prev_audio_state=%d, s=%d", (int) prev_audio_state, (int) s);
+    do_full_update = true;
+    
+    if (prev_audio_state == audiostate::PLAYREC &&
+        s == audiostate::REC) {
+      audio->stop ();
+    } else if ((prev_audio_state == audiostate::PLAYREC ||
+         prev_audio_state == audiostate::REC) &&
+        (s == audiostate::IDLE || s == audiostate::MONITOR)) {
+      CP
+      on_recording_done ();
+    }
+    prev_audio_state = s;
+  }
+
   // widget stuff: update only every n passes
   if (num_passes % update_widgets_every == 0) {
-    audiostate s = audio->state;
-    
-    if (s != prev_audio_state) {
-      debug ("prev_audio_state=%d, s=%d", (int) prev_audio_state, (int) s);
-      prev_audio_state = s;
-      do_full_update = true;
-    } //else {CP}
     if (mode != prev_mode) {
       prev_mode = mode;
       do_full_update = true;
@@ -270,6 +301,15 @@ void c_mainwindow::on_timer (wxTimerEvent &ev) {
     } else {
       disable (chk_overwrite);
     }
+    
+    if (list_hpf_mode->GetSelection () == 0)
+      disable (spin_hpf_freq);
+    else
+      enable (spin_hpf_freq);
+    if (list_lpf_mode->GetSelection () == 0)
+      disable (spin_lpf_freq);
+    else
+      enable (spin_lpf_freq);
     
   
     int n = ir_files.size ();
@@ -509,6 +549,10 @@ void c_mainwindow::set_prefs (s_prefs *prefs) {
   spin_sweep_thr->SetValue (prefs->sweep_silence_db);
   spin_ir_start_thr->SetValue (prefs->ir_start_silence_db);
   spin_ir_end_thr->SetValue (prefs->ir_silence_db);
+  list_hpf_mode->SetSelection (prefs->hpf_mode);
+  list_lpf_mode->SetSelection (prefs->lpf_mode);
+  spin_hpf_freq->SetValue (prefs->hpf);
+  spin_lpf_freq->SetValue (prefs->lpf);
 }
 
 void c_mainwindow::get_prefs (s_prefs *prefs) {
@@ -534,6 +578,10 @@ void c_mainwindow::get_prefs (s_prefs *prefs) {
   prefs->sweep_silence_db = spin_sweep_thr->GetValue ();
   prefs->ir_start_silence_db = spin_ir_start_thr->GetValue ();
   prefs->ir_silence_db = spin_ir_end_thr->GetValue ();
+  prefs->hpf_mode = list_hpf_mode->GetSelection ();
+  prefs->hpf_mode = list_lpf_mode->GetSelection ();
+  prefs->hpf = spin_hpf_freq->GetValue ();
+  prefs->lpf = spin_lpf_freq->GetValue ();
 }
 
 void c_mainwindow::set_mode (long int _mode) {
@@ -851,10 +899,26 @@ void c_mainwindow::on_btn_irload (wxCommandEvent &ev) { CP
     wxArrayString wxv;
     f.GetPaths (wxv);
     for (int i = 0; i < wxv.GetCount (); i++) {
-      list_irfiles->Append (wxv [i]);
-      /*std::cout << "got filename: " + s + "\n" << std::flush;
-      list.push_back (std::string (s));*/
+      //list_irfiles->Append (wxv [i]);
+      if (!load_ir_file (std::string (wxv [i]))) {
+        show_error ("can't load file: " + std::string (wxv [i]));
+      }
     }
+  }
+}
+
+bool c_mainwindow::load_ir_file (std::string filename) { CP
+  c_ir_entry ir;
+  ir.path = filename;
+  if (read_wav (filename.c_str (), ir.l, ir.r)) {
+    ir.id = get_unique_id ();
+    ir.timestamp = epoch_sec ();
+    ir.loaded = true;
+    ir.dirty = false;
+    add_ir (ir);
+    return true;
+  } else {
+    return false;
   }
 }
 
@@ -892,13 +956,13 @@ bool c_mainwindow::make_dry_sweep (bool load_it) {
 void c_mainwindow::show_message (std::string msg) {
   std::cout << msg;
   // TODO: log_widget->add (msg);
-  wxMessageBox ("\n" + msg + "\n", "DIRT");
+  wxMessageBox ("\n" + msg + "\n", "DIRT", wxICON_INFORMATION);
 }
 
 void c_mainwindow::show_error (std::string msg) {
   std::cerr << msg;
   // TODO: log_widget->add ("Error: " + msg);
-  wxMessageBox ("\n" + msg + " \n", "DIRT error");
+  wxMessageBox ("\n" + msg + " \n", "DIRT error", wxICON_ERROR);
 }
 
 void c_mainwindow::on_btn_dry_save (wxCommandEvent &ev) {
@@ -1040,13 +1104,25 @@ void c_mainwindow::on_btn_audio (wxCommandEvent &ev) { CP
   }
 }
 
-void c_mainwindow::on_btn_play (wxCommandEvent &ev) {
+void c_mainwindow::on_btn_play (wxCommandEvent &ev) { CP
   if (!is_ready ()) return;
-  CP
+  
   //init_audio ();
+  debug ("audio->state=%d", audio->state);
   if (audio->state == audiostate::IDLE ||
-      audio->state == audiostate::MONITOR)
-    audio->play (&drysweep);
+    audio->state == audiostate::MONITOR) {
+      if (mode == ID_ROUNDTRIP) {
+      wetsweep_l.resize (drysweep.size ());
+      wetsweep_r.resize (drysweep.size ());
+      //audio->play (&drysweep);
+      //audio->record (&wetsweep_l, &wetsweep_r);
+      c_wavebuffer dummy;
+      dummy.resize (drysweep.size ());
+      audio->playrec (&drysweep, &dummy, &wetsweep_l, &wetsweep_r);
+    } else {
+      audio->play (&drysweep);
+    }
+  }
     //audio->play (&dec->sweep_dry);
   else
     audio->stop ();
@@ -1064,8 +1140,8 @@ void c_mainwindow::on_btn_process (wxCommandEvent &ev) {
   
   std::string dirname = std::string (text_outputdir->GetValue ());
   debug ("dirname='%s'", dirname.c_str ());
-  if (!dir_exists (dirname)) {
-    show_error ("Please select an output directory.\n");
+  if (chk_autosave->GetValue () && !dir_exists (dirname)) {
+    show_error ("Please untick auto-save or select an output directory.\n");
     return;
   }
   
@@ -1128,7 +1204,12 @@ bool c_mainwindow::process_one_file (std::string filename) {
   else
     strippedname = basename;
   
-  outputname = text_outputdir->GetValue () + "/" + strippedname + "-ir.wav";
+  std::string outputdir = std::string (text_outputdir->GetValue ());
+  
+  if (outputdir.size () > 0)
+    outputname = outputdir + "/" + strippedname + "-ir.wav";
+  else
+    outputname = strippedname;
     
   debug ("filename: %s", filename.c_str ());
   debug ("basename: %s", basename.c_str ());
@@ -1146,7 +1227,7 @@ bool c_mainwindow::process_one_file (std::string filename) {
       ret = false;
   } else if (!ir_l.size ()) {
     debug ("deconvolver output zero length IR: %s", filename.c_str ());
-  } else {
+  } else if (chk_autosave->GetValue () && ask_overwrite (outputname)) {
     if (ir_r.size ()) {
       if (!write_stereo_wav (outputname.c_str (), ir_l, ir_r)) {
         debug ("can't write stereo output file: %s", outputname.c_str ());
@@ -1160,36 +1241,110 @@ bool c_mainwindow::process_one_file (std::string filename) {
     }
   }
   
-  if (ret)  num_files_ok++;
-  else      num_files_error++;
+  
+  if (ret) {
+    num_files_ok++;
+    
+    auto now = std::chrono::system_clock::now();
+    time_t epoch = std::chrono::system_clock::to_time_t(now);
+    
+    c_ir_entry ir;
+    ir.id = 0;
+    ir.timestamp = epoch;
+    ir.l = ir_l;
+    ir.r = ir_r;
+    ir.path = outputname;
+    //ir.samplerate = ir_l.get_samplerate ();
+    ir.dirty = true;
+    ir.loaded = true;
+    add_ir (ir);
+    
+  } else {
+    num_files_error++;
+  }
   
   debug ("end, ret=%d", (int) ret);
   return ret;
 }
 
-int c_mainwindow::add_files (std::vector<std::string> list) {
-  CP
-  // not using this, see on_btn_inputfiles_add
-  int count = 0;
-  return count;
+bool c_mainwindow::ask_overwrite (std::string filename) {
+  if (!file_exists (filename))
+    return true;
+  
+  if (chk_overwrite->GetValue ())
+    return true;
+  
+  wxMessageDialog msg (this, std::string ("File exists:\n" + filename + "\n"),
+                       "\nOverwrite?", wxCANCEL|wxYES_NO|wxICON_QUESTION);
+  msg.SetOKCancelLabels ("Yes", "All");
+  
+  int ret = msg.ShowModal ();
+  
+  switch (ret) {
+    case wxID_OK:
+    case wxID_YES:
+      debug ("wxID_YES");
+      return true;
+    break;
+    
+    case wxID_CANCEL: // "all" button
+      debug ("wxID_CANCEL");
+      chk_overwrite->SetValue (true);
+      return true;
+    break;
+    
+    default: CP
+      debug ("default (wxID_NO or other)");
+      return false;
+    break;
+  }
+    
+  return false;
 }
 
 int c_mainwindow::update_ir_list () {
   int count, i, n = ir_files.size ();
   debug ("n=%d", n);
-  list_irfiles->Clear ();
+  list_irfiles->clear ();
   
   for (i = 0; i < n; i++) {
-    if (1||ir_files [i].path.size () > 0 &&
-        ir_files [i].l.size () > 0 &&
-        ir_files [i].r.size () > 0) {
+    int a = ir_files [i].path.find_last_of ("/");
+    std::string shortname;
+    if (a > 0)
+      shortname = ir_files [i].path.substr (a + 1, ir_files [i].path.size () - a);
+    else
+      shortname = ir_files [i].path;
+    
+    if (ir_files [i].path.size () > 0 &&
+       (ir_files [i].l.size () > 0 ||
+        ir_files [i].r.size () > 0)) {
       count++;
-      list_irfiles->Append (ir_files [i].path);
+      
+      debug ("adding entry '%s' -> '%s'", ir_files [i].path.c_str (), 
+                                          shortname.c_str ());
+      //list_irfiles->Append (wxString (shortname));
+      list_irfiles->append (ir_files [i]);
+    } else {
+      debug ("ignoring empty entry '%s' -> '%s'", ir_files [i].path.c_str (),
+                                                  shortname.c_str ());
     }
   }
   debug ("n=%d, count=%d, %d IR entries, %d list entries", 
-          n, count, ir_files.size (), list_irfiles->GetCount ());
-          
+          n, count, ir_files.size (), list_irfiles->get_count ());
+  
+  for (i = 0; i < ir_files.size (); i++) {
+    printf ("IR %d:\n",             i);
+    printf (" ID:         %ld\n",   (int64_t) ir_files [i].id);
+    printf (" timestamp:  %ld",     (int64_t) ir_files [i].timestamp);
+    printf (" (%s)\n",              readable_timestamp
+        (ir_files [i].timestamp).c_str ());
+    printf (" path:       %s\n",    ir_files [i].path.c_str ());
+    printf (" size L:     %ld\n",   (int64_t) ir_files [i].l.size ());
+    printf (" size R:     %ld\n",   (int64_t) ir_files [i].r.size ());
+    printf (" dirty:      %s\n",    ir_files [i].dirty ? "yes" : "no");
+    printf (" loaded:     %s\n\n",  ir_files [i].loaded ? "yes" : "no");
+  }
+  
   return count;
 }
 
@@ -1228,7 +1383,7 @@ int c_mainwindow::add_dir (std::string dirname, bool recurs) {
     while (found && !filedir_error) {
       std::string fn (wxfn);
       std::string absfn (dirname + "/" + fn.c_str ());
-      if (!dir_exists (absfn)) {
+      if (dir_exists (absfn)) {
         if (recurs) {
           printf ("recurs dir: %s\n", absfn.c_str ());
           int c = add_dir (absfn, recurs);
@@ -1336,6 +1491,23 @@ int wx_main (int argc, char **argv, c_audioclient *audio) {
   return retval;
 }
 
+c_irlist::c_irlist (wxWindow *parent, int id, 
+                    wxPoint pos, wxSize size, int border)
+: wxListCtrl (parent, id, pos, size, border) {
+  
+}
+
+void c_irlist::clear () {
+  
+}
+
+void c_irlist::append (c_ir_entry &ir) {
+  
+}
+
+int c_irlist::get_count () {
+  return 0;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 // c_customwidget - parent class for other widget types
@@ -1699,10 +1871,12 @@ c_meterwidget::c_meterwidget (wxWindow *parent,
                               int wtf)
 : c_customwidget (parent, id, pos, size, (wxBorder) wtf) {
   CP
+  set_db_scale (-40);
 }
 
 void c_meterwidget::set_vudata (c_vudata *v) {
   data = v;
+  set_db_scale (db_scale);
 }
 
 c_vudata *c_meterwidget::get_vudata () {
@@ -1761,6 +1935,12 @@ void c_meterwidget::render_gradient_bar () {
   }
   
   //debug ("end");
+}
+
+void c_meterwidget::set_db_scale (float f) {
+  db_scale = f;
+  if (data)
+    data->set_db_scale (f);
 }
 
 bool c_meterwidget::render_base_image () {
@@ -1957,10 +2137,10 @@ bool c_meterwidget::update (wxWindowDC &dc) {
   
   // meter bars
   if (stereo) {
-    draw_bar (dc, t1, t2 - t1, false, data->abs_l, data->hold_l);
-    draw_bar (dc, t3, t4 - t3, true,  data->abs_r, data->hold_r);
+    draw_bar (dc, t1, t2 - t1, false, data->l (), data->peak_l ());
+    draw_bar (dc, t3, t4 - t3, true,  data->r (), data->peak_r ());
   } else {
-    draw_bar (dc, t1, t2 - t1, false, data->abs_l, data->hold_l);
+    draw_bar (dc, t1, t2 - t1, false, data->l (), data->peak_l ());
   }
   
   // clip indicator
@@ -2014,7 +2194,7 @@ c_waveformwidget::c_waveformwidget (wxWindow *parent,
 : c_customwidget (parent, id, pos, size, (wxBorder) wtf) {
   CP
   // for now, hard-coded colors for our waveform view
-  col_bezel1 = wxColour (0, 0, 0, 128);
+  col_bezel1 = wxColour (64, 64, 64, 128);
   col_bezel2 = wxColour (255, 255, 255, 128);
   col_bg = wxColour (0, 0, 0);
   col_fg = wxColour (0, 128, 32);
@@ -2028,10 +2208,9 @@ bool c_waveformwidget::render_base_image () {
   wxMemoryDC dc;
   dc.SelectObject (img_base);
   
-  if (!wavdata) {
+  if (0&&!entry) {
     dc.SetPen (wxPen (wxTransparentColor));
     dc.SetBrush (wxBrush (col_default_bg));
-    dc.DrawRectangle (0, 0, width, height);
     dc.SetPen (col_default_fg);
     dc.SetTextForeground (col_default_fg);
         
@@ -2043,39 +2222,44 @@ bool c_waveformwidget::render_base_image () {
   }
   
   // background
-  dc.SetBrush (wxBrush (col_bg));
-  dc.SetPen (wxPen (col_bg));
+  dc.SetBrush (wxBrush (col_default_bg));
+  dc.SetPen (wxPen (col_default_bg));
   dc.DrawRectangle (0, 0, width, height);
   
   // baseline
   dc.SetPen (wxPen (col_fg));
-  dc.DrawLine (2, 1 + height / 2, 1 + width - 4, 1 + height / 2);
   
-  draw_border (dc);
+  draw_border (dc, 1, 1, width - 2, height / 2 - 4);
+  draw_border (dc, 1, height / 2 + 4, width - 2, height / 2 - 4);
   dc.SelectObject (wxNullBitmap);
   return true;
 }
 
-void c_waveformwidget::draw_border (wxDC &dc) {
+void c_waveformwidget::draw_border (wxDC &dc, int x, int y, int w, int h) {CP
+  if (x < 0) x = 0;
+  if (y < 0) y = 0;
+  if (w < 0) w = width;
+  if (h < 0) h = height;
+  
+  // background, baseline
+  dc.SetBrush (wxBrush (col_bg));
+  dc.SetPen (wxPen (col_bg));
+  dc.DrawRectangle (x, y, w - 2, h - 2);
+  dc.SetPen (wxPen (col_fg));
+  dc.DrawLine (x + 1, y + h / 2, x + w - 2, y + h / 2);
   // bezel/frame, this gives a nice gradient effect: line at a slight
   // angle, sandwitched between two lines of system background color
   dc.SetPen (wxPen (col_bezel1));
-  dc.DrawLine (1, 1, width * 2, -1);
-  dc.DrawLine (1, 1, -1, height * 2);
+  dc.DrawLine (x, y, x + w - 1, y);             // top
+  dc.DrawLine (x, y, x, y + h - 1);             // left
   dc.SetPen (wxPen (col_bezel2));
-  dc.DrawLine (width - 1, height * -3 / 2, width - 2, height);
-  dc.DrawLine (width - 2, height - 2, 1 + (width * -3 / 2), height - 1);
-  
+  dc.DrawLine (x + 1, y + h, x + w - 1, y + h - 1);     // bottom, 1 pixel angle
+  dc.DrawLine (x + w, y + 1, x + w - 1, y + h - 1);     // right, 1 pixel angle
   dc.SetPen (wxPen (col_default_bg));
-  //dc.DrawLine (2, 2, width -3, 2);
-  //dc.DrawLine (2, 2, 2, height - 3);
-  dc.DrawLine (width - 3, 2, width - 3, height - 3);
-  dc.DrawLine (width - 3, height - 3, 3, height - 3);
-  dc.DrawLine (0, 0, width -1, 0);
-  dc.DrawLine (0, 0, 0, height - 1);
-  dc.DrawLine (width - 1, 0, width - 1, height - 1);
-  dc.DrawLine (width - 1, height - 1, 0, height - 1);
+  dc.DrawLine (x + 1, y + h, x + w - 1, y + h);         // bottom inner
+  dc.DrawLine (x + w, y + 1, x + w, y + h);             // right inner
 }
+
 
 bool c_waveformwidget::update (wxWindowDC &dc) {
   if (!c_customwidget::update (dc)) return false;

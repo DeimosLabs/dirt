@@ -72,192 +72,192 @@ size_t find_peak (const std::vector<float> &buf) {
 }
 
 void lowpass_ir (std::vector<float> &irf, double samplerate, double cutoff_hz) {
-    if (irf.empty()) return;
+  debug ("start, sr=%f, cut=%f", (float) samplerate, (float) cutoff_hz);
+  if (irf.empty()) return;
 
-    const size_t N = irf.size();
-    const double bin_hz = samplerate / double(N);
+  const size_t N = irf.size();
+  const double bin_hz = samplerate / double(N);
 
-    // FFT bin corresponding to cutoff frequency
-    int bin_cutoff = int(cutoff_hz / bin_hz);
+  // FFT bin corresponding to cutoff frequency
+  int bin_cutoff = int(cutoff_hz / bin_hz);
 
-    // r2c gives N/2 + 1 complex bins (0 .. N/2)
-    const int max_bin = int (N / 2);
+  // r2c gives N/2 + 1 complex bins (0 .. N/2)
+  const int max_bin = int (N / 2);
 
-    // Clamp cutoff to valid range
-    if (bin_cutoff < 0)        bin_cutoff = 0;
-    if (bin_cutoff > max_bin)  bin_cutoff = max_bin;
+  // Clamp cutoff to valid range
+  if (bin_cutoff < 0)        bin_cutoff = 0;
+  if (bin_cutoff > max_bin)  bin_cutoff = max_bin;
 
-    // Allocate FFTW buffers
-    std::vector<double> temp (N);
-    for (size_t i = 0; i < N; ++i)
-        temp[i] = irf[i];
+  // Allocate FFTW buffers
+  std::vector<double> temp (N);
+  for (size_t i = 0; i < N; ++i)
+    temp[i] = irf[i];
 
-    fftw_complex *freq = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * (max_bin + 1));
-    double       *time = (double*)       fftw_malloc(sizeof(double) * N);
+  fftw_complex *freq = (fftw_complex*) fftw_malloc(sizeof(fftw_complex) * (max_bin + 1));
+  double       *time = (double*)       fftw_malloc(sizeof(double) * N);
 
-    memcpy(time, temp.data(), N * sizeof(double));
+  memcpy(time, temp.data(), N * sizeof(double));
 
-    fftw_plan fwd = fftw_plan_dft_r2c_1d(int(N), time, freq, FFTW_ESTIMATE);
-    fftw_plan inv = fftw_plan_dft_c2r_1d(int(N), freq, time, FFTW_ESTIMATE);
+  fftw_plan fwd = fftw_plan_dft_r2c_1d(int(N), time, freq, FFTW_ESTIMATE);
+  fftw_plan inv = fftw_plan_dft_c2r_1d(int(N), freq, time, FFTW_ESTIMATE);
 
-    // Forward FFT
-    fftw_execute(fwd);
+  // Forward FFT
+  fftw_execute(fwd);
 
-    //
-    // Smooth spectral taper: fade out above cutoff_hz,
-    // reducing ringing compared to brick-wall zeroing
-    //
+  //
+  // Smooth spectral taper: fade out above cutoff_hz,
+  // reducing ringing compared to brick-wall zeroing
+  //
 
-    // Fade width ~15% of cutoff frequency (in bins)
-    int fade_width = int((0.15 * cutoff_hz) / bin_hz);
-    if (fade_width < 1) fade_width = 1;
+  // Fade width ~15% of cutoff frequency (in bins)
+  int fade_width = int((0.15 * cutoff_hz) / bin_hz);
+  if (fade_width < 1) fade_width = 1;
 
-    // Fade band starts below cutoff
-    int bin_fade = bin_cutoff - fade_width;
-    if (bin_fade < 0) {
-        bin_fade = 0;
-        fade_width = bin_cutoff; // compress fade if cutoff small
+  // Fade band starts below cutoff
+  int bin_fade = bin_cutoff - fade_width;
+  if (bin_fade < 0) {
+      bin_fade = 0;
+      fade_width = bin_cutoff; // compress fade if cutoff small
+  }
+
+  for (int i = 0; i <= max_bin; ++i) {
+    if (i <= bin_fade) {
+      // Pass through unchanged
+      continue;
     }
-
-    for (int i = 0; i <= max_bin; ++i) {
-        if (i <= bin_fade) {
-            // Pass through unchanged
-            continue;
-        }
-        else if (i < bin_cutoff) {
-            // Hann-style taper: 1 → 0 over the fade region
-            double t = double(i - bin_fade) / double(bin_cutoff - bin_fade);
-            double w = 0.5 * (1.0 + std::cos(M_PI * t));
-            freq[i][0] *= w;
-            freq[i][1] *= w;
-        }
-        else {
-            // Kill above cutoff
-            freq[i][0] = 0.0;
-            freq[i][1] = 0.0;
-        }
+    else if (i < bin_cutoff) {
+      // Hann-style taper: 1 → 0 over the fade region
+      double t = double(i - bin_fade) / double(bin_cutoff - bin_fade);
+      double w = 0.5 * (1.0 + std::cos(M_PI * t));
+      freq[i][0] *= w;
+      freq[i][1] *= w;
     }
+    else {
+      // Kill above cutoff
+      freq[i][0] = 0.0;
+      freq[i][1] = 0.0;
+    }
+  }
 
-    // Inverse FFT
-    fftw_execute(inv);
+  // Inverse FFT
+  fftw_execute(inv);
 
-    // Normalize (FFTW inverse is unnormalized)
-    const double invN = 1.0 / double(N);
-    for (size_t i = 0; i < N; ++i)
-        irf[i] = float(time[i] * invN);
+  // Normalize (FFTW inverse is unnormalized)
+  const double invN = 1.0 / double(N);
+  for (size_t i = 0; i < N; ++i)
+    irf[i] = float(time[i] * invN);
 
-    fftw_destroy_plan(fwd);
-    fftw_destroy_plan(inv);
-    fftw_free(freq);
-    fftw_free(time);
+  fftw_destroy_plan(fwd);
+  fftw_destroy_plan(inv);
+  fftw_free(freq);
+  fftw_free(time);
 }
 
-void highpass_ir (std::vector<float> &irf, double samplerate, double cutoff)
-{
-    if (irf.empty ()) return;
+void highpass_ir (std::vector<float> &irf, double samplerate, double cutoff) {
+  debug ("start, sr=%f, cut=%f", (float) samplerate, (float) cutoff);
+  if (irf.empty ()) return;
 
-    size_t N = irf.size ();
-    double bin_hz = samplerate / double (N);
+  size_t N = irf.size ();
+  double bin_hz = samplerate / double (N);
 
-    // map cutoff frequency to bin index
-    int bin_cutoff = int (cutoff / bin_hz);
+  // map cutoff frequency to bin index
+  int bin_cutoff = int (cutoff / bin_hz);
 
-    // FFTW r2c: N/2 + 1 complex bins: 0 .. N/2
-    int max_bin = int (N / 2);
+  // FFTW r2c: N/2 + 1 complex bins: 0 .. N/2
+  int max_bin = int (N / 2);
 
-    // clamp cutoff to valid range
-    if (bin_cutoff < 0)        bin_cutoff = 0;
-    if (bin_cutoff > max_bin)  bin_cutoff = max_bin;
+  // clamp cutoff to valid range
+  if (bin_cutoff < 0)        bin_cutoff = 0;
+  if (bin_cutoff > max_bin)  bin_cutoff = max_bin;
 
-    // allocate double buffer for FFTW
-    std::vector<double> ir (N);
-    for (size_t i = 0; i < N; ++i)
-      ir [i] = irf [i];
+  // allocate double buffer for FFTW
+  std::vector<double> ir (N);
+  for (size_t i = 0; i < N; ++i)
+    ir [i] = irf [i];
 
-    fftw_complex *freq = (fftw_complex*) fftw_malloc (sizeof (fftw_complex) * (max_bin + 1));
-    double *time       = (double*)       fftw_malloc (sizeof (double) * N);
+  fftw_complex *freq = (fftw_complex*) fftw_malloc (sizeof (fftw_complex) * (max_bin + 1));
+  double *time       = (double*)       fftw_malloc (sizeof (double) * N);
 
-    memcpy (time, ir.data (), N * sizeof (double));
+  memcpy (time, ir.data (), N * sizeof (double));
 
-    fftw_plan fwd = fftw_plan_dft_r2c_1d (int (N), time, freq, FFTW_ESTIMATE);
-    fftw_plan inv = fftw_plan_dft_c2r_1d (int (N), freq, time, FFTW_ESTIMATE);
+  fftw_plan fwd = fftw_plan_dft_r2c_1d (int (N), time, freq, FFTW_ESTIMATE);
+  fftw_plan inv = fftw_plan_dft_c2r_1d (int (N), freq, time, FFTW_ESTIMATE);
 
-    // Forward FFT
-    fftw_execute (fwd);
+  // Forward FFT
+  fftw_execute (fwd);
 
 #if 0
-    // brick-wall HP: kill DC..cutoff
-    for (int i = 0; i <= bin_cutoff && i <= max_bin; ++i) {
-        freq [i] [0] = 0.0;
-        freq [i] [1] = 0.0;
-    }
+  // brick-wall HP: kill DC..cutoff
+  for (int i = 0; i <= bin_cutoff && i <= max_bin; ++i) {
+    freq [i] [0] = 0.0;
+    freq [i] [1] = 0.0;
+  }
 #else
-    // hann-ish fade band around the cutoff, TODO: fix this
+  // hann-ish fade band around the cutoff, TODO: fix this
 
-    // fade_width is in *bins*, computed from ~15% of cutoff in Hz
-    int fade_width = int ( (0.15 * cutoff) / bin_hz );   // ~15% of cutoff
+  // fade_width is in *bins*, computed from ~15% of cutoff in Hz
+  int fade_width = int ( (0.15 * cutoff) / bin_hz );   // ~15% of cutoff
+  if (fade_width < 1) fade_width = 1;
+
+  int bin_fade = bin_cutoff - fade_width;             // where fade starts
+  if (bin_fade < 0) {
+    bin_fade   = 0;
+    fade_width = bin_cutoff - bin_fade;
     if (fade_width < 1) fade_width = 1;
+  }
 
-    int bin_fade = bin_cutoff - fade_width;             // where fade starts
-    if (bin_fade < 0) {
-        bin_fade   = 0;
-        fade_width = bin_cutoff - bin_fade;
-        if (fade_width < 1) fade_width = 1;
+  for (int i = 0; i <= max_bin; ++i) {
+    if (i <= bin_fade) {
+      // keep as-is
+      continue;
+    } else if (i < bin_cutoff) {
+      // smooth fade from 1 -> 0 over [bin_fade, bin_cutoff]
+      double t = double (i - bin_fade) / double (bin_cutoff - bin_fade);
+      double w = 0.5 * (1.0 + std::cos (M_PI * t));  // t=0 => 1, t=1 => 0
+      freq [i] [0] *= w;
+      freq [i] [1] *= w;
+    } else {
+      // fully killed below cutoff
+      freq [i] [0] = 0.0;
+      freq [i] [1] = 0.0;
     }
-
-    for (int i = 0; i <= max_bin; ++i) {
-        if (i <= bin_fade) {
-            // keep as-is
-            continue;
-        } else if (i < bin_cutoff) {
-            // smooth fade from 1 -> 0 over [bin_fade, bin_cutoff]
-            double t = double (i - bin_fade) / double (bin_cutoff - bin_fade);
-            double w = 0.5 * (1.0 + std::cos (M_PI * t));  // t=0 => 1, t=1 => 0
-            freq [i] [0] *= w;
-            freq [i] [1] *= w;
-        } else {
-            // fully killed below cutoff
-            freq [i] [0] = 0.0;
-            freq [i] [1] = 0.0;
-        }
-    }
+  }
 #endif
 
-    // inverse fft
-    fftw_execute (inv);
-        
-    // normalize fftw inverse (not normalized by default)
-    for (size_t i = 0; i < N; ++i)
-        irf[i] = float (time [i] / double (N));
+  // inverse fft
+  fftw_execute (inv);
+      
+  // normalize fftw inverse (not normalized by default)
+  for (size_t i = 0; i < N; ++i)
+      irf[i] = float (time [i] / double (N));
 
-    fftw_destroy_plan (fwd);
-    fftw_destroy_plan (inv);
-    fftw_free (freq);
-    fftw_free (time);
+  fftw_destroy_plan (fwd);
+  fftw_destroy_plan (inv);
+  fftw_free (freq);
+  fftw_free (time);
 }
 
 // simple butterworth highpass at ~30 Hz zero-phase (forward+reverse)
 // unused (for now), keeping this for reference
-void dc_kill(std::vector<float>& irf, float samplerate)
-{
-    const float fc = 30.0f;
-    const float w0 = 2.0f * M_PI * fc / samplerate;
-    const float alpha = (1.0f - std::sin(w0)) / std::cos(w0);
+void dc_kill (std::vector<float>& irf, float samplerate) {
+  const float fc = 30.0f;
+  const float w0 = 2.0f * M_PI * fc / samplerate;
+  const float alpha = (1.0f - std::sin (w0)) / std::cos (w0);
 
-    float prev = irf[0];
-    for (size_t i = 1; i < irf.size(); ++i) {
-        float v = irf[i];
-        irf[i] = irf[i] - prev + alpha * irf[i];
-        prev = v;
-    }
+  float prev = irf [0];
+  for (size_t i = 1; i < irf.size (); ++i) {
+    float v = irf [i];
+    irf[i] = irf [i] - prev + alpha * irf [i];
+    prev = v;
+  }
 
-    // reverse pass to (supposedly) make it zero phase
-    prev = irf.back();
-    for (size_t i = irf.size() - 2; i > 0; --i) {
-        float v = irf[i];
-        irf[i] = irf[i] - prev + alpha * irf[i];
-        prev = v;
-    }
+  // reverse pass to (supposedly) make it zero phase
+  prev = irf.back ();
+  for (size_t i = irf.size () - 2; i > 0; --i) {
+    float v = irf [i];
+    irf[i] = irf [i] - prev + alpha * irf [i];
+    prev = v;
+  }
 }
 
 size_t detect_sweep_start_with_marker (const std::vector<float> &buf,
@@ -1041,26 +1041,18 @@ bool c_deconvolver::render_ir (c_wavebuffer &out_l,
   }
   
   // get rid of junk above hearing threshold, say 90% of nyquist freq
-  float cutoff = (prefs->sweep_sr / 2) * 0.9;
+  /*float cutoff = (prefs->sweep_sr / 2) * 0.9;
   // ...or just a fixed frequency
   //float cutoff = 18000;
-  float lp_cut = std::min ((float) LOWPASS_F, cutoff);
+  float lp_cut = std::min ((float) LOWPASS_F, cutoff);*/
   
   if (ir_l.size () > 0) {
-#ifdef HIGHPASS_F
-    highpass_ir (ir_l, prefs->sweep_sr, HIGHPASS_F);
-#endif
-#ifdef LOWPASS_F
-    lowpass_ir (ir_l, prefs->sweep_sr, lp_cut);
-#endif
+    if (prefs->hpf_mode) highpass_ir (ir_l, prefs->sweep_sr, prefs->hpf);
+    if (prefs->lpf_mode) lowpass_ir (ir_l, prefs->sweep_sr, prefs->lpf);
   }
   if (ir_r.size () > 0) {
-#ifdef HIGHPASS_F
-    highpass_ir (ir_r, prefs->sweep_sr, HIGHPASS_F);
-#endif
-#ifdef LOWPASS_F
-    lowpass_ir (ir_r, prefs->sweep_sr, lp_cut);
-#endif
+    if (prefs->hpf_mode) highpass_ir (ir_r, prefs->sweep_sr, prefs->hpf);
+    if (prefs->lpf_mode) lowpass_ir (ir_r, prefs->sweep_sr, prefs->lpf);
   }
   
   // TODO: figure out why this even works for L/R delay
@@ -1081,6 +1073,8 @@ bool c_deconvolver::render_ir (c_wavebuffer &out_l,
   out_r.import_from (ir_r);
   out_l.set_samplerate (prefs->sweep_sr);
   out_r.set_samplerate (prefs->sweep_sr);
+  
+  debug ("resulting output l=%d, r=%d", ir_l.size (), ir_r.size ());
   
   debug ("end");
   return true;

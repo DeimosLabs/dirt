@@ -21,6 +21,7 @@
 #include "wx/frame.h"
 #include "wx/notebook.h"
 #include "wx/spinctrl.h"
+#include "wx/listctrl.h"
 #include "wx/scrolbar.h"
 #include "wx/statline.h"
 ////@end includes
@@ -33,6 +34,7 @@
 class wxBoxSizer;
 class wxSpinCtrl;
 class c_meterwidget;
+class c_irlist;
 class c_waveformwidget;
 ////@end forward declarations
 
@@ -65,6 +67,9 @@ class c_waveformwidget;
 #define ID_JACK_DRY 10024
 #define ID_JACK_WET_L 10025
 #define ID_JACK_WET_R 10026
+#define wxID_DRYINFO 10071
+#define ID_DRYINFO 10073
+#define ID_STATICTEXT 10072
 #define ID_METER_OUT 10051
 #define ID_PLAY 10031
 #define ID_TAB2 10040
@@ -187,6 +192,7 @@ public:
     wxComboBox* list_jack_wet_l;
     wxComboBox* list_jack_wet_r;
     wxBoxSizer* sizer_meters;
+    wxStaticText* text_dryinfo;
     c_meterwidget* pn_meter_out;
     c_meterwidget* pn_meter_in;
     wxButton* btn_play;
@@ -220,12 +226,12 @@ public:
     wxSpinCtrl* spin_ir_end_thr;
     wxSpinCtrl* spin_chn_offset;
     wxButton* btn_process;
-    wxListBox* list_irfiles;
+    c_irlist* list_irfiles;
     wxButton* btn_ir_rename;
     wxButton* btn_ir_remove;
     wxButton* btn_ir_load;
     wxButton* btn_ir_save;
-    c_waveformwidget* m_waveform;
+    c_waveformwidget* pn_waveform;
     wxStaticText* text_statusbar;
     wxButton* btn_about;
     wxButton* btn_ok;

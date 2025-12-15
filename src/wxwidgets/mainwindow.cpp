@@ -123,6 +123,7 @@ void ui_mainwindow::Init()
     list_jack_wet_l = NULL;
     list_jack_wet_r = NULL;
     sizer_meters = NULL;
+    text_dryinfo = NULL;
     pn_meter_out = NULL;
     pn_meter_in = NULL;
     btn_play = NULL;
@@ -161,7 +162,7 @@ void ui_mainwindow::Init()
     btn_ir_remove = NULL;
     btn_ir_load = NULL;
     btn_ir_save = NULL;
-    m_waveform = NULL;
+    pn_waveform = NULL;
     text_statusbar = NULL;
     btn_about = NULL;
     btn_ok = NULL;
@@ -313,7 +314,7 @@ void ui_mainwindow::CreateControls()
     itemBoxSizer34->Add(itemStaticText35, 0, wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
     wxFlexGridSizer* itemFlexGridSizer36 = new wxFlexGridSizer(0, 5, 0, 0);
-    itemBoxSizer33->Add(itemFlexGridSizer36, 0, wxGROW|wxALL, 5);
+    itemBoxSizer33->Add(itemFlexGridSizer36, 0, wxGROW|wxLEFT|wxRIGHT|wxTOP, 5);
     wxStaticText* itemStaticText37 = new wxStaticText( tab_drysweep, wxID_STATIC, _("Play dry"), wxDefaultPosition, wxDefaultSize, 0 );
     itemFlexGridSizer36->Add(itemStaticText37, 0, wxALIGN_LEFT|wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
@@ -330,7 +331,8 @@ void ui_mainwindow::CreateControls()
     list_jack_wet_l = new wxComboBox( tab_drysweep, ID_JACK_WET_L, wxEmptyString, wxDefaultPosition, wxDefaultSize, list_jack_wet_lStrings, wxCB_DROPDOWN );
     itemFlexGridSizer36->Add(list_jack_wet_l, 0, wxGROW|wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
-    itemFlexGridSizer36->Add(5, 5, 0, wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTER_VERTICAL|wxALL, 5);
+    wxStaticText* itemStaticText10 = new wxStaticText( tab_drysweep, wxID_STATIC, _("Dry sweep:"), wxDefaultPosition, wxDefaultSize, 0 );
+    itemFlexGridSizer36->Add(itemStaticText10, 0, wxALIGN_CENTER_HORIZONTAL|wxALIGN_BOTTOM|wxRIGHT|wxTOP, 5);
 
     itemFlexGridSizer36->Add(5, 5, 0, wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
@@ -347,9 +349,23 @@ void ui_mainwindow::CreateControls()
     itemFlexGridSizer36->AddGrowableCol(4);
 
     sizer_meters = new wxBoxSizer(wxVERTICAL);
-    itemBoxSizer33->Add(sizer_meters, 0, wxGROW|wxALL, 5);
+    itemBoxSizer33->Add(sizer_meters, 0, wxGROW|wxALL, 0);
 
-    itemBoxSizer14->Add(5, 5, 1, wxALIGN_CENTER_HORIZONTAL|wxALL, 5);
+    wxBoxSizer* itemBoxSizer30 = new wxBoxSizer(wxHORIZONTAL);
+    itemBoxSizer14->Add(itemBoxSizer30, 1, wxGROW|wxLEFT|wxRIGHT|wxBOTTOM, 5);
+    itemBoxSizer30->Add(5, 5, 0, wxALIGN_CENTER_VERTICAL|wxALL, 5);
+
+    wxStaticText* itemStaticText38 = new wxStaticText( tab_drysweep, wxID_DRYINFO, _("Length:\nStart freq:\nEnd freq:\nPreroll:\nMarker:\nGap:"), wxDefaultPosition, wxDefaultSize, 0 );
+    itemBoxSizer30->Add(itemStaticText38, 0, wxALIGN_TOP|wxALL, 0);
+
+    itemBoxSizer30->Add(5, 5, 0, wxALIGN_CENTER_VERTICAL|wxALL, 5);
+
+    wxStaticText* itemStaticText11 = new wxStaticText( tab_drysweep, ID_DRYINFO, _("A\nB\nC\nD\nE\nF"), wxDefaultPosition, wxDefaultSize, 0 );
+    itemStaticText11->SetName(wxT("text_dryinfo"));
+    itemBoxSizer30->Add(itemStaticText11, 0, wxALIGN_TOP|wxLEFT|wxRIGHT|wxBOTTOM, 5);
+
+    text_dryinfo = new wxStaticText( tab_drysweep, ID_STATICTEXT, wxEmptyString, wxDefaultPosition, wxDefaultSize, 0 );
+    itemBoxSizer30->Add(text_dryinfo, 0, wxGROW|wxALL, 0);
 
     wxBoxSizer* itemBoxSizer23 = new wxBoxSizer(wxHORIZONTAL);
     itemBoxSizer14->Add(itemBoxSizer23, 0, wxGROW|wxLEFT|wxRIGHT|wxTOP, 10);
@@ -519,11 +535,11 @@ void ui_mainwindow::CreateControls()
     itemBoxSizer28->Add(chk_zeroalign, 1, wxALIGN_LEFT|wxALL, 5);
 
     chk_trim_start = new wxCheckBox( tab_deconvolv, ID_TRIM_START, _("Trim start silence"), wxDefaultPosition, wxDefaultSize, 0 );
-    chk_trim_start->SetValue(false);
+    chk_trim_start->SetValue(true);
     itemBoxSizer28->Add(chk_trim_start, 0, wxALIGN_LEFT|wxALL, 5);
 
     chk_trim_end = new wxCheckBox( tab_deconvolv, ID_TRIM_END, _("Trim end silence"), wxDefaultPosition, wxDefaultSize, 0 );
-    chk_trim_end->SetValue(false);
+    chk_trim_end->SetValue(true);
     itemBoxSizer28->Add(chk_trim_end, 0, wxALIGN_LEFT|wxALL, 5);
 
     chk_abort = new wxCheckBox( tab_deconvolv, ID_ABORT, _("Abort on error"), wxDefaultPosition, wxDefaultSize, 0 );
@@ -533,7 +549,7 @@ void ui_mainwindow::CreateControls()
     wxBoxSizer* itemBoxSizer35 = new wxBoxSizer(wxVERTICAL);
     itemBoxSizer27->Add(itemBoxSizer35, 0, wxALIGN_TOP|wxALL, 0);
     chk_autosave = new wxCheckBox( tab_deconvolv, ID_AUTOSAVE, _("Auto save IR files"), wxDefaultPosition, wxDefaultSize, 0 );
-    chk_autosave->SetValue(false);
+    chk_autosave->SetValue(true);
     itemBoxSizer35->Add(chk_autosave, 0, wxALIGN_LEFT|wxALL, 5);
 
     chk_overwrite = new wxCheckBox( tab_deconvolv, ID_OVERWRITE, _("Overwrite existing"), wxDefaultPosition, wxDefaultSize, 0 );
@@ -606,12 +622,11 @@ void ui_mainwindow::CreateControls()
     itemPanel3->SetSizer(itemBoxSizer20);
 
     wxBoxSizer* itemBoxSizer22 = new wxBoxSizer(wxVERTICAL);
-    itemBoxSizer20->Add(itemBoxSizer22, 1, wxGROW|wxALL, 5);
+    itemBoxSizer20->Add(itemBoxSizer22, 0, wxGROW|wxALL, 5);
     wxStaticText* itemStaticText25 = new wxStaticText( itemPanel3, wxID_STATIC, _("Generated IR files:"), wxDefaultPosition, wxDefaultSize, 0 );
     itemBoxSizer22->Add(itemStaticText25, 0, wxALIGN_LEFT|wxALL, 5);
 
-    wxArrayString list_irfilesStrings;
-    list_irfiles = new wxListBox( itemPanel3, ID_IRFILES, wxDefaultPosition, wxDefaultSize, list_irfilesStrings, wxLB_SINGLE );
+    list_irfiles = new c_irlist( itemPanel3, ID_IRFILES, wxDefaultPosition, wxDefaultSize, wxLC_REPORT );
     itemBoxSizer22->Add(list_irfiles, 1, wxGROW|wxALL, 5);
 
     wxFlexGridSizer* itemFlexGridSizer4 = new wxFlexGridSizer(0, 2, 0, 0);
@@ -641,9 +656,9 @@ void ui_mainwindow::CreateControls()
 
     itemFlexGridSizer1->Add(5, 5, 0, wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
-    m_waveform = new c_waveformwidget( itemPanel3, ID_WAVEFORM, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL );
-    m_waveform->SetExtraStyle(wxWS_EX_VALIDATE_RECURSIVELY);
-    itemFlexGridSizer1->Add(m_waveform, 1, wxGROW|wxALL, 5);
+    pn_waveform = new c_waveformwidget( itemPanel3, ID_WAVEFORM, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL );
+    pn_waveform->SetExtraStyle(wxWS_EX_VALIDATE_RECURSIVELY);
+    itemFlexGridSizer1->Add(pn_waveform, 1, wxGROW|wxALL, 5);
 
     wxScrollBar* itemScrollBar1 = new wxScrollBar( itemPanel3, ID_SCROLLBAR1, wxDefaultPosition, wxDefaultSize, wxSB_VERTICAL );
     itemScrollBar1->SetScrollbar(0, 1, 100, 1);

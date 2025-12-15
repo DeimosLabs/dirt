@@ -23,6 +23,9 @@
  * See header file and --help text for more info
  */
 
+#include <ctime>
+#include <cstdint>
+#include <time.h>
 #include "dirt.h"
 #include "deconvolv.h"
 #include "jack.h"
@@ -39,6 +42,32 @@
 #define CP
 #define BP
 #endif
+
+
+std::string readable_timestamp (int64_t epoch) {
+  std::time_t tt = static_cast<std::time_t>(epoch);
+  struct tm tm_buf;
+
+#ifdef _WIN32
+  localtime_s (&tm_buf, &tt);        // Windows safe version
+#else
+  localtime_r (&tt, &tm_buf);        // POSIX safe version
+#endif
+
+  char buf [64];
+  std::snprintf (
+    buf, sizeof (buf),
+    "%04d-%02d-%02d_%02d:%02d:%02d",
+    tm_buf.tm_year + 1900,
+    tm_buf.tm_mon + 1,
+    tm_buf.tm_mday,
+    tm_buf.tm_hour,
+    tm_buf.tm_min,
+    tm_buf.tm_sec
+  );
+
+  return std::string (buf);
+}
 
 
 //#define DONT_USE_ANSI
@@ -379,6 +408,45 @@ bool c_vudata::update () {
   return ret; 
 }
 
+void c_vudata::set_db_scale (float f) {
+  db_scale = f;
+}
+
+float c_vudata::db_scaled (float f) {
+  float ret = 0;
+  if (db_scale == 0) {
+    ret = f;
+  } else if (db_scale > 0) {
+    ret = f; // TODO: math for exp. curve
+  } else {
+    float db = linear_to_db (f);
+    db += db_scale;
+    ret = 2 - (db / db_scale);
+  }
+  
+  if (ret < 0) ret = 0;
+  if (ret > 1) ret = 1;
+  
+  //debug ("db_scale=%f, ret=%f", db_scale, ret);
+  return ret;
+}
+
+float c_vudata::l () {
+  return db_scaled (abs_l);
+}
+
+float c_vudata::r () {
+  return db_scaled (abs_r);
+}
+
+float c_vudata::peak_l () {
+  return db_scaled (hold_l);
+}
+
+float c_vudata::peak_r () {
+  return db_scaled (hold_r);
+}
+
 void c_vudata::acknowledge () {
   peak_new = false;
   xrun = false;
@@ -632,6 +700,10 @@ static void print_usage (const char *prog, bool full = false) {
     "  -T, --ir-thresh dB       Threshold in dB for IR silence detection\n"
     "                             (negative) ["
                              << DEFAULT_IR_SILENCE_THRESH_DB << "]\n"
+    "      --hpf dB             High-pass filter frequency in Hz ["
+                             << DEFAULT_HPF << "]\n"
+    "      --lpf dB             Low-pass filter frequency in Hz ["
+                             << DEFAULT_LPF << "]\n"
     "  -O, --offset N           Offset (delay) wet sweep by N samples [10]\n"
     "  -z, --zero-peak          Try to align peak to zero"
                              << (DEFAULT_ZEROPEAK ? " [default]\n" : "\n") <<
@@ -650,7 +722,7 @@ static void print_usage (const char *prog, bool full = false) {
     "  -S, --playsweep          Generate sweep and play it via " 
     << AUDIO_BACKEND <<"\n"
 #endif
-    "  -R, --sweep-sr SR        Sweep samplerate [" << DEFAULT_SAMPLERATE << "\n"
+    "  -R, --sweep-sr SR        Sweep samplerate [" << DEFAULT_SAMPLERATE << "]\n"
     "  -L, --sweep-seconds SEC  Sweep length in seconds [30]\n"
     "  -a, --sweep-amplitude dB Sweep amplitude in dB [-1]\n" // DONE
     "  -X, --sweep-f1 F         Sweep start frequency [" << DEFAULT_F1 << "]\n"
@@ -896,6 +968,30 @@ int parse_args (int argc, char **argv, s_prefs &opt, bool doing_env = false) {
       if (opt.ir_silence_db < -200.0 || opt.ir_silence_db > 0.0) {
         std::cerr << "Invalid threshold dB: "
                   << argv [i] << " (must be between -200 and 0)\n";
+        return ret_err;
+      }
+    } else if (arg == "--hpf") {
+      if (++i >= argc) {
+        std::cerr << "Missing value for " << arg << "\n";
+        return ret_err;
+      }
+      opt.hpf_mode = 1;
+      opt.hpf = std::atoi (argv [i]);
+      if (opt.hpf < 40 || opt.hpf > 24000) {
+        std::cerr << "Invalid frequency (Hz): "
+                  << argv [i] << " (must be between 20 and 24000)\n";
+        return ret_err;
+      }
+    } else if (arg == "--lpf") {
+      if (++i >= argc) {
+        std::cerr << "Missing value for " << arg << "\n";
+        return ret_err;
+      }
+      opt.lpf_mode = 1;
+      opt.lpf = std::atoi (argv [i]);
+      if (opt.hpf < 40 || opt.hpf > 24000) {
+        std::cerr << "Invalid frequency (Hz): "
+                  << argv [i] << " (must be between 20 and 24000)\n";
         return ret_err;
       }
     } else if (arg == "-m" || arg == "--mono") {
@@ -1159,7 +1255,6 @@ int parse_env (int in_argc, char **in_argv, s_prefs &p) {
   const char *argv [128];
   const char *env, *equal;
   
-  
   struct s_arg {
     const char *envname;
     const char *argname;
@@ -1172,11 +1267,13 @@ int parse_env (int in_argc, char **in_argv, s_prefs &p) {
     { "DIRT_THRESH",        "--thresh",               true   },
     { "DIRT_IR_THRESH",     "--ir-thresh",            true   },
     { "DIRT_ALIGN",         "--align",                true   },
-    { "DIRT_DEBUGDUMP",      "--dump",                true   },
+    { "DIRT_DEBUGDUMP",     "--dump",                 true   },
     { "DIRT_SR",            "--samplerate",           true   },
     { "DIRT_SAMPLERATE",    "--samplerate",           true   },
-    { "DIRT_SWEEP_F1",      "--",                     true   },
-    { "DIRT_SWEEP_F2",      "--",                     true   },
+    { "DIRT_SWEEP_F1",      "--sweep-f1",             true   },
+    { "DIRT_SWEEP_F2",      "--sweep-f2",             true   },
+    { "DIRT_HPF",           "--hpf",                  true   },
+    { "DIRT_LPF",           "--lpf",                  true   },
     { "DIRT_SWEEP_LENGTH",  "--sweep-seconds",        true   },
     { "DIRT_SWEEP_SECONDS", "--sweep-seconds",        true   },
     { "DIRT_SWEEP_PREROLL", "--preroll",              true   },
