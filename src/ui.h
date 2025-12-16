@@ -76,6 +76,10 @@ public:
   c_deconvolver *dec = NULL;
   c_audioclient *audio = NULL;
   
+  bool shift = false;
+  bool alt =   false;
+  bool ctrl =  false;
+  
 protected:
   virtual int FilterEvent (wxEvent &ev);
   
@@ -400,14 +404,14 @@ public:
   ~c_waveformwidget () {}
   
   // event handlers: override those from c_customwidget
-  /*void on_mousemove (wxMouseEvent &event);
+  //void on_mousemove (wxMouseEvent &event);
   void on_mousedown_left (wxMouseEvent &event);
-  void on_mouseup_left (wxMouseEvent &event);
-  void on_mousedown_middle (wxMouseEvent &event);
-  void on_mouseup_middle (wxMouseEvent &event);
+  //void on_mouseup_left (wxMouseEvent &event);
+  //void on_mousedown_middle (wxMouseEvent &event);
+  //void on_mouseup_middle (wxMouseEvent &event);
   void on_mousedown_right (wxMouseEvent &event);
-  void on_mouseup_right (wxMouseEvent &event);
-  void on_mouseleave (wxMouseEvent &event);*/
+  //void on_mouseup_right (wxMouseEvent &event);
+  //void on_mouseleave (wxMouseEvent &event);
   void on_keypress (wxKeyEvent &event);
   void on_keyrelease (wxKeyEvent&event);
   void on_idle (wxIdleEvent &event);
@@ -427,9 +431,11 @@ public:
   size_t get_sample_pos ();
   size_t get_samples_visible ();
   size_t set_zoom (size_t pos = 0, size_t sz = -1);
-  bool   zoom_full ();
-  bool   zoom_in ();
-  bool   zoom_out ();
+  void   zoom_x (float ratio);
+  void   zoom_in () { zoom_x (1.05); }
+  void   zoom_out () { zoom_x (-1.05); }
+  void   scroll_left (int howmuch);
+  void   scroll_right (int howmuch);
   float  get_y_zoom ();
   float  get_y_offset ();
   bool   y_zoom_full ();
@@ -439,6 +445,7 @@ public:
   wxFont tinyfont;
   
 protected:
+
 private:
   void draw_border (wxDC &dc, int x = -1, int y = -1, int w = -1, int h = -1);
   void draw_waveform (wxDC &dc, c_wavebuffer &buf, int x, int y, int w, int h);
@@ -447,10 +454,11 @@ private:
   std::vector<sxy> smphandles;
   
   // zoom / position
-  size_t view_pos   = 0;   // visible waveform pos/size in samples
-  size_t view_size  = -1;
-  float zoom_y      = 1.0; // multiplied by sample values
-  float zoom_y_off  = 0.0; // offset, -1 means baseline on top of screen
+  int64_t viewpos      = 0;   // visible waveform pos/size in samples
+  int64_t viewsize     = -1;
+  float   y_zoom       = 1.0; // multiplied by sample values
+  float   y_zoom_off   = 0.0; // offset, -1 means baseline on top of screen
+  int64_t min_viewsize = 32;
   
   wxPen pen_wavefg;
   wxBrush brush_wavefg;

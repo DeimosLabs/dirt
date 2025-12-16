@@ -1550,6 +1550,31 @@ int c_app::OnExit () {
 }
 
 int c_app::FilterEvent (wxEvent &ev) {
+  bool keystate = false;
+  int evttype = ev.GetEventType ();
+  
+  if (evttype == wxEVT_KEY_DOWN)
+    keystate = true;
+    
+  if (evttype == wxEVT_KEY_UP || evttype == wxEVT_KEY_DOWN) {
+    switch (((wxKeyEvent&)ev).GetKeyCode ()) {
+      case WXK_SHIFT:
+        shift = keystate;
+        debug ("shift=%d", (int) shift);
+      break;
+      
+      case WXK_ALT: CP
+        alt = keystate;
+        debug ("alt=%d", (int) alt);
+      break;
+      
+      case WXK_CONTROL: CP
+        ctrl = keystate;
+        debug ("ctrl=%d", (int) ctrl);
+      break;
+    }
+  }
+  
   return wxApp::FilterEvent (ev);
 }
 
@@ -1558,15 +1583,15 @@ c_app *g_app = NULL;
 
 int wx_main (int argc, char **argv, c_audioclient *audio) {
   int retval = 0;
-  debug ("start");
-  
   c_deconvolver_gui dec;
-  
+
+  debug ("start");
   g_app = new c_app (&dec);
   g_app->audio = audio;
   wxApp::SetInstance (g_app);
   retval = wxEntry (argc, argv);
-  //delete g_app;
+  if (0&&g_app)
+    delete g_app;
   debug ("end, retval=%d", retval);
   return retval;
 }
@@ -1872,7 +1897,7 @@ void c_customwidget::on_idle (wxIdleEvent &ev)       { }
 void c_customwidget::on_visible (wxShowEvent &ev)    { }
 
 void c_customwidget::on_mousedown_left (wxMouseEvent &ev) {
-  debug ("start");
+  //debug ("start");
   get_xy (ev);
   
   SetFocus ();
@@ -1885,11 +1910,11 @@ void c_customwidget::on_mousedown_left (wxMouseEvent &ev) {
   /*wxPaintDC dc (this);
   update (dc);*/
   update ();
-  debug ("end");
+  //debug ("end");
 }
 
 void c_customwidget::on_mouseup_left (wxMouseEvent &ev) {
-  debug ("start");
+  //debug ("start");
   get_xy (ev);
   mouse_buttons &= ~1;
   update ();
@@ -1897,21 +1922,21 @@ void c_customwidget::on_mouseup_left (wxMouseEvent &ev) {
     debug ("emitting sig_left_clicked");
     emit sig_left_clicked (this);
   }*/
-  debug ("end");
+  //debug ("end");
 }
 
 void c_customwidget::on_mousedown_middle (wxMouseEvent &ev) {
-  debug ("start");
+  //debug ("start");
   get_xy (ev);
   mousedown_x [1] = mouse_x;
   mousedown_y [1] = mouse_y;
   mouse_buttons |= 2;
   update ();
-  debug ("end");
+  //debug ("end");
 }
 
 void c_customwidget::on_mouseup_middle (wxMouseEvent &ev) {
-  debug ("start");
+  //debug ("start");
   get_xy (ev);
   mouse_buttons &= ~2;
   update ();
@@ -1919,21 +1944,21 @@ void c_customwidget::on_mouseup_middle (wxMouseEvent &ev) {
     debug ("emitting sig_middle_clicked");
     emit sig_middle_clicked (this);
   }*/
-  debug ("end");
+  //debug ("end");
 }
 
 void c_customwidget::on_mousedown_right (wxMouseEvent &ev) {
-  debug ("start");
+  //debug ("start");
   get_xy (ev);
   mousedown_x [2] = mouse_x;
   mousedown_y [2] = mouse_y;
   mouse_buttons |= 4;
   update ();
-  debug ("end");
+  //debug ("end");
 }
 
 void c_customwidget::on_mouseup_right (wxMouseEvent &ev) {
-  debug ("start");
+  //debug ("start");
   get_xy (ev);
   mouse_buttons &= ~4;
   update ();  
@@ -1941,10 +1966,10 @@ void c_customwidget::on_mouseup_right (wxMouseEvent &ev) {
     debug ("emitting sig_right_clicked");
     emit sig_right_clicked (this);
   }*/
-  debug ("end");
+  //debug ("end");
 }
 
-void c_customwidget::on_mousewheel (wxMouseEvent &ev) { CP
+void c_customwidget::on_mousewheel (wxMouseEvent &ev) {
   //debug ("start");
   
   int n = ev.GetWheelRotation ();
@@ -1968,7 +1993,7 @@ void c_customwidget::on_mousewheel_v (int howmuch) {
   debug ("howmuch=%d", howmuch);
 }
 
-void c_customwidget::on_mouseleave (wxMouseEvent &ev) { CP
+void c_customwidget::on_mouseleave (wxMouseEvent &ev) {
   //debug ("start");
   
   mouse_x = -1;
@@ -1979,7 +2004,7 @@ void c_customwidget::on_mouseleave (wxMouseEvent &ev) { CP
   //debug ("end");
 }
 
-void c_customwidget::on_resize_event (wxSizeEvent &ev) { CP
+void c_customwidget::on_resize_event (wxSizeEvent &ev) {
   //debug ("start");
   
   base_image_valid = false;
@@ -2351,27 +2376,29 @@ c_waveformwidget::c_waveformwidget (wxWindow *parent,
   col_fg = wxColour (0, 128, 32);
 }
 
+// TODO: horizontal scrolling on sideways drag pad movement
 void c_waveformwidget::on_mousewheel_h (int howmuch) {
   debug ("howmuch=%d", howmuch);
 }
 
 void c_waveformwidget::on_mousewheel_v (int howmuch) {
-  debug ("howmuch=%d, view_size=%d", howmuch, view_size);
-  float vs = view_size;
-  if (howmuch > 0)
-    view_size = (int) (vs / 1.1);
-  else 
-    view_size = (int) (vs * 1.1);
-
-  int sz = ir->size ();
-  if (view_size < 32) view_size = 32;
-  if (view_size > sz) view_size = sz;
-  if (view_pos < 0) view_pos = 0;
-  if (view_pos > sz - view_size) view_pos = sz - view_size;
-  debug ("sz=%d, new view_size=%d", sz, view_size);
+  debug ("howmuch=%d, viewsize=%d", howmuch, viewsize);
   
-  base_image_valid = false;
-  Refresh ();
+  if (g_app->ctrl && g_app->shift) {
+    debug ("ctrl+shift+mousewheel");
+  } else if (g_app->ctrl) {
+    debug ("ctrl+mousewheel");
+  } else if (g_app->shift) {
+    debug ("shift+mousewheel");
+  } else if (g_app->alt) {
+    debug ("alt+mousewheel");
+  } else {
+    debug ("mousewheel with no ctrl/alt/shift");
+    if (howmuch > 0)
+      zoom_x (1.1);
+    else
+      zoom_x (-1.1);
+  }
 }
 
 void c_waveformwidget::on_keypress (wxKeyEvent &ev) { CP
@@ -2384,6 +2411,62 @@ void c_waveformwidget::on_visible (wxShowEvent &ev) { CP
 }
 
 void c_waveformwidget::on_idle (wxIdleEvent &ev) {
+}
+
+void c_waveformwidget::on_mousedown_left (wxMouseEvent &ev) { CP
+  scroll_left (1);
+}
+void c_waveformwidget::on_mousedown_right (wxMouseEvent &ev) { CP
+  scroll_right (1);
+}
+
+void c_waveformwidget::scroll_left (int howmuch) {
+  viewpos -= howmuch;
+  if (viewpos < 0) viewpos = 0;
+  debug ("viewpos=%d", viewpos);
+  base_image_valid = false;
+  Refresh ();
+}
+
+void c_waveformwidget::scroll_right (int howmuch) {
+  viewpos += howmuch;
+  int max = ir->size () - viewsize;
+  if (viewpos > max)  viewpos = max;
+  debug ("viewpos=%d", viewpos);
+  base_image_valid = false;
+  Refresh ();
+}
+
+void c_waveformwidget::zoom_x (float ratio) {
+  float vs = viewsize;
+  float oldviewsize = viewsize;
+  debug ("ratio=%f", ratio);
+  
+  if (!ir) return;
+  
+  if (ratio > 0)
+    if (viewsize <= min_viewsize)
+      return;
+    else
+      viewsize = (int) (vs / ratio);
+  else
+    if (viewsize >= ir->size ())
+      return;
+    else
+      viewsize = (int) (vs * ratio * -1);
+  
+  float xpos = (float) mouse_x / (float) width;
+  viewpos += (oldviewsize - viewsize) * xpos;
+  
+  int sz = ir->size ();
+  if (viewsize < 32) viewsize = 32;
+  if (viewsize > sz) viewsize = sz;
+  if (viewpos < 0) viewpos = 0;
+  if (viewpos > sz - viewsize) viewpos = sz - viewsize;
+  debug ("sz=%d, new viewsize=%d", sz, viewsize);
+  
+  base_image_valid = false;
+  Refresh ();
 }
 
 bool c_waveformwidget::render_base_image () {
@@ -2495,16 +2578,16 @@ void c_waveformwidget::draw_waveform (wxDC &dc, c_wavebuffer &buf,
   
   int dotmode_thr = 16; // min. pixels between samples when zoomed way in
   int min_v = 16;
-  if (view_size <= 0) view_size = buf.size ();
-  int sz = view_size;
-  int pos = view_pos;
+  if (viewsize <= 0) viewsize = buf.size ();
+  int sz = viewsize;
+  int pos = viewpos;
   if (sz < min_v) sz = min_v;
   if (sz > buf.size ()) sz = buf.size ();
   if (pos < 0) pos = 0;
   if (pos > buf.size () - sz) pos = buf.size () - sz;
   if (pos < 0 || pos > buf.size () - sz) return;
   
-  debug ("view_pos=%d, view_size=%d, pos=%d, sz=%d", view_pos, view_size, pos, sz);
+  debug ("viewpos=%d, viewsize=%d, pos=%d, sz=%d", viewpos, viewsize, pos, sz);
   //int sz = buf.size ();
   int ln = 0;
   int w = tw - 4;
@@ -2621,10 +2704,10 @@ bool c_waveformwidget::select_ir (c_ir_entry *entry) { CP
   }
   ir = entry;
   
-  view_pos = 0;
-  view_size = ir->size ();
-  zoom_y = 1.0;
-  zoom_y_off = 0.0;
+  viewpos = 0;
+  viewsize = ir->size ();
+  y_zoom = 1.0;
+  y_zoom_off = 0.0;
   
   debug ("got IR - id=%ld, name=%s", ir->id, ir->name.c_str ());
   
