@@ -71,12 +71,24 @@ std::string remove_suffix (std::string name) {
   return ret;
 }
 
-int test_string_shenanigans_main () {
+int main_test_string_shenanigans () {
   std::string s = "abc/def/gh.wav";
   debug ("%s basename %s", s.c_str(), basename (s).c_str ());
   debug ("%s dirname  %s", s.c_str(),  dirname (s).c_str ());
   debug ("%s remove suffix  %s", s.c_str(),  remove_suffix (s).c_str ());
   return 0;
+}
+
+c_ir_entry::c_ir_entry () { id = get_unique_id (); }
+
+size_t c_ir_entry:: size () {
+  size_t ls = l.size ();
+  size_t rs = r.size ();
+  
+  if (ls && rs)
+    return std::min (l.size (), r.size ());  
+  else
+    return std::max (l.size (), r.size ());  
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1597,8 +1609,6 @@ int64_t c_irlist::get_selected_id () {
     return 0;
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// c_customwidget - parent class for other widget types
 
 enum {
   ASKYESNO_NO = 0,
@@ -1638,7 +1648,9 @@ enum {
   LABEL_ALIGN_RIGHT
 };
 
- 
+
+////////////////////////////////////////////////////////////////////////////////
+// c_customwidget - parent class for other widget types 
  
 BEGIN_EVENT_TABLE (c_customwidget, wxPanel)
   EVT_PAINT (c_customwidget::on_paint_event)
@@ -1652,10 +1664,10 @@ BEGIN_EVENT_TABLE (c_customwidget, wxPanel)
   EVT_RIGHT_UP (c_customwidget::on_mouseup_right)
   EVT_LEAVE_WINDOW (c_customwidget::on_mouseleave)
   EVT_MOUSEWHEEL (c_customwidget::on_mousewheel)
-  /*EVT_KEY_DOWN (c_customwidget::keypress)
-  EVT_KEY_UP (c_customwidget::keyrelease)*/
-  //EVT_IDLE (c_customwidget::idle_callback)
-  EVT_SHOW (c_customwidget::on_visible_callback)
+  EVT_KEY_DOWN (c_customwidget::on_keypress)
+  EVT_KEY_UP (c_customwidget::on_keyrelease)
+  EVT_IDLE (c_customwidget::on_idle)
+  EVT_SHOW (c_customwidget::on_visible)
 END_EVENT_TABLE ()
 
 c_customwidget::c_customwidget (wxWindow *p_parent,
@@ -1808,10 +1820,10 @@ void c_customwidget::idle_callback (wxIdleEvent &ev) {
   //debug ("end");
 }*/
 
-void c_customwidget::on_visible_callback (wxShowEvent &ev) {
+/*void c_customwidget::on_visible (wxShowEvent &ev) {
   base_image_valid = false;
   update ();
-}
+}*/
 
 void c_customwidget::on_paint_event (wxPaintEvent &ev) {
   //debug ("start");
@@ -1854,9 +1866,18 @@ bool c_customwidget::check_click_distance (int which) {
   return true;
 }
 
+void c_customwidget::on_keypress (wxKeyEvent &ev)    { }
+void c_customwidget::on_keyrelease (wxKeyEvent &ev)  { }
+void c_customwidget::on_idle (wxIdleEvent &ev)       { }
+void c_customwidget::on_visible (wxShowEvent &ev)    { }
+
 void c_customwidget::on_mousedown_left (wxMouseEvent &ev) {
   debug ("start");
   get_xy (ev);
+  
+  SetFocus ();
+  ev.Skip ();
+  
   mousedown_x [0] = mouse_x;
   mousedown_y [0] = mouse_y;
   mouse_buttons |= 1;
@@ -1925,11 +1946,29 @@ void c_customwidget::on_mouseup_right (wxMouseEvent &ev) {
 
 void c_customwidget::on_mousewheel (wxMouseEvent &ev) { CP
   //debug ("start");
-  update ();
+  
+  int n = ev.GetWheelRotation ();
+  if (ev.IsWheelInverted ()) n *= -1;
+  if (ev.GetWheelAxis () == wxMOUSE_WHEEL_HORIZONTAL) {
+    on_mousewheel_h (n);
+  } else {
+    on_mousewheel_v (n);
+  }
+  
+  //update ();
   //debug ("end");
 }
 
-void c_customwidget::on_mouseleave (wxMouseEvent &ev) {
+// this is triggered by sideways scrolling on a drag pad or similar
+void c_customwidget::on_mousewheel_h (int howmuch) {
+  debug ("howmuch=%d", howmuch);
+}
+
+void c_customwidget::on_mousewheel_v (int howmuch) {
+  debug ("howmuch=%d", howmuch);
+}
+
+void c_customwidget::on_mouseleave (wxMouseEvent &ev) { CP
   //debug ("start");
   
   mouse_x = -1;
@@ -1940,7 +1979,7 @@ void c_customwidget::on_mouseleave (wxMouseEvent &ev) {
   //debug ("end");
 }
 
-void c_customwidget::on_resize_event (wxSizeEvent &ev) {
+void c_customwidget::on_resize_event (wxSizeEvent &ev) { CP
   //debug ("start");
   
   base_image_valid = false;
@@ -1948,6 +1987,30 @@ void c_customwidget::on_resize_event (wxSizeEvent &ev) {
   
   //debug ("end");
 }
+
+
+////////////////////////////////////////////////////////////////////////////////
+// test/minimal example usage of c_customwidget derived class
+
+bool c_testwidget::render_base_image () { CP
+  if (!c_customwidget::render_base_image ()) return false;
+  wxMemoryDC dc;
+  dc.SelectObject (img_base);
+  std::string msg = "This is an example use of c_customwidget";
+  wxSize sz = dc.GetTextExtent (msg);
+  dc.SetTextForeground (col_default_fg);
+  dc.DrawText (msg, (width - sz.x) / 2, (height - sz.y) / 2);
+  dc.SelectObject (wxNullBitmap);
+  return true;
+}
+
+bool c_testwidget::update (wxWindowDC &dc) {
+  if (!c_customwidget::update (dc)) return false;
+  dc.SetPen (wxPen (*wxRED));
+  dc.DrawLine (0, 0, width, height);
+  return true;
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////
 // c_meterwidget
@@ -2288,6 +2351,41 @@ c_waveformwidget::c_waveformwidget (wxWindow *parent,
   col_fg = wxColour (0, 128, 32);
 }
 
+void c_waveformwidget::on_mousewheel_h (int howmuch) {
+  debug ("howmuch=%d", howmuch);
+}
+
+void c_waveformwidget::on_mousewheel_v (int howmuch) {
+  debug ("howmuch=%d, view_size=%d", howmuch, view_size);
+  float vs = view_size;
+  if (howmuch > 0)
+    view_size = (int) (vs / 1.1);
+  else 
+    view_size = (int) (vs * 1.1);
+
+  int sz = ir->size ();
+  if (view_size < 32) view_size = 32;
+  if (view_size > sz) view_size = sz;
+  if (view_pos < 0) view_pos = 0;
+  if (view_pos > sz - view_size) view_pos = sz - view_size;
+  debug ("sz=%d, new view_size=%d", sz, view_size);
+  
+  base_image_valid = false;
+  Refresh ();
+}
+
+void c_waveformwidget::on_keypress (wxKeyEvent &ev) { CP
+}
+
+void c_waveformwidget::on_keyrelease (wxKeyEvent &ev) { CP
+}
+
+void c_waveformwidget::on_visible (wxShowEvent &ev) { CP
+}
+
+void c_waveformwidget::on_idle (wxIdleEvent &ev) {
+}
+
 bool c_waveformwidget::render_base_image () {
   if (!c_customwidget::render_base_image ()) return false;
   // draw grid
@@ -2295,6 +2393,10 @@ bool c_waveformwidget::render_base_image () {
   int h2 = height / 2;
   wxMemoryDC dc;
   dc.SelectObject (img_base);
+  
+  pen_wavefg = wxPen (wxColour (0, 255, 0));
+  brush_wavefg = wxBrush (wxColour (0, 255, 0));
+  pen_wavezoom = wxPen (wxColour (0, 128, 0));
   
   if (0&&!ir) {
     dc.SetPen (wxPen (wxTransparentColor));
@@ -2335,11 +2437,15 @@ bool c_waveformwidget::render_base_image () {
   } else {
     draw_border (dc, 1, 1, width - 2, height / 2 - 4);
     draw_border (dc, 1, height / 2 + 4, width - 2, height / 2 - 4);
-    draw_waveform (dc, ir->l, 1, 1, width - 2, height / 2 - 4);
-    draw_waveform (dc, ir->r, 1, height / 2 + 4, width - 2, height / 2 - 4);
+    draw_waveform (dc, ir->l, 4, 1, width - 2, height / 2 - 4);
+    draw_waveform (dc, ir->r, 4, height / 2 + 4, width - 2, height / 2 - 4);
   }
   dc.SelectObject (wxNullBitmap);
   return true;
+}
+
+void on_mousewheel (wxMouseEvent &ev) {
+
 }
 
 void c_waveformwidget::draw_border (wxDC &dc, int x, int y, int w, int h) {CP
@@ -2385,15 +2491,32 @@ void c_waveformwidget::draw_waveform (wxDC &dc, c_wavebuffer &buf,
                                       int tx, int ty, int tw, int th) {
   if (!ir || ir->l.size () <= 0)
     return;
-  dc.SetPen (wxPen (wxColour (0, 255, 0, 255)));
+  dc.SetPen (pen_wavefg);
   
+  int dotmode_thr = 16; // min. pixels between samples when zoomed way in
+  int min_v = 16;
+  if (view_size <= 0) view_size = buf.size ();
+  int sz = view_size;
+  int pos = view_pos;
+  if (sz < min_v) sz = min_v;
+  if (sz > buf.size ()) sz = buf.size ();
+  if (pos < 0) pos = 0;
+  if (pos > buf.size () - sz) pos = buf.size () - sz;
+  if (pos < 0 || pos > buf.size () - sz) return;
+  
+  debug ("view_pos=%d, view_size=%d, pos=%d, sz=%d", view_pos, view_size, pos, sz);
+  //int sz = buf.size ();
   int ln = 0;
-  int sz = buf.size ();
-  int w = tw - 8;
+  int w = tw - 4;
   int i, j, wl, wr, si, l, l2, lx;
   float hi, lo, spos, xpos;
+  int baseline = ty + (th / 2);
+  
+  if (sz <= 0 || tw < 4 || th < 4) // nothing to draw / not enough space
+    return;
   
   if (sz > w * 2) {        // more than 2 samples per pixel
+    debug ("branch A: more than 2 samples per pixel, sz=%d, w=%d", sz, w);
     wl = 0;
     for (i = 1; i < w; i++) {
       spos = (float) (i - 1) / (float) w;
@@ -2408,49 +2531,87 @@ void c_waveformwidget::draw_waveform (wxDC &dc, c_wavebuffer &buf,
       if (wr < wl) wr = wl;
       if (wr > sz) wr = sz;
       for (j = wl; j < wr; j++) {
-        if (buf [j] > hi) hi = buf [j];
-        if (buf [j] < lo) lo = buf [j];
+        if (buf [pos + j] > hi) hi = buf [pos + j];
+        if (buf [pos + j] < lo) lo = buf [pos + j];
       }
       ln++;
-      dc.DrawLine (tx + i, ty + (th / 2) + ((float) (th / 2) * hi),
-                   tx + i, ty + (th / 2) + ((float) (th / 2) * lo));
+      dc.DrawLine (tx + i, baseline - ((float) (th / 2) * hi),
+                   tx + i, baseline - ((float) (th / 2) * lo));
     }
   } else if (sz > w) {     // 1 to 2 samples per pixel
-    for (i = 0; i < w; i++) {
-      spos = (float) i / (float) w;
-      si = spos * (float) sz;
-      hi = lo = buf [si];
-      if (si > sz) {
-        if (buf [si + 1] > hi) hi = buf [si + 1];
-        if (buf [si + 1] < lo) lo = buf [si + 1];
-      }
-      dc.DrawLine (tx + i, ty + (th / 2) + ((float) (th / 2) * hi),
-                   tx + i, ty + (th / 2) + ((float) (th / 2) * lo));
-    }
-  } else if (sz > w / 4) { // 1 to 4 pixels per sample
-    l = ty + th / 2 + buf [0] * (float) th / 2.0;
+    debug ("branch B: sz > w / 8, sz=%d, w=%d", sz, w);
+    l = baseline + buf [pos] * (float) th / 2.0;
     for (i = 1; i < w; i++) {
       spos = (float) (i - 1) / (float) w;
       si = spos * (float) sz;
-      l2 = ty + th / 2 - buf [si] * (float) th / 2.0;
+      l2 = baseline - buf [pos + si] * (float) th / 2.0;
       dc.DrawLine (tx + i - 1, l, tx + i, l2);
       l = l2;
     }
-  } else {                 // more than 4 pixels per sample
-    l = ty + th / 2 - buf [0] * (float) th / 2.0;
+  } else if (sz > w / 2) { // 1 to 2 pixels per sample
+    debug ("branch C: 1 to 2 pixels per sample, sz=%d, w=%d", sz, w);
+    l = baseline - buf [pos] * (float) th / 2.0;
     lx = 0;
     for (si = 1; si < sz; si++) {
       xpos = (float) si / (float) sz;
       i = xpos * (float) w;
-      l2 = ty + th / 2 - buf [si] * (float) th / 2.0;
+      l2 = baseline - buf [pos + si] * (float) th / 2.0;
       dc.DrawLine (tx + lx, l, tx + i, l2);
       l = l2;
       lx = i;
     }
+  } else if (sz > w / dotmode_thr) {                 // 2 to dotmode_thr pixels per sample
+    debug ("branch D: 2 to %d pixels per sample, sz=%d, w=%d", dotmode_thr, sz, w);
+    l = baseline - buf [pos] * (float) th / 2.0;
+    lx = 0;
+    for (si = 1; si < sz; si++) {
+      xpos = (float) si / (float) sz;
+      i = xpos * (float) w;
+      l2 = baseline - buf [pos + si] * (float) th / 2.0;
+      dc.DrawLine (tx + lx, l, tx + i, l2);
+      l = l2;
+      lx = i;
+    }
+  } else { // "dot edit" mode
+    int pxps = w / sz;
+    int nh = 1 + (w / pxps);
+    debug ("branch E: > %d pixels per sample, sz=%d, w=%d, pxps=%d, nh=%d", dotmode_thr, sz, w, pxps, nh);
+    smphandles.resize (nh);
+    dc.SetPen (pen_wavezoom);
+    l = baseline - buf [pos] * (float) th / 2.0;
+    lx = 0;
+    int hi = 0;
+    for (si = 0; si < sz; si++) {
+      xpos = (float) si / (float) (sz);
+      i = xpos * (float) w;
+      l2 = baseline - buf [pos + si] * (float) th / 2.0;
+      dc.DrawLine (tx + lx, l, tx + i, l2);
+      l = l2;
+      lx = i;
+      //debug ("hi=%d, i=%d, l2=%d, si=%d", hi, i, l2, si);
+      if (hi < nh) {
+        smphandles [hi].x = tx + i;
+        smphandles [hi].y = l2;
+        smphandles [hi].s = si;
+        hi++;
+      }
+    }
+    dc.SetPen (pen_wavefg);
+    dc.SetBrush (brush_wavefg);
+    for (i = 0; i < hi; i++) {
+      dc.DrawRectangle (smphandles [i].x - 4,
+                        smphandles [i].y - 4,
+                        8, 8);
+    }
+    // clear rest of handles
+    int n = smphandles.size ();
+    for (; i < n; i++) {
+      smphandles [i].x = -1;
+      smphandles [i].y = -1;
+      smphandles [i].s = -1;
+    }
   }
 }
-  
-
 
 bool c_waveformwidget::select_ir (c_ir_entry *entry) { CP
   base_image_valid = false;
@@ -2460,6 +2621,10 @@ bool c_waveformwidget::select_ir (c_ir_entry *entry) { CP
   }
   ir = entry;
   
+  view_pos = 0;
+  view_size = ir->size ();
+  zoom_y = 1.0;
+  zoom_y_off = 0.0;
   
   debug ("got IR - id=%ld, name=%s", ir->id, ir->name.c_str ());
   
@@ -2476,28 +2641,6 @@ c_ir_entry *c_waveformwidget::get_selected () {
   return ir;
 }
 
-
-////////////////////////////////////////////////////////////////////////////////
-// test/minimal example usage of c_customwidget derived class
-
-bool c_testwidget::render_base_image () { CP
-  if (!c_customwidget::render_base_image ()) return false;
-  wxMemoryDC dc;
-  dc.SelectObject (img_base);
-  std::string msg = "This is an example use of c_customwidget";
-  wxSize sz = dc.GetTextExtent (msg);
-  dc.SetTextForeground (col_default_fg);
-  dc.DrawText (msg, (width - sz.x) / 2, (height - sz.y) / 2);
-  dc.SelectObject (wxNullBitmap);
-  return true;
-}
-
-bool c_testwidget::update (wxWindowDC &dc) {
-  if (!c_customwidget::update (dc)) return false;
-  dc.SetPen (wxPen (*wxRED));
-  dc.DrawLine (0, 0, width, height);
-  return true;
-}
 
 #endif // USE_WXWIDGETS
 

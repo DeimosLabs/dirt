@@ -48,7 +48,8 @@ public:
   std::string dir;
   bool loaded = false;
   bool dirty = false;
-  c_ir_entry () { id = ::get_unique_id (); }
+  c_ir_entry ();
+  size_t size ();
 };
 
 class c_customwidget;
@@ -204,20 +205,17 @@ public:
 private:
 };
 
+
 /*
  * Custom widget example/template - (usually) base class.
  *
  * Widget class derived directly from wxPanel, where we override/bind
  * paint events etc. to implement our own appearance and behaviour.
  *
- * NOTE TO SELF: New custom widgets should derive from this class, or (if
- * absolutely necessary) copy/paste it and change the name to something
- * else/descriptive/meaningful.
+ * New custom widget classes should derive from this class, and override
+ * the required virtual functions for drawing and event handling.
  *
  */
-
-//comment this out for actual use
-//#define SHOW_CUSTOMWIDGET_TEST_STUFF
 
 class c_customwidget : public wxPanel/*, public has_slots <>*/ {
 public:
@@ -231,6 +229,7 @@ public:
   virtual void inspect ();
   int width, height;
   
+  // signal/slot stuff. requires sigslot.h - not including it in this project.
   //signal1 <c_customwidget *> sig_left_clicked;
   //signal1 <c_customwidget *> sig_middle_clicked;
   //signal1 <c_customwidget *> sig_right_clicked;
@@ -270,18 +269,18 @@ protected:
   virtual void on_mouseup_right (wxMouseEvent &event);
   virtual void on_mouseleave (wxMouseEvent &event);
   virtual void on_mousewheel (wxMouseEvent &event);
-  //void onkeypress (wxKeyEvent &event);
-  //void onkeyrelease (wxKeyEvent&event);
-  //void onidle_callback (wxIdleEvent &event);
-  virtual void on_visible_callback (wxShowEvent &ev);
+  // we manage these, just override from derived class
+  virtual void on_mousewheel_v (int howmuch);
+  virtual void on_mousewheel_h (int howmuch);
+  
+  virtual void on_keypress (wxKeyEvent &event);
+  virtual void on_keyrelease (wxKeyEvent&event);
+  virtual void on_idle (wxIdleEvent &event);
+  virtual void on_visible (wxShowEvent &ev);
   
   inline void get_xy (wxMouseEvent &ev) { mouse_x = ev.GetX (); mouse_y = ev.GetY (); }
   bool check_click_distance (int which_button);
   
-#ifdef SHOW_CUSTOMWIDGET_TEST_STUFF
-  virtual char *get_example_label_text ();
-#endif
-
   bool visible;
   int opacity;
   int mouse_x;
@@ -301,6 +300,25 @@ protected:
   
   DECLARE_EVENT_TABLE ();
 };
+
+
+// c_testwidget (minimal WORKING) example derived class from c_customwidget
+
+class c_testwidget : public c_customwidget {
+public:
+  c_testwidget (wxWindow *parent = NULL,
+                int id = -1,//ID_FOREIGN,
+                wxPoint pos = wxDefaultPosition,
+                wxSize size = wxDefaultSize,
+                int border = -1)
+  : c_customwidget (parent, id) {}
+  
+  virtual bool render_base_image ();
+   bool update (wxWindowDC &dc);
+};
+
+
+// c_meterwidget (vu meters)
 
 class c_meterwidget : public c_customwidget {
 public:
@@ -353,22 +371,24 @@ private:
   wxBitmap img_bar;
   wxBitmap img_bar_sub;
   wxBitmap img_warning [(int) meterwarn::MAX];
-  /*float center_line  = 0.0;
-  float bar_size     = 0.0;
-  float center_pos   = 0.0;
-  float pos_bar1     = 0.0;
-  float pos_bar2     = 0.0;
-  float size_bar     = 0.0;*/
   int   met_len      = -1;
   bool  last_stereo  = false;
 
-  
   // length, thickness: x/y size depending if horiz. or vertical
   int ln, th;
   // position of bars along the widget's total thickness
   // left t1->t2, right t3->t4, tp is padding between black and inner bars
   int t1, t2, t3, t4, tp;
 };
+
+struct sxy {
+  int s;
+  int x;
+  int y;
+};
+
+
+// c_waveformwidget (audio waveform viewer/editor)
 
 class c_waveformwidget : public c_customwidget {
 public:
@@ -379,12 +399,42 @@ public:
                     int wtfisthis = -1);
   ~c_waveformwidget () {}
   
-  virtual bool render_base_image ();
+  // event handlers: override those from c_customwidget
+  /*void on_mousemove (wxMouseEvent &event);
+  void on_mousedown_left (wxMouseEvent &event);
+  void on_mouseup_left (wxMouseEvent &event);
+  void on_mousedown_middle (wxMouseEvent &event);
+  void on_mouseup_middle (wxMouseEvent &event);
+  void on_mousedown_right (wxMouseEvent &event);
+  void on_mouseup_right (wxMouseEvent &event);
+  void on_mouseleave (wxMouseEvent &event);*/
+  void on_keypress (wxKeyEvent &event);
+  void on_keyrelease (wxKeyEvent&event);
+  void on_idle (wxIdleEvent &event);
+  void on_visible (wxShowEvent &ev);
+  void on_mousewheel_h (int howmuch);
+  void on_mousewheel_v (int howmuch);
+  
+  bool render_base_image ();
+  
   //virtual void update ();
   virtual bool update (wxWindowDC &dc);
   bool select_ir (c_ir_entry *entry);
   bool unselect_ir ();
   c_ir_entry *get_selected ();
+  
+  // zoom/scroll functions
+  size_t get_sample_pos ();
+  size_t get_samples_visible ();
+  size_t set_zoom (size_t pos = 0, size_t sz = -1);
+  bool   zoom_full ();
+  bool   zoom_in ();
+  bool   zoom_out ();
+  float  get_y_zoom ();
+  float  get_y_offset ();
+  bool   y_zoom_full ();
+  bool   y_zoom_in ();
+  bool   y_zoom_out ();
   
   wxFont tinyfont;
   
@@ -394,26 +444,22 @@ private:
   void draw_waveform (wxDC &dc, c_wavebuffer &buf, int x, int y, int w, int h);
   //c_wavebuffer *wavdata = NULL;
   c_ir_entry *ir = NULL;
+  std::vector<sxy> smphandles;
+  
+  // zoom / position
+  size_t view_pos   = 0;   // visible waveform pos/size in samples
+  size_t view_size  = -1;
+  float zoom_y      = 1.0; // multiplied by sample values
+  float zoom_y_off  = 0.0; // offset, -1 means baseline on top of screen
+  
+  wxPen pen_wavefg;
+  wxBrush brush_wavefg;
+  wxPen pen_wavezoom;
 };
 
 int wx_main (int argc, char **argv, c_audioclient *audio);
 
 extern c_app *g_app;
-
-// example derived class from c_customwidget
-
-class c_testwidget : public c_customwidget {
-public:
-  c_testwidget (wxWindow *parent = NULL,
-                int id = -1,//ID_FOREIGN,
-                wxPoint pos = wxDefaultPosition,
-                wxSize size = wxDefaultSize,
-                int border = -1)
-  : c_customwidget (parent, id) {}
-  
-  virtual bool render_base_image ();
-   bool update (wxWindowDC &dc);
-};
 
 
 #endif  // USE_WXWIDGETS

@@ -252,7 +252,7 @@ public:
   
 private:
   std::vector<sample_t> samples_;
-  int samplerate_;
+  int samplerate_ = 0;
 };
 
 class c_vudata {
