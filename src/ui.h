@@ -42,12 +42,12 @@ class c_ir_entry {
 public:
   int64_t id = 0;
   int64_t timestamp = 0;
-  //int samplerate = DEFAULT_SAMPLERATE;
   c_wavebuffer l;
   c_wavebuffer r;
-  std::string path;
-  bool dirty = false;
+  std::string name;
+  std::string dir;
   bool loaded = false;
+  bool dirty = false;
   c_ir_entry () { id = ::get_unique_id (); }
 };
 
@@ -137,6 +137,8 @@ public:
   void on_btn_irload (wxCommandEvent &ev);
   void on_btn_irsave (wxCommandEvent &ev);
   void on_port_select (wxCommandEvent &ev);
+  void on_irfile_select (wxListEvent &ev);
+  void on_irfile_unselect (wxListEvent &ev);
   void on_timer (wxTimerEvent &ev);
   void on_recording_done ();
   
@@ -197,6 +199,7 @@ public:
   void clear ();
   void append (c_ir_entry &ir);
   int get_count ();
+  int64_t get_selected_id ();
   
 private:
 };
@@ -379,15 +382,18 @@ public:
   virtual bool render_base_image ();
   //virtual void update ();
   virtual bool update (wxWindowDC &dc);
-  bool select_data (c_ir_entry *entry);
+  bool select_ir (c_ir_entry *entry);
+  bool unselect_ir ();
+  c_ir_entry *get_selected ();
   
   wxFont tinyfont;
   
 protected:
 private:
   void draw_border (wxDC &dc, int x = -1, int y = -1, int w = -1, int h = -1);
+  void draw_waveform (wxDC &dc, c_wavebuffer &buf, int x, int y, int w, int h);
   //c_wavebuffer *wavdata = NULL;
-  c_ir_entry *entry = NULL;
+  c_ir_entry *ir = NULL;
 };
 
 int wx_main (int argc, char **argv, c_audioclient *audio);

@@ -38,6 +38,46 @@ static std::string g_backend_names [] = {
   "unknown"
 };
 
+static std::string basename (std::string name) {
+  std::string ret;
+  int a = name.find_last_of ("/");
+  if (a >= 0 && a < name.size ())
+    ret = name.substr (a + 1, name.size () - a);
+  else
+    ret = name;
+  
+  return ret;
+}
+
+std::string dirname (std::string name) {
+  std::string ret;
+  int a = name.find_last_of ("/");
+  if (a >= 0 && a < name.size ())
+    ret = name.substr (0, a);
+  else
+    ret = name;
+  
+  return ret;
+}
+
+std::string remove_suffix (std::string name) {
+  std::string ret;
+  int a = name.find_last_of (".");
+  if (a >= 1 && a < name.size () - 1)
+    ret = name.substr (0, a);
+  else
+    ret = name;
+  
+  return ret;
+}
+
+int test_string_shenanigans_main () {
+  std::string s = "abc/def/gh.wav";
+  debug ("%s basename %s", s.c_str(), basename (s).c_str ());
+  debug ("%s dirname  %s", s.c_str(),  dirname (s).c_str ());
+  debug ("%s remove suffix  %s", s.c_str(),  remove_suffix (s).c_str ());
+  return 0;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 // c_mainwindow
@@ -73,6 +113,9 @@ wxBEGIN_EVENT_TABLE (c_mainwindow, ui_mainwindow)
   EVT_BUTTON (ID_IR_REMOVE, c_mainwindow::on_btn_irremove)
   EVT_BUTTON (ID_IR_LOAD, c_mainwindow::on_btn_irload)
   EVT_BUTTON (ID_IR_SAVE, c_mainwindow::on_btn_irsave)
+  
+  EVT_LIST_ITEM_SELECTED (ID_IRFILES, c_mainwindow::on_irfile_select)
+  EVT_LIST_ITEM_DESELECTED (ID_IRFILES, c_mainwindow::on_irfile_unselect)
 
 wxEND_EVENT_TABLE ();
 
@@ -111,6 +154,8 @@ c_mainwindow::c_mainwindow (c_deconvolver *d)
   SetSize (sz + wxSize (0, 100));
   SetSizeHints (sz);
   
+  text_log->SetBackgroundColour (*wxBLACK);
+  
   set_mode (ID_FILE);
   
   init_audio ();
@@ -124,12 +169,12 @@ c_mainwindow::~c_mainwindow () {
 
 bool c_mainwindow::add_ir (c_ir_entry &ent) { CP
   debug ("got IR entry '%s' size l=%d,r=%d, %dHz, %s", 
-         ent.path.c_str (), ent.l.size (), ent.r.size (), ent.l.get_samplerate (),
+         ent.name.c_str (), ent.l.size (), ent.r.size (), ent.l.get_samplerate (),
          ent.dirty ? "dirty" : "not dirty");
          
-  if (ent.path.size () <= 0)
-    ent.path = readable_timestamp (epoch_sec ());
-  if (ent.path.size () > 0 && ent.l.size () > 0) {
+  if (ent.name.size () <= 0)
+    ent.name = readable_timestamp (epoch_sec ());
+  if (ent.l.size () > 0) {
     //c_ir_entry newir;
     ir_files.push_back (ent);
     //int i = ir_files.size () - 1;
@@ -141,6 +186,25 @@ bool c_mainwindow::add_ir (c_ir_entry &ent) { CP
   debug ("empty IR, ignoring");
   
   return false;
+}
+
+void c_mainwindow::on_irfile_select (wxListEvent &ev) { CP
+  int64_t id =  list_irfiles->get_selected_id ();
+  debug ("got selected ID %ld", id);
+  int n = ir_files.size ();
+  
+  for (int i = 0; i < n; i++)
+    if (ir_files [i].id == id) {
+      debug ("IR found");
+      pn_waveform->select_ir (&ir_files [i]);
+      return;
+    }
+  debug ("no IR found");
+}
+
+void c_mainwindow::on_irfile_unselect (wxListEvent &ev) {
+  CP
+  pn_waveform->unselect_ir ();
 }
 
 void c_mainwindow::on_recording_done () { CP
@@ -825,8 +889,11 @@ void c_mainwindow::set_mode (long int _mode) {
 }
 
 void c_mainwindow::set_enable (wxWindow *w, bool b) {
-  w->Enable (b);
-  w->SetTransparent (b ? 255 : 128);
+  if (!b != !w->IsEnabled ()) {
+    get_unique_id ();
+    w->Enable (b);
+    w->SetTransparent (b ? 255 : 128);
+  }
 }
 
 void c_mainwindow::update_audio_ports () {
@@ -909,8 +976,10 @@ void c_mainwindow::on_btn_irload (wxCommandEvent &ev) { CP
 
 bool c_mainwindow::load_ir_file (std::string filename) { CP
   c_ir_entry ir;
-  ir.path = filename;
+  ir.dir = dirname (filename);
   if (read_wav (filename.c_str (), ir.l, ir.r)) {
+    std::string bname = basename (filename);
+    ir.name = bname;
     ir.id = get_unique_id ();
     ir.timestamp = epoch_sec ();
     ir.loaded = true;
@@ -1172,9 +1241,12 @@ void c_mainwindow::on_btn_process (wxCommandEvent &ev) {
       if (chk_abort->GetValue ()) {
         i = n; // skip to end
       } else {
-        i++;  // skip this file
-      }
+        i++;   // error, skip this file (leave it in list)
+      }        // else stay at same index (next file)
     }
+  }
+  if (list_inputfiles->GetCount () > 0) {
+    text_inputheader->SetLabel ("There were errors processing these files:");
   }
   busy = false;
 }
@@ -1204,10 +1276,14 @@ bool c_mainwindow::process_one_file (std::string filename) {
   else
     strippedname = basename;
   
-  std::string outputdir = std::string (text_outputdir->GetValue ());
+  std::string outputdir = std::string (text_outputdir->GetValue ());  
+  std::string outputbasename = strippedname + "-ir.wav";
   
   if (outputdir.size () > 0)
-    outputname = outputdir + "/" + strippedname + "-ir.wav";
+    if (outputdir [outputdir.size () - 1] == '/')
+      outputname = outputdir + outputbasename;
+    else
+      outputname = outputdir + "/" + outputbasename;
   else
     outputname = strippedname;
     
@@ -1249,11 +1325,11 @@ bool c_mainwindow::process_one_file (std::string filename) {
     time_t epoch = std::chrono::system_clock::to_time_t(now);
     
     c_ir_entry ir;
-    ir.id = 0;
     ir.timestamp = epoch;
     ir.l = ir_l;
     ir.r = ir_r;
-    ir.path = outputname;
+    ir.name = outputbasename;
+    ir.dir = outputdir;
     //ir.samplerate = ir_l.get_samplerate ();
     ir.dirty = true;
     ir.loaded = true;
@@ -1303,47 +1379,38 @@ bool c_mainwindow::ask_overwrite (std::string filename) {
 }
 
 int c_mainwindow::update_ir_list () {
-  int count, i, n = ir_files.size ();
+  int count = 0, i, n = ir_files.size ();
   debug ("n=%d", n);
   list_irfiles->clear ();
   
   for (i = 0; i < n; i++) {
-    int a = ir_files [i].path.find_last_of ("/");
-    std::string shortname;
-    if (a > 0)
-      shortname = ir_files [i].path.substr (a + 1, ir_files [i].path.size () - a);
-    else
-      shortname = ir_files [i].path;
     
-    if (ir_files [i].path.size () > 0 &&
+    if (ir_files [i].name.size () > 0 &&
        (ir_files [i].l.size () > 0 ||
         ir_files [i].r.size () > 0)) {
       count++;
       
-      debug ("adding entry '%s' -> '%s'", ir_files [i].path.c_str (), 
-                                          shortname.c_str ());
+      debug ("adding entry '%s'", ir_files [i].name.c_str ());
       //list_irfiles->Append (wxString (shortname));
       list_irfiles->append (ir_files [i]);
     } else {
-      debug ("ignoring empty entry '%s' -> '%s'", ir_files [i].path.c_str (),
-                                                  shortname.c_str ());
+      debug ("ignoring empty entry '%s'", ir_files [i].name.c_str ());
     }
-  }
-  debug ("n=%d, count=%d, %d IR entries, %d list entries", 
-          n, count, ir_files.size (), list_irfiles->get_count ());
-  
-  for (i = 0; i < ir_files.size (); i++) {
+    
     printf ("IR %d:\n",             i);
     printf (" ID:         %ld\n",   (int64_t) ir_files [i].id);
     printf (" timestamp:  %ld",     (int64_t) ir_files [i].timestamp);
     printf (" (%s)\n",              readable_timestamp
         (ir_files [i].timestamp).c_str ());
-    printf (" path:       %s\n",    ir_files [i].path.c_str ());
+    printf (" name:       %s\n",    ir_files [i].name.c_str ());
+    printf (" dir:        %s\n",    ir_files [i].dir.c_str ());
     printf (" size L:     %ld\n",   (int64_t) ir_files [i].l.size ());
     printf (" size R:     %ld\n",   (int64_t) ir_files [i].r.size ());
     printf (" dirty:      %s\n",    ir_files [i].dirty ? "yes" : "no");
     printf (" loaded:     %s\n\n",  ir_files [i].loaded ? "yes" : "no");
   }
+  debug ("n=%d, count=%d, %d IR entries, %d list entries", 
+          n, count, ir_files.size (), list_irfiles->get_count ());
   
   return count;
 }
@@ -1400,6 +1467,7 @@ int c_mainwindow::add_dir (std::string dirname, bool recurs) {
         if (suffix_match (absfn, ".wav")) {
           printf ("found file: %s\n", absfn.c_str ());
           list_inputfiles->Append (absfn);
+          text_inputheader->SetLabel ("List of sweep files to process:");
           count++;
         } else {
           printf ("ignoring file: %s\n", absfn.c_str ());
@@ -1491,22 +1559,42 @@ int wx_main (int argc, char **argv, c_audioclient *audio) {
   return retval;
 }
 
+
+////////////////////////////////////////////////////////////////////////////////
+// c_irlist
+
 c_irlist::c_irlist (wxWindow *parent, int id, 
                     wxPoint pos, wxSize size, int border)
 : wxListCtrl (parent, id, pos, size, border) { CP
-  
+  clear ();
 }
 
 void c_irlist::clear () { CP
-  
-}
-
-void c_irlist::append (c_ir_entry &ir) { CP
-  
+  ClearAll ();
+  AppendColumn ("Generated IR files:", wxLIST_FORMAT_LEFT, wxLIST_AUTOSIZE_USEHEADER);
+  //SetColumnWidth (0, GetSize ().x);
 }
 
 int c_irlist::get_count () { CP
-  return 0;
+  return GetItemCount ();
+}
+
+void c_irlist::append (c_ir_entry &ir) { CP
+  char buf [64];
+  snprintf (buf, 31, "%d", (int) ir.id);
+  
+  long int item = InsertItem (GetItemCount (), ir.name);
+  SetItemData (item, ir.id);
+}
+
+int64_t c_irlist::get_selected_id () {
+  long int item = -1;
+  item = GetNextItem (item, wxLIST_NEXT_ALL, wxLIST_STATE_SELECTED);
+  
+  if (item >= 0) {
+    return GetItemData (item);
+  } else
+    return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1835,7 +1923,7 @@ void c_customwidget::on_mouseup_right (wxMouseEvent &ev) {
   debug ("end");
 }
 
-void c_customwidget::on_mousewheel (wxMouseEvent &ev) {
+void c_customwidget::on_mousewheel (wxMouseEvent &ev) { CP
   //debug ("start");
   update ();
   //debug ("end");
@@ -2208,7 +2296,7 @@ bool c_waveformwidget::render_base_image () {
   wxMemoryDC dc;
   dc.SelectObject (img_base);
   
-  if (0&&!entry) {
+  if (0&&!ir) {
     dc.SetPen (wxPen (wxTransparentColor));
     dc.SetBrush (wxBrush (col_default_bg));
     dc.SetPen (col_default_fg);
@@ -2229,8 +2317,27 @@ bool c_waveformwidget::render_base_image () {
   // baseline
   dc.SetPen (wxPen (col_fg));
   
-  draw_border (dc, 1, 1, width - 2, height / 2 - 4);
-  draw_border (dc, 1, height / 2 + 4, width - 2, height / 2 - 4);
+  /*std::vector<float> vf;
+  const int sz = 4096;
+  vf.resize (sz);
+  for (int i = 0; i < sz; i++)
+    if (i % 500 > 250)
+      vf [i] = 0.5;
+    else
+      vf [i] = -0.5;
+  
+  c_wavebuffer buf;
+  buf.import_from (vf);*/
+  
+  if (ir && ir->r.size () == 0) {
+    draw_border (dc, 1, 1, width - 2, height - 4);
+    draw_waveform (dc, ir->l, 4, 4, width - 8, height - 8);
+  } else {
+    draw_border (dc, 1, 1, width - 2, height / 2 - 4);
+    draw_border (dc, 1, height / 2 + 4, width - 2, height / 2 - 4);
+    draw_waveform (dc, ir->l, 1, 1, width - 2, height / 2 - 4);
+    draw_waveform (dc, ir->r, 1, height / 2 + 4, width - 2, height / 2 - 4);
+  }
   dc.SelectObject (wxNullBitmap);
   return true;
 }
@@ -2260,11 +2367,113 @@ void c_waveformwidget::draw_border (wxDC &dc, int x, int y, int w, int h) {CP
   dc.DrawLine (x + w, y + 1, x + w, y + h);             // right inner
 }
 
-
 bool c_waveformwidget::update (wxWindowDC &dc) {
   if (!c_customwidget::update (dc)) return false;
-  dc.SetPen (wxPen (col_default_fg));
+  /*dc.SetPen (wxPen (col_default_fg));
+  
+  
+  
+  std::string name;
+  if (ir) name = ir->name;
+  else name = "(no IR selected)";
+  wxSize sz = dc.GetTextExtent (name);
+  dc.DrawText (name, 4, height - sz.y - 4);*/
   return true;
+}
+
+void c_waveformwidget::draw_waveform (wxDC &dc, c_wavebuffer &buf,
+                                      int tx, int ty, int tw, int th) {
+  if (!ir || ir->l.size () <= 0)
+    return;
+  dc.SetPen (wxPen (wxColour (0, 255, 0, 255)));
+  
+  int ln = 0;
+  int sz = buf.size ();
+  int w = tw - 8;
+  int i, j, wl, wr, si, l, l2, lx;
+  float hi, lo, spos, xpos;
+  
+  if (sz > w * 2) {        // more than 2 samples per pixel
+    wl = 0;
+    for (i = 1; i < w; i++) {
+      spos = (float) (i - 1) / (float) w;
+      wl = (float) spos * (float) sz;
+      spos = (float) i / (float) w;
+      wr = (float) spos * (float) sz;
+      hi = -1;
+      lo = 1;
+      
+      if (wl < 0) wl = 0;
+      if (wl > sz) wl = sz;
+      if (wr < wl) wr = wl;
+      if (wr > sz) wr = sz;
+      for (j = wl; j < wr; j++) {
+        if (buf [j] > hi) hi = buf [j];
+        if (buf [j] < lo) lo = buf [j];
+      }
+      ln++;
+      dc.DrawLine (tx + i, ty + (th / 2) + ((float) (th / 2) * hi),
+                   tx + i, ty + (th / 2) + ((float) (th / 2) * lo));
+    }
+  } else if (sz > w) {     // 1 to 2 samples per pixel
+    for (i = 0; i < w; i++) {
+      spos = (float) i / (float) w;
+      si = spos * (float) sz;
+      hi = lo = buf [si];
+      if (si > sz) {
+        if (buf [si + 1] > hi) hi = buf [si + 1];
+        if (buf [si + 1] < lo) lo = buf [si + 1];
+      }
+      dc.DrawLine (tx + i, ty + (th / 2) + ((float) (th / 2) * hi),
+                   tx + i, ty + (th / 2) + ((float) (th / 2) * lo));
+    }
+  } else if (sz > w / 4) { // 1 to 4 pixels per sample
+    l = ty + th / 2 + buf [0] * (float) th / 2.0;
+    for (i = 1; i < w; i++) {
+      spos = (float) (i - 1) / (float) w;
+      si = spos * (float) sz;
+      l2 = ty + th / 2 - buf [si] * (float) th / 2.0;
+      dc.DrawLine (tx + i - 1, l, tx + i, l2);
+      l = l2;
+    }
+  } else {                 // more than 4 pixels per sample
+    l = ty + th / 2 - buf [0] * (float) th / 2.0;
+    lx = 0;
+    for (si = 1; si < sz; si++) {
+      xpos = (float) si / (float) sz;
+      i = xpos * (float) w;
+      l2 = ty + th / 2 - buf [si] * (float) th / 2.0;
+      dc.DrawLine (tx + lx, l, tx + i, l2);
+      l = l2;
+      lx = i;
+    }
+  }
+}
+  
+
+
+bool c_waveformwidget::select_ir (c_ir_entry *entry) { CP
+  base_image_valid = false;
+  if (!entry) { 
+    unselect_ir ();
+    return false;
+  }
+  ir = entry;
+  
+  
+  debug ("got IR - id=%ld, name=%s", ir->id, ir->name.c_str ());
+  
+  
+  return true;
+}
+
+bool c_waveformwidget::unselect_ir () {
+  CP
+  return true;
+}
+
+c_ir_entry *c_waveformwidget::get_selected () {
+  return ir;
 }
 
 

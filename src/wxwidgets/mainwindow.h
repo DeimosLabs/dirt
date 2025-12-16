@@ -75,6 +75,7 @@ class c_waveformwidget;
 #define ID_TAB2 10040
 #define ID_INPUTDIR_RECURSIVE 10006
 #define ID_INPUTDIR 10007
+#define wxID_INPUTHEADER 10074
 #define ID_INPUTDIR_BROWSE 10008
 #define ID_INPUTDIR_SCAN 10005
 #define ID_INPUTFILES_ADD 10001
@@ -96,6 +97,7 @@ class c_waveformwidget;
 #define ID_OVERWRITE 10036
 #define ID_IGNORESR 10068
 #define ID_DEBUG 10027
+#define ID_SPINCTRL 10075
 #define ID_SWEEP_THR 10035
 #define ID_IR_START_THR 10042
 #define ID_IR_END_THR 10043
@@ -118,6 +120,7 @@ class c_waveformwidget;
 #define ID_BUTTON7 10064
 #define ID_BUTTON8 10065
 #define ID_PANEL 10032
+#define ID_LOG 10076
 #define wxID_STATUSBAR 10066
 #define SYMBOL_UI_MAINWINDOW_STYLE wxCAPTION|wxRESIZE_BORDER|wxSYSTEM_MENU|wxCLOSE_BOX
 #define SYMBOL_UI_MAINWINDOW_TITLE _("DIRT")
@@ -200,6 +203,7 @@ public:
     wxBoxSizer* staticbox_deconvolv;
     wxCheckBox* chk_inputdir_recursive;
     wxTextCtrl* text_inputdir;
+    wxStaticText* text_inputheader;
     wxButton* btn_inputdir_browse;
     wxButton* btn_inputdir_scan;
     wxButton* btn_inputfiles_add;
@@ -232,6 +236,7 @@ public:
     wxButton* btn_ir_load;
     wxButton* btn_ir_save;
     c_waveformwidget* pn_waveform;
+    wxTextCtrl* text_log;
     wxStaticText* text_statusbar;
     wxButton* btn_about;
     wxButton* btn_ok;

@@ -265,7 +265,7 @@ static void vu_wait (c_vudata &vu, std::string str) {
 extern char *g_dirt_build_timestamp;
 extern char *g_dirt_version;
 
-/*extern*/ int64_t get_unique_id () { CP
+/*extern*/ int64_t get_unique_id () {
   static int64_t unique_id = 0;
   return ++unique_id;
 }
