@@ -438,9 +438,10 @@ public:
   void   scroll_right (int howmuch);
   float  get_y_zoom ();
   float  get_y_offset ();
-  bool   y_zoom_full ();
-  bool   y_zoom_in ();
-  bool   y_zoom_out ();
+  void   zoom_y (float ratio);
+  void   zoom_full_y (float ratio);
+  void   zoom_in_y (float ratio);
+  void   zoom_out_y (float ratio);
   
   wxFont tinyfont;
   
@@ -457,7 +458,7 @@ private:
   int64_t viewpos      = 0;   // visible waveform pos/size in samples
   int64_t viewsize     = -1;
   float   y_zoom       = 1.0; // multiplied by sample values
-  float   y_zoom_off   = 0.0; // offset, -1 means baseline on top of screen
+  float   y_offset     = 0.0; // offset, -1 means baseline on top of screen
   int64_t min_viewsize = 32;
   
   wxPen pen_wavefg;

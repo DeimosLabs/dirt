@@ -2386,10 +2386,22 @@ void c_waveformwidget::on_mousewheel_v (int howmuch) {
   
   if (g_app->ctrl && g_app->shift) {
     debug ("ctrl+shift+mousewheel");
+    if (howmuch < 0)
+      scroll_right (1);
+    else
+      scroll_left (1);
   } else if (g_app->ctrl) {
     debug ("ctrl+mousewheel");
+    if (howmuch < 0)
+      zoom_y (1.0 / 1.1);
+    else
+      zoom_y (1.1);
   } else if (g_app->shift) {
     debug ("shift+mousewheel");
+    if (howmuch < 0)
+      scroll_right (viewsize / 16);
+    else
+      scroll_left (viewsize / 16);
   } else if (g_app->alt) {
     debug ("alt+mousewheel");
   } else {
@@ -2435,6 +2447,15 @@ void c_waveformwidget::scroll_right (int howmuch) {
   debug ("viewpos=%d", viewpos);
   base_image_valid = false;
   Refresh ();
+}
+
+void c_waveformwidget::zoom_y (float ratio) {
+  y_zoom *= ratio;
+  if (y_zoom < 1) y_zoom = 1;
+  if (y_zoom > 2000) y_zoom = 2000;
+  base_image_valid = false;
+  Refresh ();
+  debug ("ratio=%f, y_zoom=%f", ratio, y_zoom);  
 }
 
 void c_waveformwidget::zoom_x (float ratio) {
@@ -2520,8 +2541,8 @@ bool c_waveformwidget::render_base_image () {
   } else {
     draw_border (dc, 1, 1, width - 2, height / 2 - 4);
     draw_border (dc, 1, height / 2 + 4, width - 2, height / 2 - 4);
-    draw_waveform (dc, ir->l, 4, 1, width - 2, height / 2 - 4);
-    draw_waveform (dc, ir->r, 4, height / 2 + 4, width - 2, height / 2 - 4);
+    draw_waveform (dc, ir->l, 4, 1, width - 2, height / 2 - 8);
+    draw_waveform (dc, ir->r, 4, height / 2 + 4, width - 2, height / 2 - 8);
   }
   dc.SelectObject (wxNullBitmap);
   return true;
@@ -2592,36 +2613,63 @@ void c_waveformwidget::draw_waveform (wxDC &dc, c_wavebuffer &buf,
   int ln = 0;
   int w = tw - 4;
   int i, j, wl, wr, si, l, l2, lx;
-  float hi, lo, spos, xpos;
+  float hi, lo, hi_min, hi_max, lo_min, lo_max, spos, xpos;
   int baseline = ty + (th / 2);
-  
+  bool oob_hi = false, oob_lo = false;
+  bool over = false, under = false;
   if (sz <= 0 || tw < 4 || th < 4) // nothing to draw / not enough space
     return;
   
   if (sz > w * 2) {        // more than 2 samples per pixel
     debug ("branch A: more than 2 samples per pixel, sz=%d, w=%d", sz, w);
     wl = 0;
-    for (i = 1; i < w; i++) {
+    for (i = 1; i < w; i++) { // this one was a handful!!!
       spos = (float) (i - 1) / (float) w;
       wl = (float) spos * (float) sz;
       spos = (float) i / (float) w;
       wr = (float) spos * (float) sz;
-      hi = -1;
-      lo = 1;
+      hi_max = -1;
+      lo_max = -1;
+      lo_min = 1;
+      lo_max = 1;
       
       if (wl < 0) wl = 0;
       if (wl > sz) wl = sz;
       if (wr < wl) wr = wl;
       if (wr > sz) wr = sz;
       for (j = wl; j < wr; j++) {
-        if (buf [pos + j] > hi) hi = buf [pos + j];
-        if (buf [pos + j] < lo) lo = buf [pos + j];
+        if (buf [pos + j] > hi_max) hi_max = buf [pos + j];
+        if (buf [pos + j] > hi_min) hi_min = buf [pos + j];
+        if (buf [pos + j] < lo_max) lo_max = buf [pos + j];
+        if (buf [pos + j] < lo_min) lo_min = buf [pos + j];
       }
       ln++;
+      
+      hi_min *= y_zoom; hi_min -= y_offset;
+      hi_max *= y_zoom; hi_max -= y_offset;
+      lo_min *= y_zoom; lo_min -= y_offset;
+      lo_max *= y_zoom; lo_max -= y_offset;
+      oob_hi = (hi_min > 1 && hi_max > 1) || (hi_min < -1 || hi_max < -1);
+      oob_lo = (lo_min > 1 && lo_max > 1) || (lo_min < -1 || lo_max < -1);
+      if      (oob_hi && lo_min > 1) over = true;
+      else if (oob_lo && hi_max < -1) under = true;
+      
+      hi = hi_max;
+      lo = lo_min;
+      if      (hi_max > 1 && lo_min < -1) { hi = 1; lo = -1; }
+      else if (over || under) { hi = 0; lo = 0; }
+      else if (oob_hi) { hi = 1;  }
+      else if (oob_lo) { lo = -1; }
+      
+      if (hi_min > 1)  hi_min = 1;   if (hi_max > 1)  hi_max = 1;
+      if (hi_min < -1) hi_min = -1;  if (hi_max < -1) hi_max = -1;
+      if (lo_min > 1)  hi_min = 1;   if (lo_max > 1)  hi_max = 1;
+      if (lo_min < -1) hi_min = -1;  if (lo_max < -1) hi_max = -1;
+      
       dc.DrawLine (tx + i, baseline - ((float) (th / 2) * hi),
                    tx + i, baseline - ((float) (th / 2) * lo));
     }
-  } else if (sz > w) {     // 1 to 2 samples per pixel
+  /*} else if (sz > w) {     // 1 to 2 samples per pixel
     debug ("branch B: sz > w / 8, sz=%d, w=%d", sz, w);
     l = baseline + buf [pos] * (float) th / 2.0;
     for (i = 1; i < w; i++) {
@@ -2630,9 +2678,9 @@ void c_waveformwidget::draw_waveform (wxDC &dc, c_wavebuffer &buf,
       l2 = baseline - buf [pos + si] * (float) th / 2.0;
       dc.DrawLine (tx + i - 1, l, tx + i, l2);
       l = l2;
-    }
+    }*/
   } else if (sz > w / 2) { // 1 to 2 pixels per sample
-    debug ("branch C: 1 to 2 pixels per sample, sz=%d, w=%d", sz, w);
+    debug ("branch B: 0.5 to 2 pixels per sample, sz=%d, w=%d", sz, w);
     l = baseline - buf [pos] * (float) th / 2.0;
     lx = 0;
     for (si = 1; si < sz; si++) {
@@ -2643,7 +2691,7 @@ void c_waveformwidget::draw_waveform (wxDC &dc, c_wavebuffer &buf,
       l = l2;
       lx = i;
     }
-  } else if (sz > w / dotmode_thr) {                 // 2 to dotmode_thr pixels per sample
+  } else if (sz > w / dotmode_thr) {                 // 1 to dotmode_thr pixels per sample
     debug ("branch D: 2 to %d pixels per sample, sz=%d, w=%d", dotmode_thr, sz, w);
     l = baseline - buf [pos] * (float) th / 2.0;
     lx = 0;
@@ -2707,7 +2755,7 @@ bool c_waveformwidget::select_ir (c_ir_entry *entry) { CP
   viewpos = 0;
   viewsize = ir->size ();
   y_zoom = 1.0;
-  y_zoom_off = 0.0;
+  y_offset = 0.0;
   
   debug ("got IR - id=%ld, name=%s", ir->id, ir->name.c_str ());
   
