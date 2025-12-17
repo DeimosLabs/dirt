@@ -2608,22 +2608,27 @@ void c_waveformwidget::draw_waveform (wxDC &dc, c_wavebuffer &buf,
   if (pos > buf.size () - sz) pos = buf.size () - sz;
   if (pos < 0 || pos > buf.size () - sz) return;
   
-  debug ("viewpos=%d, viewsize=%d, pos=%d, sz=%d", viewpos, viewsize, pos, sz);
   //int sz = buf.size ();
   int ln = 0;
   int w = tw - 4;
-  int i, j, wl, wr, si, l, l2, lx;
-  float hi, lo, hi_min, hi_max, lo_min, lo_max, spos, xpos;
+  int i, j, wl, wr, si, l, l2, lz, lx, ly, x, y;
+  float hi, lo, hi_min, hi_max, lo_min, lo_max, spos, xpos, v, z;
   int baseline = ty + (th / 2);
   bool oob_hi = false, oob_lo = false;
   bool over = false, under = false;
   if (sz <= 0 || tw < 4 || th < 4) // nothing to draw / not enough space
     return;
   
-  if (sz > w * 2) {        // more than 2 samples per pixel
-    debug ("branch A: more than 2 samples per pixel, sz=%d, w=%d", sz, w);
+  // now we decide how to draw depending on zoom level:
+  //   A) process each block of samples for given pixel
+  //   B) draw a line to each pixel from last
+  //   C) draw a line to each sample from last
+  //   D) "dot edit" mode: like C except add "handle" for each samlple
+  if (sz > w * 4) { // more than 2 samples per pixel: per block from wl to wr
+    debug ("branch A: >= 1 samples per pixels");
     wl = 0;
     for (i = 1; i < w; i++) { // this one was a handful!!!
+      over = under = false;
       spos = (float) (i - 1) / (float) w;
       wl = (float) spos * (float) sz;
       spos = (float) i / (float) w;
@@ -2666,80 +2671,83 @@ void c_waveformwidget::draw_waveform (wxDC &dc, c_wavebuffer &buf,
       if (lo_min > 1)  hi_min = 1;   if (lo_max > 1)  hi_max = 1;
       if (lo_min < -1) hi_min = -1;  if (lo_max < -1) hi_max = -1;
       
-      dc.DrawLine (tx + i, baseline - ((float) (th / 2) * hi),
-                   tx + i, baseline - ((float) (th / 2) * lo));
+      if (hi != 0 && lo != 0)
+        dc.DrawLine (tx + i, baseline - ((float) (th / 2) * hi),
+                     tx + i, baseline - ((float) (th / 2) * lo));
     }
-  /*} else if (sz > w) {     // 1 to 2 samples per pixel
-    debug ("branch B: sz > w / 8, sz=%d, w=%d", sz, w);
-    l = baseline + buf [pos] * (float) th / 2.0;
-    for (i = 1; i < w; i++) {
+  } else if (sz > w) { // zigzag between pixels
+    debug ("branch B: sz > w (1 to 2 samples per pixel)");
+    for (i = 0; i < w - 1; i++) {
       spos = (float) (i - 1) / (float) w;
       si = spos * (float) sz;
-      l2 = baseline - buf [pos + si] * (float) th / 2.0;
-      dc.DrawLine (tx + i - 1, l, tx + i, l2);
-      l = l2;
-    }*/
-  } else if (sz > w / 2) { // 1 to 2 pixels per sample
-    debug ("branch B: 0.5 to 2 pixels per sample, sz=%d, w=%d", sz, w);
-    l = baseline - buf [pos] * (float) th / 2.0;
-    lx = 0;
-    for (si = 1; si < sz; si++) {
-      xpos = (float) si / (float) sz;
-      i = xpos * (float) w;
-      l2 = baseline - buf [pos + si] * (float) th / 2.0;
-      dc.DrawLine (tx + lx, l, tx + i, l2);
-      l = l2;
-      lx = i;
+      v = buf [pos + si];
+      z = v * (float) (th / 2.0);
+      z *= y_zoom;
+      z += y_offset;
+      if (v < 1 && v > -1 && i > 0) {
+        dc.DrawLine (tx + i - 1, baseline - l, tx + i + 1, baseline - z);
+      }
+      l = z;
     }
-  } else if (sz > w / dotmode_thr) {                 // 1 to dotmode_thr pixels per sample
-    debug ("branch D: 2 to %d pixels per sample, sz=%d, w=%d", dotmode_thr, sz, w);
-    l = baseline - buf [pos] * (float) th / 2.0;
-    lx = 0;
-    for (si = 1; si < sz; si++) {
-      xpos = (float) si / (float) sz;
-      i = xpos * (float) w;
-      l2 = baseline - buf [pos + si] * (float) th / 2.0;
-      dc.DrawLine (tx + lx, l, tx + i, l2);
-      l = l2;
-      lx = i;
+  } else if (sz > w / dotmode_thr) { // zigzag between samples
+    debug ("branch C: sz > w (1 to 2 samples per pixel)");
+    for (i = 0; i < viewsize; i++) {
+      xpos = (float) (i - 1) / (float) viewsize;
+      x = xpos * (float) tw;
+      v = buf [i + viewpos];
+      z = v * (float) (th / 2.0);
+      z *= y_zoom;
+      z += y_offset;
+      if (v < 1 && v > -1 && i > 0) {
+        dc.DrawLine (tx + lx, baseline - lz, tx + x, baseline - z);
+      }
+      lx = x;
+      lz = z;
     }
-  } else { // "dot edit" mode
+  } else { // >= dotmode_thr pixels per sample: "dot edit" mode
+    debug ("branch D: dot edit mode");
     int pxps = w / sz;
     int nh = 1 + (w / pxps);
-    debug ("branch E: > %d pixels per sample, sz=%d, w=%d, pxps=%d, nh=%d", dotmode_thr, sz, w, pxps, nh);
-    smphandles.resize (nh);
+    dothandles.resize (nh);
     dc.SetPen (pen_wavezoom);
-    l = baseline - buf [pos] * (float) th / 2.0;
-    lx = 0;
+    //l = baseline - buf [pos] * (float) th / 2.0;
+    //lx = 0;
     int hi = 0;
-    for (si = 0; si < sz; si++) {
-      xpos = (float) si / (float) (sz);
-      i = xpos * (float) w;
-      l2 = baseline - buf [pos + si] * (float) th / 2.0;
-      dc.DrawLine (tx + lx, l, tx + i, l2);
-      l = l2;
-      lx = i;
+    for (i = 0; i < viewsize; i++) {
+      xpos = (float) (i) / (float) viewsize;
+      x = xpos * (float) tw + tx;
+      v = buf [i + viewpos];
+      z = v * (float) (th / 2.0);
+      z *= y_zoom;
+      z += y_offset;
+      y = baseline - z;
+      //y = baseline - z * (float) th / 2.0;
+      dc.DrawLine (lx, ly, x, y);
+      lz = z;
+      ly = y;
+      lx = x;
+      //ly = y;
       //debug ("hi=%d, i=%d, l2=%d, si=%d", hi, i, l2, si);
       if (hi < nh) {
-        smphandles [hi].x = tx + i;
-        smphandles [hi].y = l2;
-        smphandles [hi].s = si;
+        dothandles [hi].x = x;
+        dothandles [hi].y = y;
+        dothandles [hi].s = i;
         hi++;
       }
     }
     dc.SetPen (pen_wavefg);
     dc.SetBrush (brush_wavefg);
     for (i = 0; i < hi; i++) {
-      dc.DrawRectangle (smphandles [i].x - 4,
-                        smphandles [i].y - 4,
+      dc.DrawRectangle (dothandles [i].x - 4,
+                        dothandles [i].y - 4,
                         8, 8);
     }
     // clear rest of handles
-    int n = smphandles.size ();
+    int n = dothandles.size ();
     for (; i < n; i++) {
-      smphandles [i].x = -1;
-      smphandles [i].y = -1;
-      smphandles [i].s = -1;
+      dothandles [i].x = -1;
+      dothandles [i].y = -1;
+      dothandles [i].s = -1;
     }
   }
 }

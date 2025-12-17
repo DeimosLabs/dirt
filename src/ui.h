@@ -442,6 +442,7 @@ public:
   void   zoom_full_y (float ratio);
   void   zoom_in_y (float ratio);
   void   zoom_out_y (float ratio);
+  void   update_scrollbars ();
   
   wxFont tinyfont;
   
@@ -452,7 +453,7 @@ private:
   void draw_waveform (wxDC &dc, c_wavebuffer &buf, int x, int y, int w, int h);
   //c_wavebuffer *wavdata = NULL;
   c_ir_entry *ir = NULL;
-  std::vector<sxy> smphandles;
+  std::vector<sxy> dothandles;
   
   // zoom / position
   int64_t viewpos      = 0;   // visible waveform pos/size in samples
