@@ -9184,7 +9184,7 @@ F"</string>
                       <string name="proxy-AlignV">"Expand"</string>
                       <string name="proxy-Background colour">""</string>
                       <string name="proxy-Base class">"wxScrollBar"</string>
-                      <long name="proxy-Border">5</long>
+                      <long name="proxy-Border">8</long>
                       <string name="proxy-Class">"wxScrollBar"</string>
                       <string name="proxy-Custom arguments">""</string>
                       <string name="proxy-Custom ctor arguments">""</string>
@@ -9220,7 +9220,7 @@ F"</string>
                       <long name="proxy-Width">-1</long>
                       <bool name="proxy-wxADJUST_MINSIZE">0</bool>
                       <bool name="proxy-wxBORDER_THEME">0</bool>
-                      <bool name="proxy-wxBOTTOM">1</bool>
+                      <bool name="proxy-wxBOTTOM">0</bool>
                       <bool name="proxy-wxDOUBLE_BORDER">0</bool>
                       <bool name="proxy-wxFIXED_MINSIZE">0</bool>
                       <bool name="proxy-wxFULL_REPAINT_ON_RESIZE">0</bool>
@@ -9236,7 +9236,7 @@ F"</string>
                       <bool name="proxy-wxSIMPLE_BORDER">0</bool>
                       <bool name="proxy-wxSTATIC_BORDER">0</bool>
                       <bool name="proxy-wxSUNKEN_BORDER">0</bool>
-                      <bool name="proxy-wxTOP">1</bool>
+                      <bool name="proxy-wxTOP">0</bool>
                       <bool name="proxy-wxWANTS_CHARS">0</bool>
                       <long name="proxy-X">-1</long>
                       <long name="proxy-Y">-1</long>
@@ -9283,7 +9283,7 @@ F"</string>
                       <string name="proxy-AlignV">"Expand"</string>
                       <string name="proxy-Background colour">""</string>
                       <string name="proxy-Base class">"wxScrollBar"</string>
-                      <long name="proxy-Border">5</long>
+                      <long name="proxy-Border">8</long>
                       <string name="proxy-Class">"wxScrollBar"</string>
                       <string name="proxy-Custom arguments">""</string>
                       <string name="proxy-Custom ctor arguments">""</string>
@@ -9323,12 +9323,12 @@ F"</string>
                       <bool name="proxy-wxDOUBLE_BORDER">0</bool>
                       <bool name="proxy-wxFIXED_MINSIZE">0</bool>
                       <bool name="proxy-wxFULL_REPAINT_ON_RESIZE">0</bool>
-                      <bool name="proxy-wxLEFT">1</bool>
+                      <bool name="proxy-wxLEFT">0</bool>
                       <bool name="proxy-wxNO_BORDER">0</bool>
                       <bool name="proxy-wxNO_FULL_REPAINT_ON_RESIZE">0</bool>
                       <bool name="proxy-wxRAISED_BORDER">0</bool>
                       <bool name="proxy-wxRESERVE_SPACE_EVEN_IF_HIDDEN">0</bool>
-                      <bool name="proxy-wxRIGHT">1</bool>
+                      <bool name="proxy-wxRIGHT">0</bool>
                       <bool name="proxy-wxSB_HORIZONTAL">1</bool>
                       <bool name="proxy-wxSB_VERTICAL">0</bool>
                       <bool name="proxy-wxSHAPED">0</bool>
@@ -9344,29 +9344,69 @@ F"</string>
                       <string name="type">"dialog-control-document"</string>
                     </document>
                     <document>
-                      <string name="proxy-type">"wbSpacerProxy"</string>
+                      <string name="proxy-type">"wbButtonProxy"</string>
                       <string name="filename">""</string>
-                      <string name="icon-name">"spacer"</string>
-                      <string name="identifier">"itemSpacer16"</string>
+                      <string name="icon-name">"dialogcontrol"</string>
+                      <string name="identifier">"itemButton12"</string>
                       <long name="is-transient">0</long>
                       <long name="locked">0</long>
                       <long name="owns-file">1</long>
-                      <string name="proxy-AlignH">"Centre"</string>
-                      <string name="proxy-AlignV">"Centre"</string>
-                      <long name="proxy-Border">5</long>
+                      <string name="proxy-AlignH">"Expand"</string>
+                      <string name="proxy-AlignV">"Expand"</string>
+                      <string name="proxy-Background colour">""</string>
+                      <string name="proxy-Base class">"wxButton"</string>
+                      <long name="proxy-Border">3</long>
+                      <string name="proxy-Class">"wxButton"</string>
+                      <string name="proxy-Custom arguments">""</string>
+                      <string name="proxy-Custom ctor arguments">""</string>
+                      <string name="proxy-Custom styles">""</string>
+                      <string name="proxy-Data class header filename">""</string>
+                      <string name="proxy-Data class implementation filename">""</string>
+                      <string name="proxy-Data class manager window">""</string>
+                      <string name="proxy-Data class name">""</string>
+                      <string name="proxy-Data source">""</string>
+                      <string name="proxy-Data validator">""</string>
+                      <string name="proxy-Data variable">""</string>
+                      <bool name="proxy-Default">0</bool>
+                      <bool name="proxy-Enabled">1</bool>
+                      <bool name="proxy-External implementation">1</bool>
+                      <string name="proxy-Font">""</string>
+                      <string name="proxy-Foreground colour">""</string>
+                      <string name="proxy-Header filename">""</string>
                       <long name="proxy-Height">5</long>
+                      <string name="proxy-Help text">""</string>
+                      <bool name="proxy-Hidden">0</bool>
+                      <string name="proxy-Id name">"ID_ZOOMFULL"</string>
+                      <long name="proxy-Id value">-1</long>
+                      <string name="proxy-Implementation filename">""</string>
+                      <string name="proxy-Label">""</string>
+                      <string name="proxy-Member variable name">"btn_zoomfull"</string>
+                      <string name="proxy-Name">""</string>
                       <string name="proxy-Platform">"&lt;Any platform&gt;"</string>
-                      <long name="proxy-Stretch factor">0</long>
+                      <bool name="proxy-Separate files">0</bool>
+                      <long name="proxy-Stretch factor">1</long>
+                      <string name="proxy-Tooltip text">"Zoom out full"</string>
                       <long name="proxy-Width">5</long>
                       <bool name="proxy-wxADJUST_MINSIZE">0</bool>
                       <bool name="proxy-wxBOTTOM">1</bool>
+                      <bool name="proxy-wxBU_BOTTOM">0</bool>
+                      <bool name="proxy-wxBU_EXACTFIT">0</bool>
+                      <bool name="proxy-wxBU_LEFT">0</bool>
+                      <bool name="proxy-wxBU_RIGHT">0</bool>
+                      <bool name="proxy-wxBU_TOP">0</bool>
                       <bool name="proxy-wxFIXED_MINSIZE">0</bool>
+                      <bool name="proxy-wxFULL_REPAINT_ON_RESIZE">0</bool>
                       <bool name="proxy-wxLEFT">1</bool>
+                      <bool name="proxy-wxNO_BORDER">0</bool>
+                      <bool name="proxy-wxNO_FULL_REPAINT_ON_RESIZE">0</bool>
                       <bool name="proxy-wxRESERVE_SPACE_EVEN_IF_HIDDEN">0</bool>
                       <bool name="proxy-wxRIGHT">1</bool>
                       <bool name="proxy-wxSHAPED">0</bool>
                       <bool name="proxy-wxTOP">1</bool>
-                      <string name="title">"Spacer"</string>
+                      <bool name="proxy-wxWANTS_CHARS">0</bool>
+                      <long name="proxy-X">-1</long>
+                      <long name="proxy-Y">-1</long>
+                      <string name="title">"wxButton: ID_ZOOMFULL"</string>
                       <long name="title-mode">0</long>
                       <string name="type">"dialog-control-document"</string>
                     </document>
@@ -9456,11 +9496,11 @@ F"</string>
                         <long name="proxy-Height">-1</long>
                         <string name="proxy-Help text">""</string>
                         <bool name="proxy-Hidden">0</bool>
-                        <string name="proxy-Id name">"ID_BUTTON2"</string>
+                        <string name="proxy-Id name">"ID_IR_PLAY"</string>
                         <long name="proxy-Id value">10059</long>
                         <string name="proxy-Implementation filename">""</string>
                         <string name="proxy-Label">"Play"</string>
-                        <string name="proxy-Member variable name">""</string>
+                        <string name="proxy-Member variable name">"btn_ir_play"</string>
                         <string name="proxy-Name">""</string>
                         <string name="proxy-Platform">"&lt;Any platform&gt;"</string>
                         <bool name="proxy-Separate files">0</bool>
@@ -9486,7 +9526,7 @@ F"</string>
                         <bool name="proxy-wxWANTS_CHARS">0</bool>
                         <long name="proxy-X">-1</long>
                         <long name="proxy-Y">-1</long>
-                        <string name="title">"wxButton: ID_BUTTON2"</string>
+                        <string name="title">"wxButton: ID_IR_PLAY"</string>
                         <long name="title-mode">0</long>
                         <string name="type">"dialog-control-document"</string>
                       </document>
@@ -9523,11 +9563,11 @@ F"</string>
                         <long name="proxy-Height">-1</long>
                         <string name="proxy-Help text">""</string>
                         <bool name="proxy-Hidden">0</bool>
-                        <string name="proxy-Id name">"ID_BUTTON3"</string>
+                        <string name="proxy-Id name">"ID_IR_TRIM"</string>
                         <long name="proxy-Id value">10060</long>
                         <string name="proxy-Implementation filename">""</string>
                         <string name="proxy-Label">"Trim"</string>
-                        <string name="proxy-Member variable name">""</string>
+                        <string name="proxy-Member variable name">"btn_ir_trim"</string>
                         <string name="proxy-Name">""</string>
                         <string name="proxy-Platform">"&lt;Any platform&gt;"</string>
                         <bool name="proxy-Separate files">0</bool>
@@ -9553,7 +9593,7 @@ F"</string>
                         <bool name="proxy-wxWANTS_CHARS">0</bool>
                         <long name="proxy-X">-1</long>
                         <long name="proxy-Y">-1</long>
-                        <string name="title">"wxButton: ID_BUTTON3"</string>
+                        <string name="title">"wxButton: ID_IR_TRIM"</string>
                         <long name="title-mode">0</long>
                         <string name="type">"dialog-control-document"</string>
                       </document>
@@ -9590,11 +9630,11 @@ F"</string>
                         <long name="proxy-Height">-1</long>
                         <string name="proxy-Help text">""</string>
                         <bool name="proxy-Hidden">0</bool>
-                        <string name="proxy-Id name">"ID_BUTTON4"</string>
+                        <string name="proxy-Id name">"ID_IR_BACKWARDS"</string>
                         <long name="proxy-Id value">10061</long>
                         <string name="proxy-Implementation filename">""</string>
                         <string name="proxy-Label">"Backwards"</string>
-                        <string name="proxy-Member variable name">""</string>
+                        <string name="proxy-Member variable name">"btn_ir_backwards"</string>
                         <string name="proxy-Name">""</string>
                         <string name="proxy-Platform">"&lt;Any platform&gt;"</string>
                         <bool name="proxy-Separate files">0</bool>
@@ -9620,7 +9660,7 @@ F"</string>
                         <bool name="proxy-wxWANTS_CHARS">0</bool>
                         <long name="proxy-X">-1</long>
                         <long name="proxy-Y">-1</long>
-                        <string name="title">"wxButton: ID_BUTTON4"</string>
+                        <string name="title">"wxButton: ID_IR_BACKWARDS"</string>
                         <long name="title-mode">0</long>
                         <string name="type">"dialog-control-document"</string>
                       </document>
@@ -9657,11 +9697,11 @@ F"</string>
                         <long name="proxy-Height">-1</long>
                         <string name="proxy-Help text">""</string>
                         <bool name="proxy-Hidden">0</bool>
-                        <string name="proxy-Id name">"ID_BUTTON5"</string>
+                        <string name="proxy-Id name">"ID_IR_DCFLIP"</string>
                         <long name="proxy-Id value">10062</long>
                         <string name="proxy-Implementation filename">""</string>
                         <string name="proxy-Label">"DC flip"</string>
-                        <string name="proxy-Member variable name">""</string>
+                        <string name="proxy-Member variable name">"btn_ir_dcflip"</string>
                         <string name="proxy-Name">""</string>
                         <string name="proxy-Platform">"&lt;Any platform&gt;"</string>
                         <bool name="proxy-Separate files">0</bool>
@@ -9687,7 +9727,7 @@ F"</string>
                         <bool name="proxy-wxWANTS_CHARS">0</bool>
                         <long name="proxy-X">-1</long>
                         <long name="proxy-Y">-1</long>
-                        <string name="title">"wxButton: ID_BUTTON5"</string>
+                        <string name="title">"wxButton: ID_IR_DCFLIP"</string>
                         <long name="title-mode">0</long>
                         <string name="type">"dialog-control-document"</string>
                       </document>
@@ -9724,11 +9764,11 @@ F"</string>
                         <long name="proxy-Height">-1</long>
                         <string name="proxy-Help text">""</string>
                         <bool name="proxy-Hidden">0</bool>
-                        <string name="proxy-Id name">"ID_BUTTON6"</string>
+                        <string name="proxy-Id name">"ID_IR_DCOFFSET"</string>
                         <long name="proxy-Id value">10063</long>
                         <string name="proxy-Implementation filename">""</string>
                         <string name="proxy-Label">"DC offset"</string>
-                        <string name="proxy-Member variable name">""</string>
+                        <string name="proxy-Member variable name">"btn_ir_dcoffset"</string>
                         <string name="proxy-Name">""</string>
                         <string name="proxy-Platform">"&lt;Any platform&gt;"</string>
                         <bool name="proxy-Separate files">0</bool>
@@ -9754,7 +9794,7 @@ F"</string>
                         <bool name="proxy-wxWANTS_CHARS">0</bool>
                         <long name="proxy-X">-1</long>
                         <long name="proxy-Y">-1</long>
-                        <string name="title">"wxButton: ID_BUTTON6"</string>
+                        <string name="title">"wxButton: ID_IR_DCOFFSET"</string>
                         <long name="title-mode">0</long>
                         <string name="type">"dialog-control-document"</string>
                       </document>
@@ -9791,11 +9831,11 @@ F"</string>
                         <long name="proxy-Height">-1</long>
                         <string name="proxy-Help text">""</string>
                         <bool name="proxy-Hidden">0</bool>
-                        <string name="proxy-Id name">"ID_BUTTON7"</string>
+                        <string name="proxy-Id name">"ID_IR_AMPLIFY"</string>
                         <long name="proxy-Id value">10064</long>
                         <string name="proxy-Implementation filename">""</string>
                         <string name="proxy-Label">"Amplify"</string>
-                        <string name="proxy-Member variable name">""</string>
+                        <string name="proxy-Member variable name">"btn_ir_amplify"</string>
                         <string name="proxy-Name">""</string>
                         <string name="proxy-Platform">"&lt;Any platform&gt;"</string>
                         <bool name="proxy-Separate files">0</bool>
@@ -9821,7 +9861,7 @@ F"</string>
                         <bool name="proxy-wxWANTS_CHARS">0</bool>
                         <long name="proxy-X">-1</long>
                         <long name="proxy-Y">-1</long>
-                        <string name="title">"wxButton: ID_BUTTON7"</string>
+                        <string name="title">"wxButton: ID_IR_AMPLIFY"</string>
                         <long name="title-mode">0</long>
                         <string name="type">"dialog-control-document"</string>
                       </document>
@@ -9858,11 +9898,11 @@ F"</string>
                         <long name="proxy-Height">-1</long>
                         <string name="proxy-Help text">""</string>
                         <bool name="proxy-Hidden">0</bool>
-                        <string name="proxy-Id name">"ID_BUTTON8"</string>
+                        <string name="proxy-Id name">"ID_IR_STEREO"</string>
                         <long name="proxy-Id value">10065</long>
                         <string name="proxy-Implementation filename">""</string>
                         <string name="proxy-Label">"Stereo"</string>
-                        <string name="proxy-Member variable name">""</string>
+                        <string name="proxy-Member variable name">"btn_ir_stereo"</string>
                         <string name="proxy-Name">""</string>
                         <string name="proxy-Platform">"&lt;Any platform&gt;"</string>
                         <bool name="proxy-Separate files">0</bool>
@@ -9888,7 +9928,7 @@ F"</string>
                         <bool name="proxy-wxWANTS_CHARS">0</bool>
                         <long name="proxy-X">-1</long>
                         <long name="proxy-Y">-1</long>
-                        <string name="title">"wxButton: ID_BUTTON8"</string>
+                        <string name="title">"wxButton: ID_IR_STEREO"</string>
                         <long name="title-mode">0</long>
                         <string name="type">"dialog-control-document"</string>
                       </document>

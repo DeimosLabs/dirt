@@ -164,6 +164,14 @@ void ui_mainwindow::Init()
     btn_ir_load = NULL;
     btn_ir_save = NULL;
     pn_waveform = NULL;
+    btn_zoomfull = NULL;
+    btn_ir_play = NULL;
+    btn_ir_trim = NULL;
+    btn_ir_backwards = NULL;
+    btn_ir_dcflip = NULL;
+    btn_ir_dcoffset = NULL;
+    btn_ir_amplify = NULL;
+    btn_ir_stereo = NULL;
     text_log = NULL;
     text_statusbar = NULL;
     btn_about = NULL;
@@ -671,40 +679,43 @@ void ui_mainwindow::CreateControls()
 
     wxScrollBar* itemScrollBar1 = new wxScrollBar( itemPanel3, ID_SCROLLBAR1, wxDefaultPosition, wxDefaultSize, wxSB_VERTICAL );
     itemScrollBar1->SetScrollbar(0, 1, 100, 1);
-    itemFlexGridSizer1->Add(itemScrollBar1, 1, wxGROW|wxALL, 5);
+    itemFlexGridSizer1->Add(itemScrollBar1, 1, wxGROW|wxLEFT|wxRIGHT, 8);
 
     itemFlexGridSizer1->Add(5, 5, 0, wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
     wxScrollBar* itemScrollBar2 = new wxScrollBar( itemPanel3, ID_SCROLLBAR, wxDefaultPosition, wxDefaultSize, wxSB_HORIZONTAL );
     itemScrollBar2->SetScrollbar(0, 1, 100, 1);
-    itemFlexGridSizer1->Add(itemScrollBar2, 0, wxALIGN_CENTER_HORIZONTAL|wxGROW|wxALL, 5);
+    itemFlexGridSizer1->Add(itemScrollBar2, 0, wxALIGN_CENTER_HORIZONTAL|wxGROW|wxTOP|wxBOTTOM, 8);
 
-    itemFlexGridSizer1->Add(5, 5, 0, wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTER_VERTICAL|wxALL, 5);
+    btn_zoomfull = new wxButton( itemPanel3, ID_ZOOMFULL, wxEmptyString, wxDefaultPosition, wxSize(5, 5), 0 );
+    if (ui_mainwindow::ShowToolTips())
+        btn_zoomfull->SetToolTip(_("Zoom out full"));
+    itemFlexGridSizer1->Add(btn_zoomfull, 1, wxGROW|wxALL, 3);
 
     itemFlexGridSizer1->Add(5, 5, 0, wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
     wxBoxSizer* itemBoxSizer24 = new wxBoxSizer(wxHORIZONTAL);
     itemFlexGridSizer1->Add(itemBoxSizer24, 1, wxGROW|wxALL, 5);
-    wxButton* itemButton27 = new wxButton( itemPanel3, ID_BUTTON2, _("Play"), wxDefaultPosition, wxDefaultSize, 0 );
-    itemBoxSizer24->Add(itemButton27, 1, wxALIGN_CENTER_VERTICAL|wxALL, 5);
+    btn_ir_play = new wxButton( itemPanel3, ID_IR_PLAY, _("Play"), wxDefaultPosition, wxDefaultSize, 0 );
+    itemBoxSizer24->Add(btn_ir_play, 1, wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
-    wxButton* itemButton28 = new wxButton( itemPanel3, ID_BUTTON3, _("Trim"), wxDefaultPosition, wxDefaultSize, 0 );
-    itemBoxSizer24->Add(itemButton28, 1, wxALIGN_CENTER_VERTICAL|wxALL, 5);
+    btn_ir_trim = new wxButton( itemPanel3, ID_IR_TRIM, _("Trim"), wxDefaultPosition, wxDefaultSize, 0 );
+    itemBoxSizer24->Add(btn_ir_trim, 1, wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
-    wxButton* itemButton29 = new wxButton( itemPanel3, ID_BUTTON4, _("Backwards"), wxDefaultPosition, wxDefaultSize, 0 );
-    itemBoxSizer24->Add(itemButton29, 1, wxALIGN_CENTER_VERTICAL|wxALL, 5);
+    btn_ir_backwards = new wxButton( itemPanel3, ID_IR_BACKWARDS, _("Backwards"), wxDefaultPosition, wxDefaultSize, 0 );
+    itemBoxSizer24->Add(btn_ir_backwards, 1, wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
-    wxButton* itemButton30 = new wxButton( itemPanel3, ID_BUTTON5, _("DC flip"), wxDefaultPosition, wxDefaultSize, 0 );
-    itemBoxSizer24->Add(itemButton30, 1, wxALIGN_CENTER_VERTICAL|wxALL, 5);
+    btn_ir_dcflip = new wxButton( itemPanel3, ID_IR_DCFLIP, _("DC flip"), wxDefaultPosition, wxDefaultSize, 0 );
+    itemBoxSizer24->Add(btn_ir_dcflip, 1, wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
-    wxButton* itemButton31 = new wxButton( itemPanel3, ID_BUTTON6, _("DC offset"), wxDefaultPosition, wxDefaultSize, 0 );
-    itemBoxSizer24->Add(itemButton31, 1, wxALIGN_CENTER_VERTICAL|wxALL, 5);
+    btn_ir_dcoffset = new wxButton( itemPanel3, ID_IR_DCOFFSET, _("DC offset"), wxDefaultPosition, wxDefaultSize, 0 );
+    itemBoxSizer24->Add(btn_ir_dcoffset, 1, wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
-    wxButton* itemButton32 = new wxButton( itemPanel3, ID_BUTTON7, _("Amplify"), wxDefaultPosition, wxDefaultSize, 0 );
-    itemBoxSizer24->Add(itemButton32, 1, wxALIGN_CENTER_VERTICAL|wxALL, 5);
+    btn_ir_amplify = new wxButton( itemPanel3, ID_IR_AMPLIFY, _("Amplify"), wxDefaultPosition, wxDefaultSize, 0 );
+    itemBoxSizer24->Add(btn_ir_amplify, 1, wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
-    wxButton* itemButton33 = new wxButton( itemPanel3, ID_BUTTON8, _("Stereo"), wxDefaultPosition, wxDefaultSize, 0 );
-    itemBoxSizer24->Add(itemButton33, 1, wxALIGN_CENTER_VERTICAL|wxALL, 5);
+    btn_ir_stereo = new wxButton( itemPanel3, ID_IR_STEREO, _("Stereo"), wxDefaultPosition, wxDefaultSize, 0 );
+    itemBoxSizer24->Add(btn_ir_stereo, 1, wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
     itemFlexGridSizer1->Add(5, 5, 0, wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTER_VERTICAL|wxALL, 5);
 

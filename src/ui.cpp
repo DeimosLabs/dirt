@@ -126,6 +126,7 @@ wxBEGIN_EVENT_TABLE (c_mainwindow, ui_mainwindow)
   EVT_BUTTON (ID_IR_LOAD, c_mainwindow::on_btn_irload)
   EVT_BUTTON (ID_IR_SAVE, c_mainwindow::on_btn_irsave)
   
+  EVT_BUTTON (ID_ZOOMFULL, c_mainwindow::on_btn_zoomfull)
   EVT_LIST_ITEM_SELECTED (ID_IRFILES, c_mainwindow::on_irfile_select)
   EVT_LIST_ITEM_DESELECTED (ID_IRFILES, c_mainwindow::on_irfile_unselect)
 
@@ -177,6 +178,13 @@ c_mainwindow::c_mainwindow (c_deconvolver *d)
 
 c_mainwindow::~c_mainwindow () {
   CP
+}
+
+void c_mainwindow::on_btn_zoomfull (wxCommandEvent &ev) {
+  if (!pn_waveform) return;
+  
+  pn_waveform->zoom_full_x ();
+  pn_waveform->zoom_full_y ();
 }
 
 bool c_mainwindow::add_ir (c_ir_entry &ent) { CP
@@ -2382,26 +2390,26 @@ void c_waveformwidget::on_mousewheel_h (int howmuch) {
 }
 
 void c_waveformwidget::on_mousewheel_v (int howmuch) {
-  debug ("howmuch=%d, viewsize=%d", howmuch, viewsize);
+  debug ("howmuch=%d, viewsize_x=%d", howmuch, viewsize_x);
   
   if (g_app->ctrl && g_app->shift) {
     debug ("ctrl+shift+mousewheel");
-    if (howmuch < 0)
-      scroll_right (1);
+    if (howmuch > 0)
+      scroll_down_by (0.02);
     else
-      scroll_left (1);
+      scroll_up_by (0.02);
   } else if (g_app->ctrl) {
     debug ("ctrl+mousewheel");
     if (howmuch < 0)
-      zoom_y (1.0 / 1.1);
+      zoom_y (1.0 / 1.1, mouse_y);
     else
-      zoom_y (1.1);
+      zoom_y (1.1, mouse_y);
   } else if (g_app->shift) {
     debug ("shift+mousewheel");
     if (howmuch < 0)
-      scroll_right (viewsize / 16);
+      scroll_right_by (viewsize_x / 16);
     else
-      scroll_left (viewsize / 16);
+      scroll_left_by (viewsize_x / 16);
   } else if (g_app->alt) {
     debug ("alt+mousewheel");
   } else {
@@ -2426,65 +2434,121 @@ void c_waveformwidget::on_idle (wxIdleEvent &ev) {
 }
 
 void c_waveformwidget::on_mousedown_left (wxMouseEvent &ev) { CP
-  scroll_left (1);
 }
+
 void c_waveformwidget::on_mousedown_right (wxMouseEvent &ev) { CP
-  scroll_right (1);
 }
 
-void c_waveformwidget::scroll_left (int howmuch) {
-  viewpos -= howmuch;
-  if (viewpos < 0) viewpos = 0;
-  debug ("viewpos=%d", viewpos);
+/*void c_waveformwidget::on_mousemove (wxMouseEvent &ev) {
+  c_customwidget::on_mousemove (ev);
+  //base_image_valid = false;
+  //Refresh ();
+}*/
+
+void c_waveformwidget::zoom_full_x () {
+  if (!ir) return;
+  viewsize_x = ir->size ();
+  viewpos_x = 0;
   base_image_valid = false;
   Refresh ();
 }
 
-void c_waveformwidget::scroll_right (int howmuch) {
-  viewpos += howmuch;
-  int max = ir->size () - viewsize;
-  if (viewpos > max)  viewpos = max;
-  debug ("viewpos=%d", viewpos);
+void c_waveformwidget::zoom_full_y () {
+  if (!ir) return;
+  viewsize_y = 2.0;
+  viewpos_y = 1.0;
   base_image_valid = false;
   Refresh ();
 }
 
-void c_waveformwidget::zoom_y (float ratio) {
-  y_zoom *= ratio;
-  if (y_zoom < 1) y_zoom = 1;
-  if (y_zoom > 2000) y_zoom = 2000;
+void c_waveformwidget::scroll_left_by (int howmuch) {
+  viewpos_x -= howmuch;
+  int max = ir->size () - viewsize_x;
+  if (viewpos_x < 0) viewpos_x = 0;
+  if (viewpos_x > max)  viewpos_x = max;
+  debug ("viewpos=%d", viewpos_x);
   base_image_valid = false;
   Refresh ();
-  debug ("ratio=%f, y_zoom=%f", ratio, y_zoom);  
+}
+
+void c_waveformwidget::scroll_right_by (int howmuch) {
+  scroll_left_by (howmuch * -1);
+}
+
+void c_waveformwidget::scroll_up_by (float howmuch) {
+  viewpos_y += howmuch;
+  float max_scroll_y = 1.0 - viewsize_y;// - (1 - (1/viewpos_y));
+  
+  if (viewpos_y < -1) viewpos_y = -1;
+  if (viewpos_y > max_scroll_y) viewpos_y = max_scroll_y;
+  base_image_valid = false;
+  Refresh ();
+  
+  debug ("viewpos_y=%f, viewsize_y=%f", viewpos_y, viewsize_y);
+}
+
+void c_waveformwidget::clamp_coords () {
+  float min_size_y = 0.0001;
+  if (!ir) return;
+  
+  if (viewpos_y < -1.0) viewpos_y = -1.0;
+  if (viewpos_y >  1.0) viewpos_y =  1.0;
+  if (viewsize_y < min_size_y) viewsize_y = min_size_y;
+  if (viewsize_y > 2.0) viewsize_y = 2.0;
+
+  int sz = ir->size ();
+  if (viewsize_x < 32) viewsize_x = 32;
+  if (viewsize_x > sz) viewsize_x = sz;
+  if (viewpos_x < 0) viewpos_x = 0;
+  if (viewpos_x > sz - viewsize_x) viewpos_x = sz - viewsize_x;
+}
+
+void c_waveformwidget::scroll_down_by (float howmuch) { scroll_up_by (-1 * howmuch); }
+
+void c_waveformwidget::zoom_y (float ratio, int around_px) {
+  float min_size_y = 0.0001;
+  float t = (float) around_px / (float) (height - 1);
+  float anchor_at = viewpos_y - t * viewsize_y;
+
+  // apply zoom
+  float new_size = viewsize_y / ratio;
+  if (new_size < min_size_y) new_size = min_size_y;
+  if (new_size > 2.0) new_size = 2.0;
+
+  // solve: anchor_at = newViewpos - t * new_size
+  viewpos_y = anchor_at + t * new_size;
+  viewsize_y = new_size;
+
+  // clamp so visible stays within [-1..+1]
+  clamp_coords ();
+  //if (viewpos_y < -1.0) viewpos_y = -1.0;
+  //if (viewpos_y >  1.0) viewpos_y =  1.0;
+  
+  base_image_valid = false;
+  Refresh ();
+  debug ("ratio=%f, viewpos_y=%f", ratio, viewpos_y);  
 }
 
 void c_waveformwidget::zoom_x (float ratio) {
-  float vs = viewsize;
-  float oldviewsize = viewsize;
+  float vs = viewsize_x;
+  float oldviewsize_x = viewsize_x;
   debug ("ratio=%f", ratio);
   
   if (!ir) return;
   
   if (ratio > 0)
-    if (viewsize <= min_viewsize)
+    if (viewsize_x <= min_viewsize_x)
       return;
     else
-      viewsize = (int) (vs / ratio);
+      viewsize_x = (int) (vs / ratio);
   else
-    if (viewsize >= ir->size ())
+    if (viewsize_x >= ir->size ())
       return;
     else
-      viewsize = (int) (vs * ratio * -1);
+      viewsize_x = (int) (vs * ratio * -1);
   
   float xpos = (float) mouse_x / (float) width;
-  viewpos += (oldviewsize - viewsize) * xpos;
-  
-  int sz = ir->size ();
-  if (viewsize < 32) viewsize = 32;
-  if (viewsize > sz) viewsize = sz;
-  if (viewpos < 0) viewpos = 0;
-  if (viewpos > sz - viewsize) viewpos = sz - viewsize;
-  debug ("sz=%d, new viewsize=%d", sz, viewsize);
+  viewpos_x += (oldviewsize_x - viewsize_x) * xpos;
   
   base_image_valid = false;
   Refresh ();
@@ -2522,18 +2586,6 @@ bool c_waveformwidget::render_base_image () {
   
   // baseline
   dc.SetPen (wxPen (col_fg));
-  
-  /*std::vector<float> vf;
-  const int sz = 4096;
-  vf.resize (sz);
-  for (int i = 0; i < sz; i++)
-    if (i % 500 > 250)
-      vf [i] = 0.5;
-    else
-      vf [i] = -0.5;
-  
-  c_wavebuffer buf;
-  buf.import_from (vf);*/
   
   if (ir && ir->r.size () == 0) {
     draw_border (dc, 1, 1, width - 2, height - 4);
@@ -2591,33 +2643,88 @@ bool c_waveformwidget::update (wxWindowDC &dc) {
   return true;
 }
 
+// pixel to sample/amplitude mapping, given view size/pos:
+#define Y_TO_AMP(y,vpos,vsz,h) ((vpos) - ((float)(y) / (float)((h) - 1)) * (vsz))
+#define AMP_TO_Y(a,vpos,vsz,h) ((int)lroundf((( (vpos) - (a)) / (vsz)) * ((h) - 1)))
+#define X_TO_SMP(x,vpos,vsz,w) ((vpos) + ((float)(x) / (float)((w) - 1)) * (vsz))
+#define SMP_TO_X(s,vpos,vsz,w) ((int)lroundf((((float)(s) - (vpos)) / (vsz)) * ((w) - 1)))
+  
+
+float c_waveformwidget::y_to_amplitude (int y) {
+  return Y_TO_AMP (y, viewpos_y, viewsize_y, height);
+}
+
+int c_waveformwidget::amplitude_to_y (float amp) {
+  return AMP_TO_Y (amp, viewpos_y, viewsize_y, height);
+}
+
+size_t c_waveformwidget::x_to_samplepos (int x) {
+  return X_TO_SMP (x, viewpos_x, viewsize_x, width);  
+}
+
+int c_waveformwidget::samplepos_to_x (size_t s) {
+  return SMP_TO_X (s, viewpos_x, viewsize_x, width);
+}
+
+// viewsize ie. 2.0 -> no zoom, 0.5 -> 25% y range visible etc.
+// viewpos: top of viewsize in +1..-1
+static int baseline_pos (int h, float viewsize, float viewpos) {
+  // Convert baseline from world-space to screen-space
+  float t = (0.5 - viewpos) / viewsize;   // normalized position in view
+  float baseline_px = t * (h - 1);
+  debug ("h=%d, viewsize=%f, viewpos=%f", h, viewsize, viewpos);
+  debug ("t=%f, baseline_px=%f", t, baseline_px);
+  
+  return (int) std::lround (baseline_px);
+}
+
+static int baseline_from_mouse (int y, int h, float viewsize, float viewpos) {
+  int baseline_y = baseline_pos (h, viewsize, viewpos);
+  int ret = baseline_y - y;   // positive = baseline is below mouse
+  debug ("y=%d, ret=%d", y, ret);
+  return ret;
+}
+
+void c_waveformwidget::on_mousemove (wxMouseEvent &ev) {
+  c_customwidget::on_mousemove (ev);
+  int d = baseline_from_mouse (mouse_y, height, 0.5, 0.25);
+  CP
+  int samplepos = x_to_samplepos (mouse_x);
+  CP
+  float sampleamp = y_to_amplitude (mouse_y);
+  if (ir && samplepos <= ir->l.size ())
+    debug ("sample %d of %d: %f, d=%d", samplepos, ir->size (), ir->l [samplepos], d);
+  //base_image_valid = false;
+  //Refresh ();
+}
+
 void c_waveformwidget::draw_waveform (wxDC &dc, c_wavebuffer &buf,
                                       int tx, int ty, int tw, int th) {
-  if (!ir || ir->l.size () <= 0)
-    return;
+  if (!ir || ir->l.size () <= 0 || viewsize_x <= 0 || tw < 4 || th < 4)
+    return; // nothing to draw / not enough space
+  
+  debug ("viewpos_x=%ld, viewsize_x=%ld, viewpos_y=%f, viewsize_y=%f",
+         viewpos_x, viewsize_x, viewpos_y, viewsize_y);
+  
   dc.SetPen (pen_wavefg);
   
   int dotmode_thr = 16; // min. pixels between samples when zoomed way in
-  int min_v = 16;
-  if (viewsize <= 0) viewsize = buf.size ();
-  int sz = viewsize;
-  int pos = viewpos;
-  if (sz < min_v) sz = min_v;
+  if (viewsize_x <= 0) viewsize_x = buf.size ();
+  int sz = viewsize_x;
+  int pos = viewpos_x;
+  if (sz < 0) sz = 0;
   if (sz > buf.size ()) sz = buf.size ();
   if (pos < 0) pos = 0;
   if (pos > buf.size () - sz) pos = buf.size () - sz;
   if (pos < 0 || pos > buf.size () - sz) return;
   
   //int sz = buf.size ();
-  int ln = 0;
-  int w = tw - 4;
-  int i, j, wl, wr, si, l, l2, lz, lx, ly, x, y;
+  int w = tw - 1;
+  int h = th - 1;
+  int i, j, wl, wr, si, lx, ly, x, y, dh;
   float hi, lo, hi_min, hi_max, lo_min, lo_max, spos, xpos, v, z;
-  int baseline = ty + (th / 2);
   bool oob_hi = false, oob_lo = false;
   bool over = false, under = false;
-  if (sz <= 0 || tw < 4 || th < 4) // nothing to draw / not enough space
-    return;
   
   // now we decide how to draw depending on zoom level:
   //   A) process each block of samples for given pixel
@@ -2626,9 +2733,8 @@ void c_waveformwidget::draw_waveform (wxDC &dc, c_wavebuffer &buf,
   //   D) "dot edit" mode: like C except add "handle" for each samlple
   if (sz > w * 4) { // more than 2 samples per pixel: per block from wl to wr
     debug ("branch A: >= 1 samples per pixels");
-    wl = 0;
     for (i = 1; i < w; i++) { // this one was a handful!!!
-      over = under = false;
+      over = under = oob_hi = oob_lo = false;
       spos = (float) (i - 1) / (float) w;
       wl = (float) spos * (float) sz;
       spos = (float) i / (float) w;
@@ -2642,67 +2748,47 @@ void c_waveformwidget::draw_waveform (wxDC &dc, c_wavebuffer &buf,
       if (wl > sz) wl = sz;
       if (wr < wl) wr = wl;
       if (wr > sz) wr = sz;
-      for (j = wl; j < wr; j++) {
+      for (j = wl; j < wr; j++) { // find min/max in this block
         if (buf [pos + j] > hi_max) hi_max = buf [pos + j];
         if (buf [pos + j] > hi_min) hi_min = buf [pos + j];
         if (buf [pos + j] < lo_max) lo_max = buf [pos + j];
         if (buf [pos + j] < lo_min) lo_min = buf [pos + j];
       }
-      ln++;
       
-      hi_min *= y_zoom; hi_min -= y_offset;
-      hi_max *= y_zoom; hi_max -= y_offset;
-      lo_min *= y_zoom; lo_min -= y_offset;
-      lo_max *= y_zoom; lo_max -= y_offset;
-      oob_hi = (hi_min > 1 && hi_max > 1) || (hi_min < -1 || hi_max < -1);
-      oob_lo = (lo_min > 1 && lo_max > 1) || (lo_min < -1 || lo_max < -1);
-      if      (oob_hi && lo_min > 1) over = true;
-      else if (oob_lo && hi_max < -1) under = true;
+      // calculate screen coords relative to top left of waveform
+      hi_max = AMP_TO_Y (hi_max, viewpos_y, viewsize_y, h);
+      hi_min = AMP_TO_Y (hi_min, viewpos_y, viewsize_y, h);
+      lo_max = AMP_TO_Y (lo_max, viewpos_y, viewsize_y, h);
+      lo_min = AMP_TO_Y (lo_min, viewpos_y, viewsize_y, h);
       
-      hi = hi_max;
-      lo = lo_min;
-      if      (hi_max > 1 && lo_min < -1) { hi = 1; lo = -1; }
-      else if (over || under) { hi = 0; lo = 0; }
-      else if (oob_hi) { hi = 1;  }
-      else if (oob_lo) { lo = -1; }
-      
-      if (hi_min > 1)  hi_min = 1;   if (hi_max > 1)  hi_max = 1;
-      if (hi_min < -1) hi_min = -1;  if (hi_max < -1) hi_max = -1;
-      if (lo_min > 1)  hi_min = 1;   if (lo_max > 1)  hi_max = 1;
-      if (lo_min < -1) hi_min = -1;  if (lo_max < -1) hi_max = -1;
-      
-      if (hi != 0 && lo != 0)
-        dc.DrawLine (tx + i, baseline - ((float) (th / 2) * hi),
-                     tx + i, baseline - ((float) (th / 2) * lo));
+      dc.DrawLine (tx + i, ty + hi_max, tx + i, ty + lo_min);
     }
   } else if (sz > w) { // zigzag between pixels
     debug ("branch B: sz > w (1 to 2 samples per pixel)");
+    y = AMP_TO_Y (buf [viewpos_y], viewpos_y, viewsize_y, h);
     for (i = 0; i < w - 1; i++) {
       spos = (float) (i - 1) / (float) w;
       si = spos * (float) sz;
       v = buf [pos + si];
-      z = v * (float) (th / 2.0);
-      z *= y_zoom;
-      z += y_offset;
-      if (v < 1 && v > -1 && i > 0) {
-        dc.DrawLine (tx + i - 1, baseline - l, tx + i + 1, baseline - z);
+      y = AMP_TO_Y (v, viewpos_y, viewsize_y, h);
+      if (y < h && y >= 0 && i > 0) {
+        dc.DrawLine (tx + i, ty + ly, tx + i + 1, y);
       }
-      l = z;
+      ly = y;
     }
   } else if (sz > w / dotmode_thr) { // zigzag between samples
     debug ("branch C: sz > w (1 to 2 samples per pixel)");
-    for (i = 0; i < viewsize; i++) {
-      xpos = (float) (i - 1) / (float) viewsize;
-      x = xpos * (float) tw;
-      v = buf [i + viewpos];
-      z = v * (float) (th / 2.0);
-      z *= y_zoom;
-      z += y_offset;
-      if (v < 1 && v > -1 && i > 0) {
-        dc.DrawLine (tx + lx, baseline - lz, tx + x, baseline - z);
-      }
+    lx = SMP_TO_X (pos, pos, viewsize_y, w);
+    ly = AMP_TO_Y (buf [pos], viewpos_y, viewsize_y, h);
+    for (i = 1; i < sz; i++) {
+      xpos = (float) (i - 1) / (float) viewsize_x;
+      v = buf [i + pos];
+      x = SMP_TO_X (i + pos, pos, viewsize_x, w);
+      y = AMP_TO_Y (v, viewpos_y, viewsize_y, h);
+      if (y < h && y >= 0)
+        dc.DrawLine (tx + lx, ty + ly, tx + x, ty + y);
       lx = x;
-      lz = z;
+      ly = y;
     }
   } else { // >= dotmode_thr pixels per sample: "dot edit" mode
     debug ("branch D: dot edit mode");
@@ -2710,36 +2796,29 @@ void c_waveformwidget::draw_waveform (wxDC &dc, c_wavebuffer &buf,
     int nh = 1 + (w / pxps);
     dothandles.resize (nh);
     dc.SetPen (pen_wavezoom);
-    //l = baseline - buf [pos] * (float) th / 2.0;
-    //lx = 0;
-    int hi = 0;
-    for (i = 0; i < viewsize; i++) {
-      xpos = (float) (i) / (float) viewsize;
-      x = xpos * (float) tw + tx;
-      v = buf [i + viewpos];
-      z = v * (float) (th / 2.0);
-      z *= y_zoom;
-      z += y_offset;
-      y = baseline - z;
-      //y = baseline - z * (float) th / 2.0;
-      dc.DrawLine (lx, ly, x, y);
-      lz = z;
-      ly = y;
-      lx = x;
-      //ly = y;
-      //debug ("hi=%d, i=%d, l2=%d, si=%d", hi, i, l2, si);
-      if (hi < nh) {
-        dothandles [hi].x = x;
-        dothandles [hi].y = y;
-        dothandles [hi].s = i;
-        hi++;
+    dh = 0;
+    lx = SMP_TO_X (pos, pos, viewsize_y, w);
+    ly = AMP_TO_Y (buf [pos], viewpos_y, viewsize_y, h);
+    for (i = 1; i < viewsize_x; i++) {
+      v = buf [i + pos];
+      x = SMP_TO_X (i + pos, pos, viewsize_x, w);
+      y = AMP_TO_Y (v, viewpos_y, viewsize_y, h);
+      if (y >= 0 && y < h)
+        dc.DrawLine (tx + lx, ty + ly, tx + x, ty + y);
+      if (dh < nh) {
+        dothandles [dh].x = x;
+        dothandles [dh].y = y;
+        dothandles [dh].s = i;
+        dh++;
       }
+      lx = x;
+      ly = y;
     }
     dc.SetPen (pen_wavefg);
     dc.SetBrush (brush_wavefg);
-    for (i = 0; i < hi; i++) {
-      dc.DrawRectangle (dothandles [i].x - 4,
-                        dothandles [i].y - 4,
+    for (i = 0; i < dh; i++) {
+      dc.DrawRectangle (dothandles [i].x - 1,
+                        dothandles [i].y - 1,
                         8, 8);
     }
     // clear rest of handles
@@ -2760,10 +2839,9 @@ bool c_waveformwidget::select_ir (c_ir_entry *entry) { CP
   }
   ir = entry;
   
-  viewpos = 0;
-  viewsize = ir->size ();
-  y_zoom = 1.0;
-  y_offset = 0.0;
+  zoom_full_x ();
+  zoom_full_y ();
+  dotedit = false;
   
   debug ("got IR - id=%ld, name=%s", ir->id, ir->name.c_str ());
   

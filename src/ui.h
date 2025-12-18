@@ -141,6 +141,7 @@ public:
   void on_btn_irremove (wxCommandEvent &ev);
   void on_btn_irload (wxCommandEvent &ev);
   void on_btn_irsave (wxCommandEvent &ev);
+  void on_btn_zoomfull (wxCommandEvent &ev);
   void on_port_select (wxCommandEvent &ev);
   void on_irfile_select (wxListEvent &ev);
   void on_irfile_unselect (wxListEvent &ev);
@@ -343,7 +344,6 @@ public:
   c_vudata *get_vudata ();
   bool needs_redraw () { return data ? data->needs_redraw : false; }
   
-  //void set_audio_client (c_audioclient *cli);
   void set_stereo (bool b);
   void set_l (float level, float hold, bool clip = false, bool xrun = false);
   void set_r (float level, float hold, bool clip = false, bool xrun = false);
@@ -352,15 +352,12 @@ public:
   //float l       = 0.0;
   //float r       = 0.0;
 
-  wxFont tinyfont;
-  //bool  show_rec    = false;  // enable red circle / recording indicator
-  //bool  show_clip   = false;  // warn when clipping, (for now) also used for xruns
-  int   clip_size    = 0;
-  int   rec_size     = 0;
-  bool  rec_enabled  = false;
-  //bool  needs_redraw = false;
-  c_vudata *data     = NULL;
-  float   db_scale   = DEFAULT_VU_DB;
+  int       clip_size    = 0;
+  int       rec_size     = 0;
+  bool      rec_enabled  = false;
+  c_vudata  *data        = NULL;
+  float     db_scale     = DEFAULT_VU_DB;
+  wxFont    tinyfont;
   
 protected:
 private:
@@ -386,9 +383,9 @@ private:
 };
 
 struct sxy {
-  int s;
-  int x;
-  int y;
+  int s;  // sample
+  int x;  // on screen x rel. to widget
+  int y;  //       " " y " " 
 };
 
 
@@ -418,49 +415,79 @@ public:
   void on_visible (wxShowEvent &ev);
   void on_mousewheel_h (int howmuch);
   void on_mousewheel_v (int howmuch);
+  void on_mousemove (wxMouseEvent &ev);
   
   bool render_base_image ();
   
-  //virtual void update ();
   virtual bool update (wxWindowDC &dc);
   bool select_ir (c_ir_entry *entry);
   bool unselect_ir ();
   c_ir_entry *get_selected ();
   
   // zoom/scroll functions
-  size_t get_sample_pos ();
-  size_t get_samples_visible ();
+  size_t get_scroll_pos ();
+  size_t get_scroll_visible ();
   size_t set_zoom (size_t pos = 0, size_t sz = -1);
   void   zoom_x (float ratio);
   void   zoom_in () { zoom_x (1.05); }
   void   zoom_out () { zoom_x (-1.05); }
-  void   scroll_left (int howmuch);
-  void   scroll_right (int howmuch);
-  float  get_y_zoom ();
-  float  get_y_offset ();
-  void   zoom_y (float ratio);
+  void   zoom_full_x ();
+  void   zoom_full_y ();
+  void   zoom_y (float ratio, int around_px);
   void   zoom_full_y (float ratio);
   void   zoom_in_y (float ratio);
   void   zoom_out_y (float ratio);
+  void   scroll_left_by (int samples);
+  void   scroll_right_by (int samples);
+  void   scroll_y_by (float offset);
+  void   scroll_up_by (float offset);
+  void   scroll_down_by (float offset);
+  void   scroll_x_to (size_t pos);
+  void   resize_x_to (size_t sz);
+  void   scroll_y_to (float pos);
+  void   resize_y_to (float size);
+  int    get_x_zoom ();
+  int    get_x_pos ();
+  float  get_y_zoom ();
+  float  get_y_pos ();
   void   update_scrollbars ();
+  // in case we need these from somewhere else - they just use macros
+  float  y_to_amplitude (int y);
+  int    amplitude_to_y (float y);
+  size_t x_to_samplepos (int x);
+  int    samplepos_to_x (size_t s);
   
   wxFont tinyfont;
   
 protected:
 
-private:
+//private:
   void draw_border (wxDC &dc, int x = -1, int y = -1, int w = -1, int h = -1);
   void draw_waveform (wxDC &dc, c_wavebuffer &buf, int x, int y, int w, int h);
+  int get_dot_at (int x, int y);
+  static size_t get_dot_under_mouse ();
+  size_t get_sample_at (int x);
+  float get_amplitude_at (int y);
+  void clamp_coords ();
+
+  // selection
+  size_t cursor = 0;
+  size_t selection = -1;
+  size_t last_dragged_handle = -1;
+  
   //c_wavebuffer *wavdata = NULL;
   c_ir_entry *ir = NULL;
   std::vector<sxy> dothandles;
+  bool    dotedit      = false;
   
   // zoom / position
-  int64_t viewpos      = 0;   // visible waveform pos/size in samples
-  int64_t viewsize     = -1;
-  float   y_zoom       = 1.0; // multiplied by sample values
-  float   y_offset     = 0.0; // offset, -1 means baseline on top of screen
-  int64_t min_viewsize = 32;
+  int64_t viewpos_x      = 0;   // visible waveform pos/size in samples
+  int64_t viewsize_x     = -1;
+  int64_t min_viewsize_x = 32;
+  float   viewpos_y      = 1.0; // sample values multiplied by 1/this
+  float   viewsize_y     = 0.0; // offset, -1 means baseline on top of screen
+  float   min_viewsize_y = 0.00001;
+  
   
   wxPen pen_wavefg;
   wxBrush brush_wavefg;

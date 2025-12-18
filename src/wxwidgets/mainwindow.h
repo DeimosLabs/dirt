@@ -112,13 +112,14 @@ class c_waveformwidget;
 #define ID_WAVEFORM 10052
 #define ID_SCROLLBAR1 10054
 #define ID_SCROLLBAR 10053
-#define ID_BUTTON2 10059
-#define ID_BUTTON3 10060
-#define ID_BUTTON4 10061
-#define ID_BUTTON5 10062
-#define ID_BUTTON6 10063
-#define ID_BUTTON7 10064
-#define ID_BUTTON8 10065
+#define ID_ZOOMFULL -1
+#define ID_IR_PLAY 10059
+#define ID_IR_TRIM 10060
+#define ID_IR_BACKWARDS 10061
+#define ID_IR_DCFLIP 10062
+#define ID_IR_DCOFFSET 10063
+#define ID_IR_AMPLIFY 10064
+#define ID_IR_STEREO 10065
 #define ID_PANEL 10032
 #define ID_LOG 10076
 #define wxID_STATUSBAR 10066
@@ -236,6 +237,14 @@ public:
     wxButton* btn_ir_load;
     wxButton* btn_ir_save;
     c_waveformwidget* pn_waveform;
+    wxButton* btn_zoomfull;
+    wxButton* btn_ir_play;
+    wxButton* btn_ir_trim;
+    wxButton* btn_ir_backwards;
+    wxButton* btn_ir_dcflip;
+    wxButton* btn_ir_dcoffset;
+    wxButton* btn_ir_amplify;
+    wxButton* btn_ir_stereo;
     wxTextCtrl* text_log;
     wxStaticText* text_statusbar;
     wxButton* btn_about;
