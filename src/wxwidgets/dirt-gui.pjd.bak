@@ -348,7 +348,7 @@
               <string name="proxy-Id name">"ID_NOTEBOOK"</string>
               <long name="proxy-Id value">10038</long>
               <string name="proxy-Implementation filename">""</string>
-              <string name="proxy-Member variable name">""</string>
+              <string name="proxy-Member variable name">"note_tabs"</string>
               <string name="proxy-Name">""</string>
               <bool name="proxy-Notebook sizer">0</bool>
               <string name="proxy-Platform">"&lt;Any platform&gt;"</string>
@@ -9110,7 +9110,7 @@ F"</string>
                       <string name="proxy-Background colour">""</string>
                       <string name="proxy-Base class">"wxPanel"</string>
                       <long name="proxy-Border">5</long>
-                      <string name="proxy-Class">"c_waveformwidget"</string>
+                      <string name="proxy-Class">"c_customwidget"</string>
                       <string name="proxy-Custom arguments">""</string>
                       <string name="proxy-Custom ctor arguments">""</string>
                       <string name="proxy-Custom styles">""</string>
@@ -9168,7 +9168,7 @@ F"</string>
                       <bool name="proxy-wxWS_EX_VALIDATE_RECURSIVELY">1</bool>
                       <long name="proxy-X">-1</long>
                       <long name="proxy-Y">-1</long>
-                      <string name="title">"c_waveformwidget: ID_WAVEFORM"</string>
+                      <string name="title">"c_customwidget: ID_WAVEFORM"</string>
                       <long name="title-mode">0</long>
                       <string name="type">"dialog-control-document"</string>
                     </document>
@@ -9184,7 +9184,7 @@ F"</string>
                       <string name="proxy-AlignV">"Expand"</string>
                       <string name="proxy-Background colour">""</string>
                       <string name="proxy-Base class">"wxScrollBar"</string>
-                      <long name="proxy-Border">10</long>
+                      <long name="proxy-Border">8</long>
                       <string name="proxy-Class">"wxScrollBar"</string>
                       <string name="proxy-Custom arguments">""</string>
                       <string name="proxy-Custom ctor arguments">""</string>
@@ -9236,7 +9236,7 @@ F"</string>
                       <bool name="proxy-wxSIMPLE_BORDER">0</bool>
                       <bool name="proxy-wxSTATIC_BORDER">0</bool>
                       <bool name="proxy-wxSUNKEN_BORDER">0</bool>
-                      <bool name="proxy-wxTOP">1</bool>
+                      <bool name="proxy-wxTOP">0</bool>
                       <bool name="proxy-wxWANTS_CHARS">0</bool>
                       <long name="proxy-X">-1</long>
                       <long name="proxy-Y">-1</long>
@@ -9283,7 +9283,7 @@ F"</string>
                       <string name="proxy-AlignV">"Expand"</string>
                       <string name="proxy-Background colour">""</string>
                       <string name="proxy-Base class">"wxScrollBar"</string>
-                      <long name="proxy-Border">10</long>
+                      <long name="proxy-Border">8</long>
                       <string name="proxy-Class">"wxScrollBar"</string>
                       <string name="proxy-Custom arguments">""</string>
                       <string name="proxy-Custom ctor arguments">""</string>
@@ -9323,7 +9323,7 @@ F"</string>
                       <bool name="proxy-wxDOUBLE_BORDER">0</bool>
                       <bool name="proxy-wxFIXED_MINSIZE">0</bool>
                       <bool name="proxy-wxFULL_REPAINT_ON_RESIZE">0</bool>
-                      <bool name="proxy-wxLEFT">1</bool>
+                      <bool name="proxy-wxLEFT">0</bool>
                       <bool name="proxy-wxNO_BORDER">0</bool>
                       <bool name="proxy-wxNO_FULL_REPAINT_ON_RESIZE">0</bool>
                       <bool name="proxy-wxRAISED_BORDER">0</bool>

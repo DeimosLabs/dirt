@@ -31,6 +31,7 @@
  */
 
 ////@begin forward declarations
+class wxNotebook;
 class wxBoxSizer;
 class wxSpinCtrl;
 class c_meterwidget;
@@ -173,6 +174,7 @@ public:
     static bool ShowToolTips();
 
 ////@begin ui_mainwindow member variables
+    wxNotebook* note_tabs;
     wxPanel* tab_drysweep;
     wxBoxSizer* staticbox_drysweep;
     wxRadioButton* radio_file;

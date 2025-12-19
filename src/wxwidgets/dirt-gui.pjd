@@ -348,7 +348,7 @@
               <string name="proxy-Id name">"ID_NOTEBOOK"</string>
               <long name="proxy-Id value">10038</long>
               <string name="proxy-Implementation filename">""</string>
-              <string name="proxy-Member variable name">""</string>
+              <string name="proxy-Member variable name">"note_tabs"</string>
               <string name="proxy-Name">""</string>
               <bool name="proxy-Notebook sizer">0</bool>
               <string name="proxy-Platform">"&lt;Any platform&gt;"</string>

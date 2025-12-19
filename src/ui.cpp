@@ -8,6 +8,7 @@
 
 #ifdef USE_WXWIDGETS
 
+#include <wx/dcbuffer.h>
 #include <wx/dir.h>
 #include <wx/rawbmp.h>
 
@@ -210,13 +211,16 @@ bool c_mainwindow::add_ir (c_ir_entry &ent) { CP
 
 void c_mainwindow::on_irfile_select (wxListEvent &ev) { CP
   int64_t id =  list_irfiles->get_selected_id ();
+  CP
   debug ("got selected ID %ld", id);
   int n = ir_files.size ();
-  
+  CP
   for (int i = 0; i < n; i++)
     if (ir_files [i].id == id) {
       debug ("IR found");
+      CP
       pn_waveform->select_ir (&ir_files [i]);
+      CP
       return;
     }
   debug ("no IR found");
@@ -253,12 +257,6 @@ void c_mainwindow::on_timer (wxTimerEvent &ev) {
   //       drysweep.size (), wetsweep_l.size (), wetsweep_r.size ());
   num_passes++;
   if (!dec || !audio) return;
-  
-  // animation stuff etc. that we do every pass
-  // nothing yet, our custom widgets update themselves on redraw events
-  //pn_meter->Refresh (); // not necessary
-  if (pn_meter_in->needs_redraw ()) pn_meter_in->Refresh ();
-  if (pn_meter_out->needs_redraw ()) pn_meter_out->Refresh ();
   
   audiostate s = audio->state;
   
@@ -337,14 +335,26 @@ void c_mainwindow::on_timer (wxTimerEvent &ev) {
     
     int numfiles = list_inputfiles->GetCount ();
     
-    if (filedir_scanning) {
+    //std::cout << "selected tab: " << note_tabs->GetSelection () << "\n";
+    
+    if (note_tabs->GetSelection () == 2) {
+      c_ir_entry *ir = pn_waveform->get_selected ();
+      if (!ir) {
+        set_statustext ("No file selected.");
+      } else {
+        char buf [256];
+        snprintf (buf, 255, "%s: %ld samples, %s.", ir->name.c_str (),
+                   ir->size (), (ir->r.size () ? "stereo" : "mono"));
+        set_statustext (wxString (buf));
+      }
+    } else if (filedir_scanning) {
       btn_inputdir_scan->SetLabel ("Cancel");
       set_statustext ("Scanning...");
     } else if (num_files_ok || num_files_error) {
       snprintf (buf, 255, "Files processed: %d, errors: %d",
                 num_files_ok, num_files_error);
       set_statustext (std::string (buf));
-    }else {
+    } else {
       btn_inputdir_scan->SetLabel ("Scan");
       if (drysweep.size () == 0) {
         set_statustext ("Ready: Please load or generate a dry sweep");
@@ -452,7 +462,6 @@ bool c_mainwindow::init_audio (int samplerate, bool stereo) { CP
   audio = g_app->audio;
   if (!audio) {
     audio = new c_jackclient (dec->prefs);
-    BP
   }
 
   pn_meter_in->set_vudata (&audio->vu_in);
@@ -1686,8 +1695,8 @@ enum {
 // c_customwidget - parent class for other widget types 
  
 BEGIN_EVENT_TABLE (c_customwidget, wxPanel)
-  EVT_PAINT (c_customwidget::on_paint_event)
-  EVT_SIZE (c_customwidget::on_resize_event)
+  EVT_PAINT (c_customwidget::on_paint)
+  EVT_SIZE (c_customwidget::on_resize)
   EVT_MOTION (c_customwidget::on_mousemove)
   EVT_LEFT_DOWN (c_customwidget::on_mousedown_left)
   EVT_LEFT_UP (c_customwidget::on_mouseup_left)
@@ -1707,14 +1716,17 @@ c_customwidget::c_customwidget (wxWindow *p_parent,
                                 int p_id,
                                 wxPoint pos, 
                                 wxSize p_size,
-                                wxBorder border)
-: wxPanel (p_parent, p_id, pos, p_size, border) {
+                                int wtf)
+                                //wxBorder border)
+: wxPanel (p_parent, p_id, pos, p_size, wtf) {
   debug ("start");
   
   visible = true;
   parent = p_parent;
   int font_height = 16;//fm.height ();
   debug ("font_height=%d", font_height);
+  
+  SetBackgroundStyle(wxBG_STYLE_PAINT);
   
   //SetMinClientSize (wxSize (128, (int) (font_height * 2.8)));
   //SetMaxClientSize (wxSize (16384, 16384));
@@ -1731,6 +1743,8 @@ c_customwidget::c_customwidget (wxWindow *p_parent,
   smallboldfont = font;//.MakeSmaller ().MakeBold (); uhh, this function changes fonts inplace
   smallboldfont.MakeSmaller ().MakeBold ();
   
+  in_paintevent = false;  
+  base_image_valid = false;
   mouse_buttons = 0;
   mouse_x = -1;
   mouse_y = -1;
@@ -1738,15 +1752,7 @@ c_customwidget::c_customwidget (wxWindow *p_parent,
   for (int i = 0; i < 8; i++)
     mousedown_x [i] = mousedown_y [i] = -16384; // again arbitrary, but umm... yeah :)
   
-  in_paintevent = false;
-  
   set_opacity (255);
-  debug ("end");
-}
-
-
-c_customwidget::~c_customwidget () {
-  debug ("start");
   debug ("end");
 }
 
@@ -1760,7 +1766,7 @@ void c_customwidget::set_opacity (int p_opacity) {
   setStyleSheet (buf);*/
   
   base_image_valid = false;
-  update ();
+  Refresh (false);
 }
 
 
@@ -1771,37 +1777,76 @@ void c_customwidget::inspect () {
 
 /* Typically, this funciton would react on resize, or other event that
  * invalidates the base image. */
-bool c_customwidget::render_base_image () {
+/*bool c_customwidget::render_base_image () { CP
   //debug ("start");
-  int i, j, k, x, y;
-  int cr, cg, cb;
-  int timeunit, timevalue;
-  float alpha;
-  wxMemoryDC dc;
-  
   GetClientSize (&width, &height);
   if (width <= 0 || height <= 0) return false;
   
-  int gradwidth = width / 5;
   img_base = wxBitmap (width, height, 32);
-  img_overlay = wxBitmap (width, height, 32);
   
   if (!img_base.IsOk ()) return false;
   
+  wxMemoryDC dc;
   dc.SelectObject (img_base);
   dc.SetBackground (col_bg);
-  dc.Clear ();
+  dc.SetTextForeground (col_default_fg);
+  std::string msg = "c_customwidget::render_base_image";
+  wxSize sz = dc.GetTextExtent (msg);
+  dc.DrawText (msg, (width - sz.x) / 2, (height - sz.y) / 2);
+  //dc.Clear ();
   dc.SelectObject (wxNullBitmap);
   
   base_image_valid = true;
   
   //debug ("end");
   return true;
+}*/
+
+
+
+
+bool c_customwidget::render_base_image ()
+{
+  GetClientSize (&width, &height);
+  if (width <= 0 || height <= 0) return false;
+
+  if (!img_base.IsOk () || img_base.GetWidth () != width || 
+      img_base.GetHeight () != height)
+    img_base = wxBitmap (width, height, 32);
+
+  if (!img_base.IsOk ()) return false;
+
+  wxMemoryDC dc;
+  dc.SelectObject (img_base);
+  dc.SetBackground (wxBrush(col_bg));
+  dc.Clear ();
+
+  draw_base (dc);              // <-- virtual hook (no need to call parent)
+  
+  dc.SelectObject (wxNullBitmap);
+
+  base_image_valid = true;
+  return true;
+}
+
+
+void c_customwidget::draw_base (wxDC &dc) {
+  dc.SetBackground (col_bg);
+  dc.SetTextForeground (col_default_fg);
+  std::string msg = "Base class, override\nc_customwidget::render_base_image";
+  wxSize sz = dc.GetTextExtent (msg);
+  dc.DrawText (msg, (width - sz.x) / 2, (height - sz.y) / 2);
+}
+
+
+
+// public API, override for drawing overlay
+void c_customwidget::render_overlay (wxDC &dc) {
 }
 
 /* Typically, this function would react to minor appearance changes, such
  * as visual feedback of mouse events and so on. */
-bool c_customwidget::update (wxWindowDC &dc) {
+/*bool c_customwidget::update (wxWindowDC &dc) {
   int x, y, w, h, i, m, c;
   unsigned char new_md5 [16];
   int new_width, new_height;
@@ -1822,47 +1867,54 @@ bool c_customwidget::update (wxWindowDC &dc) {
   dc.DrawBitmap (img_base, 0, 0);
   //dc.DrawBitmap (img_overlay, 0, 0);
   
-  /* Add overlay/highlight indicators etc.
-   * we would need to do this AFTER render_base_image () */
+  // Add overlay/highlight indicators etc.
+  // we would need to do this AFTER render_base_image ()
   
   //debug ("end");
   return true;
-}
-
-bool c_customwidget::update () {
-  //debug ("start");
-  wxClientDC dc (this);
-  //debug ("end");
-  return update (dc);
-}
-
-/*void c_customwidget::schedule_deletion () {
-  debug ("start");
-  Hide ();
-  deleted = true;
-  debug ("end");
-}
-
-void c_customwidget::idle_callback (wxIdleEvent &ev) {
-  //debug ("start");
-  if (deleted) {
-    debug ("deleted");
-    Destroy ();
-    deleted = false;
-  }
-  //debug ("end");
 }*/
 
-/*void c_customwidget::on_visible (wxShowEvent &ev) {
+/*void c_customwidget::update () { // <--- called to schedule a repaint
+  Refresh (false);
+}*/
+
+void c_customwidget::invalidate_base () {
   base_image_valid = false;
-  update ();
-}*/
+  Refresh (false);
+}
 
-void c_customwidget::on_paint_event (wxPaintEvent &ev) {
-  //debug ("start");
-  wxPaintDC dc (this);
-  update (dc);
-  //debug ("end");
+void c_customwidget::invalidate_overlay () {
+  Refresh (false);
+}
+
+void c_customwidget::invalidate_overlay_rect (const wxRect &r) {
+  RefreshRect (r, false);
+}
+
+void c_customwidget::on_paint (wxPaintEvent &ev) {
+  wxAutoBufferedPaintDC dc (this);
+
+  // Always sync size here; paint can happen without EVT_SIZE in some cases.
+  int new_w, new_h;
+  GetClientSize (&new_w, &new_h);
+  if (new_w <= 0 || new_h <= 0) return;
+
+  if (new_w != width || new_h != height) {
+    width = new_w; height = new_h;
+    base_image_valid = false;
+  }
+  
+  if (!base_image_valid || !img_base.IsOk ()) {
+    render_base_image ();
+  }
+
+  // Compose: base bitmap then overlay primitives.
+  if (img_base.IsOk ())
+    dc.DrawBitmap (img_base, 0, 0, false);
+
+  on_paint (dc); // <--- the api hook
+
+  render_overlay(dc);
 }
 
 // TODO: find out in which cases (if any) this x,y < 0 differs from
@@ -1879,6 +1931,8 @@ void c_customwidget::on_mousemove (wxMouseEvent &ev) {
   mouse_x = ev.GetX ();
   mouse_y = ev.GetY ();
   //debug ("mouse=%d,%d, buttons=%d", mouse_x, mouse_y, mouse_buttons);
+  
+  on_mousemove (mouse_x, mouse_y);
   
   // we do this in derived class before/after calling this function
   //update ();
@@ -1899,10 +1953,21 @@ bool c_customwidget::check_click_distance (int which) {
   return true;
 }
 
-void c_customwidget::on_keypress (wxKeyEvent &ev)    { }
-void c_customwidget::on_keyrelease (wxKeyEvent &ev)  { }
-void c_customwidget::on_idle (wxIdleEvent &ev)       { }
-void c_customwidget::on_visible (wxShowEvent &ev)    { }
+void c_customwidget::on_keypress (wxKeyEvent &ev) {
+  on_keypress (ev.GetUnicodeKey (), ev.GetKeyCode (),
+               ev.GetRawKeyCode (), ev.IsAutoRepeat ());
+}
+
+void c_customwidget::on_keyrelease (wxKeyEvent &ev)  {
+  on_keyrelease (ev.GetUnicodeKey (), ev.GetKeyCode (),
+                 ev.GetRawKeyCode ());
+}
+void c_customwidget::on_idle (wxIdleEvent &ev) { 
+  on_idle ();
+}
+void c_customwidget::on_visible (wxShowEvent &ev) {
+  on_visible ();
+}
 
 void c_customwidget::on_mousedown_left (wxMouseEvent &ev) {
   //debug ("start");
@@ -1915,22 +1980,23 @@ void c_customwidget::on_mousedown_left (wxMouseEvent &ev) {
   mousedown_y [0] = mouse_y;
   mouse_buttons |= 1;
   
-  /*wxPaintDC dc (this);
-  update (dc);*/
-  update ();
+  on_mousedown_left ();
+  
+  Refresh (false);
+  ev.Skip ();
   //debug ("end");
 }
 
 void c_customwidget::on_mouseup_left (wxMouseEvent &ev) {
   //debug ("start");
+  SetFocus ();
   get_xy (ev);
   mouse_buttons &= ~1;
-  update ();
-  /*if (check_click_distance (0)) {
-    debug ("emitting sig_left_clicked");
-    emit sig_left_clicked (this);
-  }*/
-  //debug ("end");
+  
+  on_mouseup_left ();
+  
+  Refresh (false);
+  ev.Skip ();
 }
 
 void c_customwidget::on_mousedown_middle (wxMouseEvent &ev) {
@@ -1939,7 +2005,11 @@ void c_customwidget::on_mousedown_middle (wxMouseEvent &ev) {
   mousedown_x [1] = mouse_x;
   mousedown_y [1] = mouse_y;
   mouse_buttons |= 2;
-  update ();
+  
+  on_mousedown_middle ();
+  
+  Refresh (false);
+  ev.Skip ();
   //debug ("end");
 }
 
@@ -1947,11 +2017,11 @@ void c_customwidget::on_mouseup_middle (wxMouseEvent &ev) {
   //debug ("start");
   get_xy (ev);
   mouse_buttons &= ~2;
-  update ();
-  /*if (check_click_distance (1)) {
-    debug ("emitting sig_middle_clicked");
-    emit sig_middle_clicked (this);
-  }*/
+  
+  on_mouseup_middle ();
+  
+  Refresh (false);
+  ev.Skip ();
   //debug ("end");
 }
 
@@ -1961,7 +2031,11 @@ void c_customwidget::on_mousedown_right (wxMouseEvent &ev) {
   mousedown_x [2] = mouse_x;
   mousedown_y [2] = mouse_y;
   mouse_buttons |= 4;
-  update ();
+  
+  on_mousedown_right ();
+  
+  Refresh (false);
+  ev.Skip ();
   //debug ("end");
 }
 
@@ -1969,12 +2043,11 @@ void c_customwidget::on_mouseup_right (wxMouseEvent &ev) {
   //debug ("start");
   get_xy (ev);
   mouse_buttons &= ~4;
-  update ();  
-  /*if (check_click_distance (2)) {
-    debug ("emitting sig_right_clicked");
-    emit sig_right_clicked (this);
-  }*/
-  //debug ("end");
+  
+  on_mouseup_right ();
+  
+  Refresh (false);
+  ev.Skip ();
 }
 
 void c_customwidget::on_mousewheel (wxMouseEvent &ev) {
@@ -1988,17 +2061,18 @@ void c_customwidget::on_mousewheel (wxMouseEvent &ev) {
     on_mousewheel_v (n);
   }
   
-  //update ();
+  Refresh (false);
+  // no skip (would break scrolling)
   //debug ("end");
 }
 
 // this is triggered by sideways scrolling on a drag pad or similar
 void c_customwidget::on_mousewheel_h (int howmuch) {
-  debug ("howmuch=%d", howmuch);
+  //debug ("howmuch=%d", howmuch);
 }
 
 void c_customwidget::on_mousewheel_v (int howmuch) {
-  debug ("howmuch=%d", howmuch);
+  //debug ("howmuch=%d", howmuch);
 }
 
 void c_customwidget::on_mouseleave (wxMouseEvent &ev) {
@@ -2006,17 +2080,29 @@ void c_customwidget::on_mouseleave (wxMouseEvent &ev) {
   
   mouse_x = -1;
   mouse_y = -1;
-  update ();
+  
+  on_mouseleave ();
+  
+  Refresh (false);
   //emit sig_mouse_leave (this);
   
   //debug ("end");
 }
 
-void c_customwidget::on_resize_event (wxSizeEvent &ev) {
+// EVENT HANDLER (on_resize vs on_resized)
+void c_customwidget::on_resize (wxSizeEvent &ev) {
   //debug ("start");
   
   base_image_valid = false;
-  update ();
+  int new_w = ev.GetSize ().x;
+  int new_h = ev.GetSize ().y;
+  
+  on_resize (new_w, new_h);
+
+  // schedule repaint (no direct drawing)
+  Refresh (false);
+
+  ev.Skip (); // allow wx to continue layout/propagation
   
   //debug ("end");
 }
@@ -2025,25 +2111,18 @@ void c_customwidget::on_resize_event (wxSizeEvent &ev) {
 ////////////////////////////////////////////////////////////////////////////////
 // test/minimal example usage of c_customwidget derived class
 
-bool c_testwidget::render_base_image () { CP
-  if (!c_customwidget::render_base_image ()) return false;
-  wxMemoryDC dc;
-  dc.SelectObject (img_base);
+void c_testwidget::draw_base (wxDC &dc) {
+  //if (!c_customwidget::render_base_image ()) return false;
+  dc.DrawLine (0, 0, width, height);
+  dc.DrawLine (0, height, width, 0);
+}
+
+void c_testwidget::on_paint (wxDC &dc) { CP
   std::string msg = "This is an example use of c_customwidget";
   wxSize sz = dc.GetTextExtent (msg);
   dc.SetTextForeground (col_default_fg);
   dc.DrawText (msg, (width - sz.x) / 2, (height - sz.y) / 2);
-  dc.SelectObject (wxNullBitmap);
-  return true;
 }
-
-bool c_testwidget::update (wxWindowDC &dc) {
-  if (!c_customwidget::update (dc)) return false;
-  dc.SetPen (wxPen (*wxRED));
-  dc.DrawLine (0, 0, width, height);
-  return true;
-}
-
 
 ////////////////////////////////////////////////////////////////////////////////
 // c_meterwidget
@@ -2065,10 +2144,6 @@ void c_meterwidget::set_vudata (c_vudata *v) {
 
 c_vudata *c_meterwidget::get_vudata () {
   return data;
-}
-
-void c_meterwidget::on_resize_event (wxSizeEvent &ev) { CP
-  c_customwidget::on_resize_event (ev);
 }
 
 void c_meterwidget::render_gradient_bar () {
@@ -2100,7 +2175,7 @@ void c_meterwidget::render_gradient_bar () {
     lutG[i] = 255.0f * (1.0f - t);
     lutB [i] = 0;
   }
-  CP  
+  
   // ...now write actual pixels to bitmap
   wxAlphaPixelData pdata (img_bar);
   wxAlphaPixelData::Iterator p (pdata);
@@ -2127,10 +2202,8 @@ void c_meterwidget::set_db_scale (float f) {
     data->set_db_scale (f);
 }
 
-bool c_meterwidget::render_base_image () {
+void  c_meterwidget::draw_base (wxDC &dc) {
   //debug ("start");
-  if (!c_customwidget::render_base_image ()) return false;
-  
   //if (rec_size < 0) rec_size = (vertical ? width : height);
   //if (clip_size < 0) clip_size = (vertical ? rec_size / 2 : rec_size * 2);
   
@@ -2145,9 +2218,6 @@ bool c_meterwidget::render_base_image () {
     ln = width;
     th = height;
   }
-  
-  wxMemoryDC dc; 
-  dc.SelectObject (img_base);
   
   int crk = 0;
   
@@ -2227,31 +2297,32 @@ bool c_meterwidget::render_base_image () {
     "XRUN",
     ""
   };
+  wxMemoryDC mdc;
+  
   for (int i = 0; i < (int) meterwarn::MAX; i++) {
-    meterwarnsize [i] = dc.GetTextExtent (meterwarntext [i]);
+    meterwarnsize [i] = mdc.GetTextExtent (meterwarntext [i]);
   }
-  dc.SelectObject (wxNullBitmap);
+  mdc.SelectObject (wxNullBitmap);
   if (!vertical) {
     float ps = (float) std::min (width, height);
     ps /= 1.6;
     tinyfont.SetPointSize (ps);
-    dc.SetFont (tinyfont);
+    mdc.SetFont (tinyfont);
     for (int i = 0; i < (int) meterwarn::MAX; i++) {
       int w = meterwarnsize [i].x;
       int h = meterwarnsize [i].y;
-      debug ("new bitmap, w=%d, h=%d", w, h);
+      //debug ("new bitmap, w=%d, h=%d", w, h);
       img_warning [i] = wxBitmap (w * 4 / 3, h, 32);
-      dc.SelectObject (img_warning [i]);
-      dc.SetTextForeground (wxColour (192, 0, 0));
-      dc.SetBackground (wxColour (0, 0, 0, 0));
-      dc.Clear ();
-      dc.DrawText (meterwarntext [i], 0, 0);
-      dc.SelectObject (wxNullBitmap);
+      mdc.SelectObject (img_warning [i]);
+      mdc.SetTextForeground (wxColour (192, 0, 0));
+      mdc.SetBackground (wxColour (0, 0, 0, 0));
+      mdc.Clear ();
+      mdc.DrawText (meterwarntext [i], 0, 0);
+      mdc.SelectObject (wxNullBitmap);
     }
   }
              
   //debug ("end");
-  return true;
 }
 
 // at: x start pos if vertical, y pos if horiz
@@ -2314,10 +2385,9 @@ void c_meterwidget::draw_bar (wxDC &dc, int at, int th, bool is_r,
   //debug ("end");
 }
 
-bool c_meterwidget::update (wxWindowDC &dc) {
+void c_meterwidget::on_paint (wxDC &dc) {
   //debug ("start");
-  if (!c_customwidget::update (dc)) return false;
-  if (!data) return false;
+  if (!data) return;
   
   // meter bars
   if (stereo) {
@@ -2358,7 +2428,7 @@ bool c_meterwidget::update (wxWindowDC &dc) {
   
   data->acknowledge ();
   //debug ("end");
-  return true;
+  return;
 }
 
 void c_meterwidget::set_stereo (bool b) {
@@ -2367,29 +2437,267 @@ void c_meterwidget::set_stereo (bool b) {
   Refresh ();
 }
 
+
 ////////////////////////////////////////////////////////////////////////////////
 // c_waveformwidget
 
 c_waveformwidget::c_waveformwidget (wxWindow *parent,
-                              int id,
-                              wxPoint pos,
-                              wxSize size,
-                              int wtf)
-: c_customwidget (parent, id, pos, size, (wxBorder) wtf) {
+                                    int id,
+                                    wxPoint pos,
+                                    wxSize size,
+                                    int i) // <-- WXWIDGETS PLZ DECIDE WTF YOU
+                                           //     WANT HERE, INT OR WXBORDER
+: c_customwidget (parent, id, pos, size, (wxBorder) i) { CP
+  l = new c_waveformview (this);
+  r = new c_waveformview (this);
+}
+
+c_waveformwidget::~c_waveformwidget () { CP
+  if (l) delete l;
+  if (r) delete r;
+}
+
+bool c_waveformwidget::stereo () {
+  if (!ir || ir->r.size () <= 0)
+    return false;
+    
+  return true;
+}
+
+// event handlers: mostly passthrough for c_waveformview
+
+void c_waveformwidget::on_resize (int x, int y) {
+  debug ("x=%d, y=%d", x, y);
+  if (l) l->on_resize (x, y);
+  if (r) r->on_resize (x, y);
+}
+
+void c_waveformwidget::on_idle () {
+  if (l) l->on_idle ();
+  if (r) r->on_idle ();
+}
+
+void c_waveformwidget::on_mousedown_left () { CP
+  if (l && mouse_in (l->rect)) l->on_mousedown_left ();
+  if (r && mouse_in (r->rect)) r->on_mousedown_left ();
+  invalidate_base ();
+}
+
+void c_waveformwidget::on_mousedown_right () { CP
+  if (l && mouse_in (l->rect)) l->on_mousedown_right ();
+  if (r && mouse_in (r->rect)) r->on_mousedown_right ();
+}
+
+void c_waveformwidget::on_mousewheel_h (int howmuch) { CP
+  if (l && mouse_in (l->rect)) l->on_mousewheel_h (howmuch);
+  if (r && mouse_in (r->rect)) r->on_mousewheel_h (howmuch);
+}
+
+void c_waveformwidget::on_mousewheel_v (int howmuch) { CP
+  if (l && mouse_in (l->rect)) l->on_mousewheel_v (howmuch);
+  if (r && mouse_in (r->rect)) r->on_mousewheel_v (howmuch);
+  invalidate_base ();
+}
+
+void c_waveformwidget::on_mousemove (int x, int y) {
+  if (l && mouse_in (l->rect))
+    l->on_mousemove (mouse_x - l->rect.x, mouse_y - l->rect.y);
+  
+  if (r && mouse_in (r->rect))
+    r->on_mousemove (mouse_x - r->rect.x, mouse_y - r->rect.y);
+}
+
+// rest of passthrough functions
+
+bool c_waveformwidget::select_ir (c_ir_entry *entry) { CP
+  ir = entry;
+  bool ret = true;
+
+  if (!ir)
+    return false;
+  
+  if (ir->l.size () > 0) {
+    CP
+    if (l) ret = l->select_waveform (&ir->l);
+    CP
+    if (!ret) return false;
+  }
+
+  if (ir->r.size () > 0) {
+    CP
+    if (r) r->select_waveform (&ir->r);
+    CP
+  }
+  
+  base_image_valid = false;
+  Refresh ();
+  
+  return true;
+}
+
+bool c_waveformwidget::unselect_ir () { CP
+  l->unselect_waveform ();
+  r->unselect_waveform ();
+  
+  ir = NULL;
+  
+  Refresh ();
+  return true;
+}
+
+c_ir_entry *c_waveformwidget::get_selected () {
+  return ir;
+}
+
+void c_waveformwidget::zoom_full_x () { CP
+  if (l) l->zoom_full_x ();
+  if (r) r->zoom_full_x ();
+}
+
+void c_waveformwidget::zoom_full_y () { CP
+  if (l) l->zoom_full_y ();
+  if (r) r->zoom_full_y ();
+}
+
+bool c_waveformwidget::have_l () {
+  if (!l) return false;
+  if (!l->wb) return false;
+  if (l->wb->size () <= 0) return false;
+  return true;
+}
+
+bool c_waveformwidget::have_r () {
+  if (!r) return false;
+  if (!r->wb) return false;
+  if (r->wb->size () <= 0) return false;
+  return true;
+}
+
+
+void c_waveformwidget::draw_base (wxDC &dc) {
+  debug ("width=%d, height=%d", width, height);
+  if (ir) {
+    if (have_l () && !have_r ()) { CP
+      l->rect = wxRect (4, 4, width - 8, height - 8);
+    }
+    if (have_r ()) {
+      l->rect = wxRect (4, 4, width - 8, height / 2 - 12);
+      r->rect = wxRect (4, height / 2 + 12 , width - 8, height / 2 - 12);
+    }
+    wxPoint old_origin = dc.GetDeviceOrigin ();
+
+    if (have_l ()) { CP
+      dc.SetClippingRegion (l->rect);
+      dc.SetDeviceOrigin (l->rect.x, l->rect.y);
+      l->on_resize (l->rect.width, l->rect. height);
+      l->draw_grid (dc);
+      l->draw_waveform (dc, ir->l);
+      dc.SetDeviceOrigin (old_origin.x, old_origin.y);
+      dc.DestroyClippingRegion ();
+    }
+    if (have_r ()) { CP
+      dc.SetClippingRegion(r->rect);
+      dc.SetDeviceOrigin(r->rect.x, r->rect.y);
+      r->on_resize (r->rect.width, r->rect.height);
+      dc.SetDeviceOrigin (old_origin.x, old_origin.y);
+      dc.DestroyClippingRegion ();
+      r->draw_grid (dc); 
+      r->draw_waveform (dc, ir->r);
+    }
+  } else {
+    //debug ("no IR file selected");
+  }
+}
+
+void c_waveformwidget::on_paint (wxDC &dc) {
+  wxPoint old_origin = dc.GetDeviceOrigin ();
+  
+  if (have_l ()) {
+    dc.SetDeviceOrigin (l->rect.x, l->rect.y);
+    dc.SetClippingRegion (l->rect);
+    l->on_paint (dc);
+    dc.DestroyClippingRegion ();
+    dc.SetDeviceOrigin (old_origin.x, old_origin.y);
+  }
+  if (have_r ()) {
+    dc.SetDeviceOrigin (r->rect.x, r->rect.y);
+    dc.SetClippingRegion (r->rect);
+    r->on_paint (dc);
+    dc.DestroyClippingRegion ();
+    dc.SetDeviceOrigin (old_origin.x, old_origin.y);
+  }
+  
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+// c_waveformview
+
+// pixel to sample/amplitude mapping, given view size/pos:
+#define Y_TO_AMP(y,vpos,vsz,h) ((vpos) - ((float)(y) / (float)((h) - 1)) * (vsz))
+#define AMP_TO_Y(a,vpos,vsz,h) ((int)lroundf((( (vpos) - (a)) / (vsz)) * ((h) - 1)))
+#define X_TO_SMP(x,vpos,vsz,w) ((vpos) + ((float)(x) / (float)((w) - 1)) * (vsz))
+#define SMP_TO_X(s,vpos,vsz,w) ((int)lroundf((((float)(s) - (vpos)) / (vsz)) * ((w) - 1)))
+
+c_waveformview::c_waveformview (c_customwidget *_parent) { CP
   CP
+  parent = _parent;
   // for now, hard-coded colors for our waveform view
-  col_bezel1 = wxColour (64, 64, 64, 128);
-  col_bezel2 = wxColour (255, 255, 255, 128);
-  col_bg = wxColour (0, 0, 0);
-  col_fg = wxColour (0, 128, 32);
+  //col_bezel1 = wxColour (64, 64, 64, 128);
+  //col_bezel2 = wxColour (255, 255, 255, 128);
+  //col_bg = wxColour (0, 0, 0);
+  //col_fg = wxColour (0, 128, 32);
+  
+  col_wave_fg        = wxColour (  0, 255,   0, 255);
+  col_wave_bg        = wxColour (  0,   0,   0, 255);
+  col_waveselect_fg  = wxColour (255, 255, 255,  64);
+  col_waveselect_fg  = wxColour (  0, 255,   0,  64);
+  col_cursor         = wxColour (255, 255,   0, 255);
+  col_dothandle      = wxColour (  0, 255,   0, 255);
+  col_dothighlight   = wxColour (255, 255,   0, 255);
+  col_wavezoom       = wxColour (  0, 128,   0, 255);
+  col_baseline       = wxColour (255, 255, 255, 255);
+  col_grid           = wxColour (  0,   0,  64, 255);
+  
+}
+
+
+float c_waveformview::y_to_amplitude (int y) {
+  return Y_TO_AMP (y, viewpos_y, viewsize_y, height);
+}
+
+int c_waveformview::amplitude_to_y (float amp) {
+  return AMP_TO_Y (amp, viewpos_y, viewsize_y, height);
+}
+
+size_t c_waveformview::x_to_samplepos (int x) {
+  return X_TO_SMP (x, viewpos_x, viewsize_x, width);  
+}
+
+int c_waveformview::samplepos_to_x (size_t s) {
+  return SMP_TO_X (s, viewpos_x, viewsize_x, width);
+}
+
+void c_waveformview::on_idle () {
+}
+
+void c_waveformview::on_resize (int w, int h) {
+  width = w;
+  height = h;
+}
+
+void c_waveformview::on_mousedown_left () { CP
+}
+
+void c_waveformview::on_mousedown_right () { CP
 }
 
 // TODO: horizontal scrolling on sideways drag pad movement
-void c_waveformwidget::on_mousewheel_h (int howmuch) {
+void c_waveformview::on_mousewheel_h (int howmuch) {
   debug ("howmuch=%d", howmuch);
 }
 
-void c_waveformwidget::on_mousewheel_v (int howmuch) {
+void c_waveformview::on_mousewheel_v (int howmuch) {
   debug ("howmuch=%d, viewsize_x=%d", howmuch, viewsize_x);
   
   if (g_app->ctrl && g_app->shift) {
@@ -2421,140 +2729,104 @@ void c_waveformwidget::on_mousewheel_v (int howmuch) {
   }
 }
 
-void c_waveformwidget::on_keypress (wxKeyEvent &ev) { CP
-}
-
-void c_waveformwidget::on_keyrelease (wxKeyEvent &ev) { CP
-}
-
-void c_waveformwidget::on_visible (wxShowEvent &ev) { CP
-}
-
-void c_waveformwidget::on_idle (wxIdleEvent &ev) {
-}
-
-void c_waveformwidget::on_mousedown_left (wxMouseEvent &ev) { CP
-}
-
-void c_waveformwidget::on_mousedown_right (wxMouseEvent &ev) { CP
-}
-
-/*void c_waveformwidget::on_mousemove (wxMouseEvent &ev) {
+/*void c_waveformview::on_mousemove (wxMouseEvent &ev) {
   c_customwidget::on_mousemove (ev);
   //base_image_valid = false;
   //Refresh ();
 }*/
 
-void c_waveformwidget::zoom_full_x () {
-  if (!ir) return;
-  viewsize_x = ir->size ();
+void c_waveformview::zoom_full_x () { CP
+  if (!wb) return;
+  viewsize_x = wb->size ();
   viewpos_x = 0;
-  base_image_valid = false;
-  Refresh ();
 }
 
-void c_waveformwidget::zoom_full_y () {
-  if (!ir) return;
+void c_waveformview::zoom_full_y () { CP
+  if (!wb) return;
+  
   viewsize_y = 2.0;
   viewpos_y = 1.0;
-  base_image_valid = false;
-  Refresh ();
 }
 
-void c_waveformwidget::scroll_left_by (int howmuch) {
+void c_waveformview::scroll_left_by (int howmuch) { CP
+  if (!wb) return;
   viewpos_x -= howmuch;
-  int max = ir->size () - viewsize_x;
+  int max = wb->size () - viewsize_x;
   if (viewpos_x < 0) viewpos_x = 0;
   if (viewpos_x > max)  viewpos_x = max;
   debug ("viewpos=%d", viewpos_x);
-  base_image_valid = false;
-  Refresh ();
 }
 
-void c_waveformwidget::scroll_right_by (int howmuch) {
+void c_waveformview::scroll_right_by (int howmuch) { CP
   scroll_left_by (howmuch * -1);
 }
 
-void c_waveformwidget::scroll_up_by (float howmuch) {
+void c_waveformview::scroll_up_by (float howmuch) { CP
+  if (!wb) return;
   viewpos_y += howmuch;
-  float max_scroll_y = 1.0 - viewsize_y;// - (1 - (1/viewpos_y));
+  /*float max_scroll_y = 1.0 - viewsize_y;// - (1 - (1/viewpos_y));
   
   if (viewpos_y < -1) viewpos_y = -1;
-  if (viewpos_y > max_scroll_y) viewpos_y = max_scroll_y;
-  base_image_valid = false;
-  Refresh ();
+  if (viewpos_y > max_scroll_y) viewpos_y = max_scroll_y;*/
+  clamp_coords ();
   
   debug ("viewpos_y=%f, viewsize_y=%f", viewpos_y, viewsize_y);
 }
 
-void c_waveformwidget::clamp_coords () {
-  float min_size_y = 0.0001;
-  if (!ir) return;
+void c_waveformview::scroll_down_by (float howmuch) {  CP scroll_up_by (-1 * howmuch); }
+
+void c_waveformview::clamp_coords () { CP
+  if (!wb) return;
   
   if (viewpos_y < -1.0) viewpos_y = -1.0;
   if (viewpos_y >  1.0) viewpos_y =  1.0;
-  if (viewsize_y < min_size_y) viewsize_y = min_size_y;
+  if (viewsize_y < min_viewsize_y) viewsize_y = min_viewsize_y;
   if (viewsize_y > 2.0) viewsize_y = 2.0;
 
-  int sz = ir->size ();
+  int sz = wb->size ();
   if (viewsize_x < 32) viewsize_x = 32;
   if (viewsize_x > sz) viewsize_x = sz;
   if (viewpos_x < 0) viewpos_x = 0;
   if (viewpos_x > sz - viewsize_x) viewpos_x = sz - viewsize_x;
 }
 
-void c_waveformwidget::scroll_down_by (float howmuch) { scroll_up_by (-1 * howmuch); }
-
-void c_waveformwidget::zoom_y (float ratio, int around_px) {
+void c_waveformview::zoom_y (float ratio, int around_px) { CP
+  if (!wb) return;
   float min_size_y = 0.0001;
-  float t = (float) around_px / (float) (height - 1);
+  float t = (float) around_px / (float) (height - 1); // TODO: fix this (height) for stereo
   float anchor_at = viewpos_y - t * viewsize_y;
 
   // apply zoom
   float new_size = viewsize_y / ratio;
-  if (new_size < min_size_y) new_size = min_size_y;
-  if (new_size > 2.0) new_size = 2.0;
 
   // solve: anchor_at = newViewpos - t * new_size
   viewpos_y = anchor_at + t * new_size;
   viewsize_y = new_size;
 
-  // clamp so visible stays within [-1..+1]
   clamp_coords ();
-  //if (viewpos_y < -1.0) viewpos_y = -1.0;
-  //if (viewpos_y >  1.0) viewpos_y =  1.0;
-  
-  base_image_valid = false;
-  Refresh ();
   debug ("ratio=%f, viewpos_y=%f", ratio, viewpos_y);  
 }
 
-void c_waveformwidget::zoom_x (float ratio) {
+void c_waveformview::zoom_x (float ratio) { CP
+  if (!wb) return;
   float vs = viewsize_x;
   float oldviewsize_x = viewsize_x;
   debug ("ratio=%f", ratio);
   
-  if (!ir) return;
+  if (!wb) return;
   
-  if (ratio > 0)
-    if (viewsize_x <= min_viewsize_x)
-      return;
-    else
-      viewsize_x = (int) (vs / ratio);
-  else
-    if (viewsize_x >= ir->size ())
-      return;
-    else
-      viewsize_x = (int) (vs * ratio * -1);
+  if (ratio < 0)
+  ratio = -1 / ratio;
+  
+  viewsize_x /= ratio;
   
   float xpos = (float) mouse_x / (float) width;
   viewpos_x += (oldviewsize_x - viewsize_x) * xpos;
   
-  base_image_valid = false;
-  Refresh ();
+  clamp_coords ();
 }
 
-bool c_waveformwidget::render_base_image () {
+/*bool c_waveformview::render_base_image () {
   if (!c_customwidget::render_base_image ()) return false;
   // draw grid
   int w2 = width / 2;
@@ -2562,49 +2834,26 @@ bool c_waveformwidget::render_base_image () {
   wxMemoryDC dc;
   dc.SelectObject (img_base);
   
-  pen_wavefg = wxPen (wxColour (0, 255, 0));
-  brush_wavefg = wxBrush (wxColour (0, 255, 0));
-  pen_wavezoom = wxPen (wxColour (0, 128, 0));
+  if (ir) {
+    // background
+    dc.SetBrush (wxBrush (col_wave_bg));
+    dc.SetPen (wxPen (col_wave_bg));
+    dc.DrawRectangle (0, 0, width, height);
+    
+    draw_grid (dc);
+    draw_waveform (dc, ir->l);
   
-  if (0&&!ir) {
-    dc.SetPen (wxPen (wxTransparentColor));
-    dc.SetBrush (wxBrush (col_default_bg));
-    dc.SetPen (col_default_fg);
-    dc.SetTextForeground (col_default_fg);
-        
-    wxFont font = GetFont ();
-    std::string msg = "(no impulse response file)";
-    wxSize sz = dc.GetTextExtent (msg);
-    dc.DrawText (msg, w2 - sz.x / 2, h2 - sz.y / 2);
-    return true;
-  }
-  
-  // background
-  dc.SetBrush (wxBrush (col_default_bg));
-  dc.SetPen (wxPen (col_default_bg));
-  dc.DrawRectangle (0, 0, width, height);
-  
-  // baseline
-  dc.SetPen (wxPen (col_fg));
-  
-  if (ir && ir->r.size () == 0) {
-    draw_border (dc, 1, 1, width - 2, height - 4);
-    draw_waveform (dc, ir->l, 4, 4, width - 8, height - 8);
   } else {
-    draw_border (dc, 1, 1, width - 2, height / 2 - 4);
-    draw_border (dc, 1, height / 2 + 4, width - 2, height / 2 - 4);
-    draw_waveform (dc, ir->l, 4, 1, width - 2, height / 2 - 8);
-    draw_waveform (dc, ir->r, 4, height / 2 + 4, width - 2, height / 2 - 8);
+    // no IR selected
+    debug ("no IR selected");
   }
+  
   dc.SelectObject (wxNullBitmap);
   return true;
-}
+}*/
 
-void on_mousewheel (wxMouseEvent &ev) {
-
-}
-
-void c_waveformwidget::draw_border (wxDC &dc, int x, int y, int w, int h) {CP
+// THIS WILL MOVE TO MULTI-CHANNEL CONTAINER CLASS
+/*void c_waveformview::draw_border (wxDC &dc, int x, int y, int w, int h) {CP
   if (x < 0) x = 0;
   if (y < 0) y = 0;
   if (w < 0) w = width;
@@ -2627,111 +2876,144 @@ void c_waveformwidget::draw_border (wxDC &dc, int x, int y, int w, int h) {CP
   dc.SetPen (wxPen (col_default_bg));
   dc.DrawLine (x + 1, y + h, x + w - 1, y + h);         // bottom inner
   dc.DrawLine (x + w, y + 1, x + w, y + h);             // right inner
-}
+}*/
 
-bool c_waveformwidget::update (wxWindowDC &dc) {
-  if (!c_customwidget::update (dc)) return false;
-  /*dc.SetPen (wxPen (col_default_fg));
+void c_waveformview::on_paint (wxDC &dc) {
+  //debug ("width=%d, height=%d", width, height);
+  int thr = 8, i;
+  struct sxy *h = NULL;
+  size_t s = dothandles.size ();
   
+  for (i = 0; i < s; i++) {
+    if (mouse_x > dothandles [i].x - thr && mouse_x < dothandles [i].x + thr &&
+        mouse_y > dothandles [i].y - thr && mouse_y < dothandles [i].y + thr) {
+      h = &dothandles [i];
+      break;
+    }
+  }
   
-  
-  std::string name;
-  if (ir) name = ir->name;
-  else name = "(no IR selected)";
-  wxSize sz = dc.GetTextExtent (name);
-  dc.DrawText (name, 4, height - sz.y - 4);*/
-  return true;
+  if (h) {
+    //debug ("handle: %d,%d,%d", h->x, h->y, h->s);
+    dc.SetBrush (wxBrush ());
+    dc.SetPen (wxPen (col_dothighlight));
+    int dotsz = 12;
+    dc.DrawRectangle (h->x - dotsz / 2, h->y - dotsz / 2, dotsz, dotsz);
+  }
 }
 
-// pixel to sample/amplitude mapping, given view size/pos:
-#define Y_TO_AMP(y,vpos,vsz,h) ((vpos) - ((float)(y) / (float)((h) - 1)) * (vsz))
-#define AMP_TO_Y(a,vpos,vsz,h) ((int)lroundf((( (vpos) - (a)) / (vsz)) * ((h) - 1)))
-#define X_TO_SMP(x,vpos,vsz,w) ((vpos) + ((float)(x) / (float)((w) - 1)) * (vsz))
-#define SMP_TO_X(s,vpos,vsz,w) ((int)lroundf((((float)(s) - (vpos)) / (vsz)) * ((w) - 1)))
-  
-
-float c_waveformwidget::y_to_amplitude (int y) {
-  return Y_TO_AMP (y, viewpos_y, viewsize_y, height);
+size_t c_waveformview::get_dot_under_mouse () {
+  return -1;
 }
 
-int c_waveformwidget::amplitude_to_y (float amp) {
-  return AMP_TO_Y (amp, viewpos_y, viewsize_y, height);
-}
-
-size_t c_waveformwidget::x_to_samplepos (int x) {
-  return X_TO_SMP (x, viewpos_x, viewsize_x, width);  
-}
-
-int c_waveformwidget::samplepos_to_x (size_t s) {
-  return SMP_TO_X (s, viewpos_x, viewsize_x, width);
-}
-
-// viewsize ie. 2.0 -> no zoom, 0.5 -> 25% y range visible etc.
-// viewpos: top of viewsize in +1..-1
-static int baseline_pos (int h, float viewsize, float viewpos) {
-  // Convert baseline from world-space to screen-space
-  float t = (0.5 - viewpos) / viewsize;   // normalized position in view
-  float baseline_px = t * (h - 1);
-  debug ("h=%d, viewsize=%f, viewpos=%f", h, viewsize, viewpos);
-  debug ("t=%f, baseline_px=%f", t, baseline_px);
-  
-  return (int) std::lround (baseline_px);
-}
-
-static int baseline_from_mouse (int y, int h, float viewsize, float viewpos) {
-  int baseline_y = baseline_pos (h, viewsize, viewpos);
-  int ret = baseline_y - y;   // positive = baseline is below mouse
-  debug ("y=%d, ret=%d", y, ret);
-  return ret;
-}
-
-void c_waveformwidget::on_mousemove (wxMouseEvent &ev) {
-  c_customwidget::on_mousemove (ev);
-  int d = baseline_from_mouse (mouse_y, height, 0.5, 0.25);
-  CP
+void c_waveformview::on_mousemove (int x, int y) {
+  mouse_x = x;
+  mouse_y = y;
   int samplepos = x_to_samplepos (mouse_x);
-  CP
   float sampleamp = y_to_amplitude (mouse_y);
-  if (ir && samplepos <= ir->l.size ())
-    debug ("sample %d of %d: %f, d=%d", samplepos, ir->size (), ir->l [samplepos], d);
+  //if (ir && samplepos <= ir->l.size ())
+  //  debug ("sample %d of %d: %f", samplepos, ir->size (), ir->l [samplepos]);
   //base_image_valid = false;
   //Refresh ();
 }
 
-void c_waveformwidget::draw_waveform (wxDC &dc, c_wavebuffer &buf,
-                                      int tx, int ty, int tw, int th) {
-  if (!ir || ir->l.size () <= 0 || viewsize_x <= 0 || tw < 4 || th < 4)
+void c_waveformview::draw_grid (wxDC & dc) {
+  int yt, yb, last_yt = 0, last_yb = 0;
+  float l;
+  int distance_thresh = height / 64;
+  
+  dc.SetBrush (wxBrush (col_wave_bg));
+  dc.SetPen (wxPen (col_wave_bg));
+  dc.DrawRectangle (0, 0, width, height);
+  
+  dc.SetPen (wxPen (col_baseline));
+  yb = AMP_TO_Y (0, viewpos_y, viewsize_y, height);
+  dc.DrawLine (0, yb, width, yb);
+  
+  dc.SetPen (wxPen (col_grid));
+  for (int i = 0; i < 18; i += 6) {
+    l = db_to_linear (i * -1);
+    yt = AMP_TO_Y (l, viewpos_y, viewsize_y, height);
+    yb = AMP_TO_Y (l * -1, viewpos_y, viewsize_y, height);
+    //debug ("i=%d, l=%f, yt=%d, yb=%d", i, l, yt, yb);
+    if (yt >= 0 && yt < height) {
+      if (abs (yt - last_yt) > distance_thresh) {
+        dc.DrawLine (0, yt, width, yt);
+        last_yt = yt;
+      }
+    }
+    if (yb >= 0 && yb < height) {
+      if (abs (yb - last_yb) > distance_thresh) {
+        dc.DrawLine (0, yb, width, yb);
+        last_yb = yb;
+      }
+    }
+  }
+}
+
+void c_waveformview::draw_waveform (wxDC &dc, c_wavebuffer &buf) {
+  if (!wb || wb->size () <= 0 || viewsize_x <= 0 || width < 4 || height < 4)
     return; // nothing to draw / not enough space
   
+  debug ("width=%d, height=%d", width, height);
   debug ("viewpos_x=%ld, viewsize_x=%ld, viewpos_y=%f, viewsize_y=%f",
          viewpos_x, viewsize_x, viewpos_y, viewsize_y);
   
-  dc.SetPen (pen_wavefg);
-  
   int dotmode_thr = 16; // min. pixels between samples when zoomed way in
-  if (viewsize_x <= 0) viewsize_x = buf.size ();
-  int sz = viewsize_x;
+  int sz = viewsize_x + 1;
   int pos = viewpos_x;
+  size_t sel_begin, sel_end;
+  int sel_begin_px, sel_end_px;
+  int w = width - 1;
+  int h = height - 1;
+  int i, j, wl, wr, si, lx, ly, x, y, dh;
+  float hi, lo, hi_min, hi_max, lo_min, lo_max, spos, xpos, v, z;
+  int cursor_px = -1;
+  bool oob_hi = false, oob_lo = false;
+  bool over = false, under = false;
+  
+  int pps = sel_begin_px + SMP_TO_X (viewpos_x + 1, viewpos_x, viewsize_x, w) -
+           (sel_begin_px + SMP_TO_X (viewpos_x, viewpos_x, viewsize_x, w));
+  
+  if (viewsize_x <= 0) viewsize_x = buf.size ();
+  
   if (sz < 0) sz = 0;
   if (sz > buf.size ()) sz = buf.size ();
   if (pos < 0) pos = 0;
   if (pos > buf.size () - sz) pos = buf.size () - sz;
   if (pos < 0 || pos > buf.size () - sz) return;
   
-  //int sz = buf.size ();
-  int w = tw - 1;
-  int h = th - 1;
-  int i, j, wl, wr, si, lx, ly, x, y, dh;
-  float hi, lo, hi_min, hi_max, lo_min, lo_max, spos, xpos, v, z;
-  bool oob_hi = false, oob_lo = false;
-  bool over = false, under = false;
+  if (dothandles.size () > 0) {
+    dothandles [0].x = -1;
+    dothandles [0].y = -1;
+    dothandles [0].x = -1;
+  }
   
+  if (cursor >= 0 && selection < sz && selection >= 0 && selection < sz) {
+    // samples where to draw selection rect
+    sel_begin = std::min (cursor, selection);
+    sel_end = std::max (cursor, selection);
+    // clamp to visible
+    sel_begin = std::max ((size_t) sel_begin, (size_t) viewpos_x);
+    sel_end = std::min ((size_t) sel_end, (size_t) (viewpos_x + viewsize_x));
+    // convert to pixel coords
+    sel_begin_px = SMP_TO_X (sel_begin, viewpos_x, viewsize_x, w);
+    sel_end_px = SMP_TO_X (sel_end, viewpos_x, viewsize_x, w);
+    
+    
+    dc.SetBrush (wxBrush (col_waveselect_fg));
+    dc.DrawRectangle (sel_begin_px - pps / 2, 0, sel_end_px - sel_begin_px + pps / 2, height);
+  }
+  //debug ("cursor=%ld, cursor_px=%d, pps=%d", cursor, cursor_px, pps);
+  
+  dc.SetPen (wxPen (col_wave_fg));
+    
   // now we decide how to draw depending on zoom level:
   //   A) process each block of samples for given pixel
   //   B) draw a line to each pixel from last
   //   C) draw a line to each sample from last
-  //   D) "dot edit" mode: like C except add "handle" for each samlple
-  if (sz > w * 4) { // more than 2 samples per pixel: per block from wl to wr
+  //   D) "dot edit" mode: like C except add "handle" for each visible sample
+  
+  if (sz > w * 2) { // more than 2 samples per pixel: per block from wl to wr
     debug ("branch A: >= 1 samples per pixels");
     for (i = 1; i < w; i++) { // this one was a handful!!!
       over = under = oob_hi = oob_lo = false;
@@ -2761,9 +3043,9 @@ void c_waveformwidget::draw_waveform (wxDC &dc, c_wavebuffer &buf,
       lo_max = AMP_TO_Y (lo_max, viewpos_y, viewsize_y, h);
       lo_min = AMP_TO_Y (lo_min, viewpos_y, viewsize_y, h);
       
-      dc.DrawLine (tx + i, ty + hi_max, tx + i, ty + lo_min);
+      dc.DrawLine (i, hi_max, i, lo_min);
     }
-  } else if (sz > w) { // zigzag between pixels
+  } else if (sz > w / 2) { // zigzag between pixels
     debug ("branch B: sz > w (1 to 2 samples per pixel)");
     y = AMP_TO_Y (buf [viewpos_y], viewpos_y, viewsize_y, h);
     for (i = 0; i < w - 1; i++) {
@@ -2772,21 +3054,21 @@ void c_waveformwidget::draw_waveform (wxDC &dc, c_wavebuffer &buf,
       v = buf [pos + si];
       y = AMP_TO_Y (v, viewpos_y, viewsize_y, h);
       if (y < h && y >= 0 && i > 0) {
-        dc.DrawLine (tx + i, ty + ly, tx + i + 1, y);
+        dc.DrawLine (i, ly, i + 1, y);
       }
       ly = y;
     }
-  } else if (sz > w / dotmode_thr) { // zigzag between samples
-    debug ("branch C: sz > w (1 to 2 samples per pixel)");
+  } else if (sz > w / dotmode_thr) { // zigzag bewidtheen samples
+    debug ("branch C: sz > w / dotmode_thr (1 to 2 samples per pixel)");
     lx = SMP_TO_X (pos, pos, viewsize_y, w);
     ly = AMP_TO_Y (buf [pos], viewpos_y, viewsize_y, h);
     for (i = 1; i < sz; i++) {
       xpos = (float) (i - 1) / (float) viewsize_x;
       v = buf [i + pos];
-      x = SMP_TO_X (i + pos, pos, viewsize_x, w);
+      x = SMP_TO_X (i + pos, pos, viewsize_x, w) - pps / 2;
       y = AMP_TO_Y (v, viewpos_y, viewsize_y, h);
       if (y < h && y >= 0)
-        dc.DrawLine (tx + lx, ty + ly, tx + x, ty + y);
+        dc.DrawLine (lx, ly, x, y);
       lx = x;
       ly = y;
     }
@@ -2795,31 +3077,31 @@ void c_waveformwidget::draw_waveform (wxDC &dc, c_wavebuffer &buf,
     int pxps = w / sz;
     int nh = 1 + (w / pxps);
     dothandles.resize (nh);
-    dc.SetPen (pen_wavezoom);
+    dc.SetPen (wxPen (col_wavezoom));
     dh = 0;
     lx = SMP_TO_X (pos, pos, viewsize_y, w);
     ly = AMP_TO_Y (buf [pos], viewpos_y, viewsize_y, h);
-    for (i = 1; i < viewsize_x; i++) {
+    for (i = 1; i < sz; i++) {
       v = buf [i + pos];
-      x = SMP_TO_X (i + pos, pos, viewsize_x, w);
+      x = SMP_TO_X (i + pos, pos, viewsize_x, w) - pps / 2;
       y = AMP_TO_Y (v, viewpos_y, viewsize_y, h);
       if (y >= 0 && y < h)
-        dc.DrawLine (tx + lx, ty + ly, tx + x, ty + y);
+        dc.DrawLine (lx, ly, x, y);
       if (dh < nh) {
         dothandles [dh].x = x;
         dothandles [dh].y = y;
-        dothandles [dh].s = i;
+        dothandles [dh].s = i + pos;
         dh++;
       }
       lx = x;
       ly = y;
     }
-    dc.SetPen (pen_wavefg);
-    dc.SetBrush (brush_wavefg);
+    dc.SetPen (wxPen (col_dothandle));
+    dc.SetBrush (wxBrush (col_dothandle));
     for (i = 0; i < dh; i++) {
-      dc.DrawRectangle (dothandles [i].x - 1,
-                        dothandles [i].y - 1,
-                        8, 8);
+      dc.DrawRectangle (dothandles [i].x - (handlesize / 2),
+                        dothandles [i].y - (handlesize / 2),
+                        handlesize, handlesize);
     }
     // clear rest of handles
     int n = dothandles.size ();
@@ -2829,35 +3111,44 @@ void c_waveformwidget::draw_waveform (wxDC &dc, c_wavebuffer &buf,
       dothandles [i].s = -1;
     }
   }
+  cursor = 1;
+  // draw cursor
+  if (cursor >= viewpos_x && cursor < viewsize_x + viewpos_x) {
+    if (pps <= 0) pps = 1;
+    cursor_px = SMP_TO_X (cursor, viewpos_x, viewsize_x, w);
+    debug ("viewpos_x=%d, viewsize_x=%d, pps=%d, cursor=%ld, cursor_px=%d",
+           viewpos_x, viewsize_x, pps, cursor, cursor_px);
+    dc.SetPen (wxPen (wxColour (col_cursor)));
+    for (i = 0; i < height; i += 2) {
+      //dc.DrawLine (cursor_px, 0, cursor_px, height);
+      dc.DrawLine (cursor_px, i * 2, cursor_px, 1 + i * 2);
+    }
+  }
 }
 
-bool c_waveformwidget::select_ir (c_ir_entry *entry) { CP
-  base_image_valid = false;
+bool c_waveformview::select_waveform (c_wavebuffer *entry) { CP
   if (!entry) { 
-    unselect_ir ();
+    unselect_waveform ();
     return false;
   }
-  ir = entry;
+  wb = entry;
   
   zoom_full_x ();
   zoom_full_y ();
   dotedit = false;
   
-  debug ("got IR - id=%ld, name=%s", ir->id, ir->name.c_str ());
-  
-  
   return true;
 }
 
-bool c_waveformwidget::unselect_ir () {
+bool c_waveformview::unselect_waveform () {
+  
   CP
   return true;
 }
 
-c_ir_entry *c_waveformwidget::get_selected () {
-  return ir;
+c_wavebuffer *c_waveformview::get_selected () {
+  return wb;
 }
-
 
 #endif // USE_WXWIDGETS
 

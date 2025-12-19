@@ -100,6 +100,7 @@ ui_mainwindow::~ui_mainwindow()
 void ui_mainwindow::Init()
 {
 ////@begin ui_mainwindow member initialisation
+    note_tabs = NULL;
     tab_drysweep = NULL;
     staticbox_drysweep = NULL;
     radio_file = NULL;
@@ -192,9 +193,9 @@ void ui_mainwindow::CreateControls()
     wxBoxSizer* itemBoxSizer1 = new wxBoxSizer(wxVERTICAL);
     itemFrame1->SetSizer(itemBoxSizer1);
 
-    wxNotebook* itemNotebook1 = new wxNotebook( itemFrame1, ID_NOTEBOOK, wxDefaultPosition, wxDefaultSize, wxBK_DEFAULT );
+    note_tabs = new wxNotebook( itemFrame1, ID_NOTEBOOK, wxDefaultPosition, wxDefaultSize, wxBK_DEFAULT );
 
-    tab_drysweep = new wxPanel( itemNotebook1, ID_TAB1, wxDefaultPosition, wxDefaultSize, wxSUNKEN_BORDER|wxTAB_TRAVERSAL );
+    tab_drysweep = new wxPanel( note_tabs, ID_TAB1, wxDefaultPosition, wxDefaultSize, wxSUNKEN_BORDER|wxTAB_TRAVERSAL );
     tab_drysweep->SetExtraStyle(wxWS_EX_VALIDATE_RECURSIVELY);
     staticbox_drysweep = new wxBoxSizer(wxHORIZONTAL);
     tab_drysweep->SetSizer(staticbox_drysweep);
@@ -404,9 +405,9 @@ void ui_mainwindow::CreateControls()
     btn_play = new wxButton( tab_drysweep, ID_PLAY, wxEmptyString, wxDefaultPosition, wxDefaultSize, 0 );
     itemBoxSizer14->Add(btn_play, 0, wxGROW|wxALL, 5);
 
-    itemNotebook1->AddPage(tab_drysweep, _("Dry sweep"));
+    note_tabs->AddPage(tab_drysweep, _("Dry sweep"));
 
-    tab_deconvolv = new wxPanel( itemNotebook1, ID_TAB2, wxDefaultPosition, wxDefaultSize, wxSUNKEN_BORDER|wxTAB_TRAVERSAL );
+    tab_deconvolv = new wxPanel( note_tabs, ID_TAB2, wxDefaultPosition, wxDefaultSize, wxSUNKEN_BORDER|wxTAB_TRAVERSAL );
     tab_deconvolv->SetExtraStyle(wxWS_EX_VALIDATE_RECURSIVELY);
     staticbox_deconvolv = new wxBoxSizer(wxVERTICAL);
     tab_deconvolv->SetSizer(staticbox_deconvolv);
@@ -634,9 +635,9 @@ void ui_mainwindow::CreateControls()
     btn_process = new wxButton( tab_deconvolv, ID_PROCESS, _("Process"), wxDefaultPosition, wxDefaultSize, 0 );
     itemBoxSizer17->Add(btn_process, 5, wxALIGN_BOTTOM|wxALL, 5);
 
-    itemNotebook1->AddPage(tab_deconvolv, _("Process"));
+    note_tabs->AddPage(tab_deconvolv, _("Process"));
 
-    wxPanel* itemPanel3 = new wxPanel( itemNotebook1, ID_PANEL1, wxDefaultPosition, wxDefaultSize, wxSUNKEN_BORDER|wxTAB_TRAVERSAL );
+    wxPanel* itemPanel3 = new wxPanel( note_tabs, ID_PANEL1, wxDefaultPosition, wxDefaultSize, wxSUNKEN_BORDER|wxTAB_TRAVERSAL );
     itemPanel3->SetExtraStyle(wxWS_EX_VALIDATE_RECURSIVELY);
     wxBoxSizer* itemBoxSizer20 = new wxBoxSizer(wxHORIZONTAL);
     itemPanel3->SetSizer(itemBoxSizer20);
@@ -722,9 +723,9 @@ void ui_mainwindow::CreateControls()
     itemFlexGridSizer1->AddGrowableRow(1);
     itemFlexGridSizer1->AddGrowableCol(1);
 
-    itemNotebook1->AddPage(itemPanel3, _("IR files"));
+    note_tabs->AddPage(itemPanel3, _("IR files"));
 
-    wxPanel* itemPanel1 = new wxPanel( itemNotebook1, ID_PANEL, wxDefaultPosition, wxDefaultSize, wxSUNKEN_BORDER|wxTAB_TRAVERSAL );
+    wxPanel* itemPanel1 = new wxPanel( note_tabs, ID_PANEL, wxDefaultPosition, wxDefaultSize, wxSUNKEN_BORDER|wxTAB_TRAVERSAL );
     itemPanel1->SetExtraStyle(wxWS_EX_VALIDATE_RECURSIVELY);
     wxBoxSizer* itemBoxSizer19 = new wxBoxSizer(wxVERTICAL);
     itemPanel1->SetSizer(itemBoxSizer19);
@@ -732,9 +733,9 @@ void ui_mainwindow::CreateControls()
     text_log = new wxTextCtrl( itemPanel1, ID_LOG, _("(to do)"), wxDefaultPosition, wxDefaultSize, wxTE_MULTILINE|wxTE_READONLY );
     itemBoxSizer19->Add(text_log, 1, wxGROW|wxALL, 5);
 
-    itemNotebook1->AddPage(itemPanel1, _("Log"));
+    note_tabs->AddPage(itemPanel1, _("Log"));
 
-    itemBoxSizer1->Add(itemNotebook1, 1, wxGROW|wxALL, 5);
+    itemBoxSizer1->Add(note_tabs, 1, wxGROW|wxALL, 5);
 
     wxBoxSizer* itemBoxSizer2 = new wxBoxSizer(wxHORIZONTAL);
     itemBoxSizer1->Add(itemBoxSizer2, 0, wxGROW|wxLEFT|wxRIGHT|wxBOTTOM, 0);

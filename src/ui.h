@@ -55,6 +55,7 @@ public:
 class c_customwidget;
 class c_meterwidget;
 class c_deconvolver_gui;
+class c_waveformview;
 
 enum class meterwarn {
   REC,
@@ -228,8 +229,9 @@ public:
                   int id = -1,//ID_FOREIGN,
                   wxPoint pos = wxDefaultPosition,
                   wxSize size = wxDefaultSize,
-                  wxBorder border = wxSIMPLE_BORDER);
-  ~c_customwidget ();
+                  int wtf = 0);
+                  //wxBorder border = wxSIMPLE_BORDER);
+  ~c_customwidget () = default;
   virtual void set_opacity (int opacity);
   virtual void inspect ();
   int width, height;
@@ -242,15 +244,39 @@ public:
   //signal1 <c_customwidget *> sig_mouse_enter;
   //signal1 <c_customwidget *> sig_mouse_leave;
   
-  virtual bool render_base_image ();
+protected:
+  virtual void draw_base (wxDC &dc);
+  
+  // override THESE, not the functions that take wx*Evt & paramters
+  virtual void on_resize (int w, int h) {}
+  virtual void on_mousemove (int x, int y) {}
+  virtual void on_mousedown_left () {}
+  virtual void on_mouseup_left () {}
+  virtual void on_mousedown_middle () {}
+  virtual void on_mouseup_middle () {}
+  virtual void on_mousedown_right () {}
+  virtual void on_mouseup_right () {}
+  virtual void on_mouseleave () {}
+  virtual void on_mousewheel () {}
+  // we manage these, just override from derived class
+  virtual void on_mousewheel_v (int howmuch);
+  virtual void on_mousewheel_h (int howmuch);
+  virtual void on_keypress (wxChar unicode_key, int keycode,
+                            wxUint32 rawkeycode, bool is_keyrepeat) {}
+  virtual void on_keyrelease (wxChar unicode_key, int keycode,
+                              wxUint32 rawkeycode) {}
+  virtual void on_idle () {}
+  virtual void on_visible () {}
+  virtual void on_paint (wxDC &dc) {}
+  //virtual void update ();
+  virtual void render_overlay (wxDC &dc);
+  virtual void invalidate_base ();
+  virtual void invalidate_overlay ();
+  virtual void invalidate_overlay_rect (const wxRect &r);
   //virtual void render_base_image (wxMemoryDC *dc);
-  virtual bool update (wxWindowDC &dc);
+  ////virtual bool update (wxWindowDC &dc);
   //void schedule_deletion ();
   
-  static wxBitmap render_text_label (char *text, wxFont &font, const wxColour &fg, const wxColour &bg, 
-                                    int max_width, int max_height, int align, int gradient_h, int gradient_v,
-                                    char **r_last_visible_char = NULL);
-                                    
   wxColour col_default_bg;
   wxColour col_default_fg;
   wxColour col_bg;
@@ -259,29 +285,6 @@ public:
   wxColour col_bezel2;
   wxFont font;
   wxFont smallboldfont;
-  
-protected:
-  virtual bool update ();
-  // event handler boilerplate - might be more to come if needed
-  virtual void on_paint_event (wxPaintEvent &evt);
-  virtual void on_resize_event (wxSizeEvent &evt);
-  virtual void on_mousemove (wxMouseEvent &event);
-  virtual void on_mousedown_left (wxMouseEvent &event);
-  virtual void on_mouseup_left (wxMouseEvent &event);
-  virtual void on_mousedown_middle (wxMouseEvent &event);
-  virtual void on_mouseup_middle (wxMouseEvent &event);
-  virtual void on_mousedown_right (wxMouseEvent &event);
-  virtual void on_mouseup_right (wxMouseEvent &event);
-  virtual void on_mouseleave (wxMouseEvent &event);
-  virtual void on_mousewheel (wxMouseEvent &event);
-  // we manage these, just override from derived class
-  virtual void on_mousewheel_v (int howmuch);
-  virtual void on_mousewheel_h (int howmuch);
-  
-  virtual void on_keypress (wxKeyEvent &event);
-  virtual void on_keyrelease (wxKeyEvent&event);
-  virtual void on_idle (wxIdleEvent &event);
-  virtual void on_visible (wxShowEvent &ev);
   
   inline void get_xy (wxMouseEvent &ev) { mouse_x = ev.GetX (); mouse_y = ev.GetY (); }
   bool check_click_distance (int which_button);
@@ -303,6 +306,26 @@ protected:
   wxBitmap image;
   wxFontMetrics fm;
   
+private:
+  bool render_base_image ();
+  // event handler boilerplate - might be more to come if needed
+  void on_paint (wxPaintEvent &evt);
+  void on_resize (wxSizeEvent &evt); // calls API func on_resized ()
+  void on_mousemove (wxMouseEvent &event);
+  void on_mousedown_left (wxMouseEvent &event);
+  void on_mouseup_left (wxMouseEvent &event);
+  void on_mousedown_middle (wxMouseEvent &event);
+  void on_mouseup_middle (wxMouseEvent &event);
+  void on_mousedown_right (wxMouseEvent &event);
+  void on_mouseup_right (wxMouseEvent &event);
+  void on_mouseleave (wxMouseEvent &event);
+  void on_mousewheel (wxMouseEvent &event);
+  // we manage these, just override from derived class
+  void on_keypress (wxKeyEvent &event);
+  void on_keyrelease (wxKeyEvent&event);
+  void on_idle (wxIdleEvent &event);
+  void on_visible (wxShowEvent &ev);
+    
   DECLARE_EVENT_TABLE ();
 };
 
@@ -318,8 +341,8 @@ public:
                 int border = -1)
   : c_customwidget (parent, id) {}
   
-  virtual bool render_base_image ();
-   bool update (wxWindowDC &dc);
+  void draw_base (wxDC &dc);
+  void on_paint (wxDC &dc);
 };
 
 
@@ -335,10 +358,9 @@ public:
   ~c_meterwidget () {}
   
   void set_db_scale (float f);
-  
-  bool render_base_image ();
-  bool update (wxWindowDC &dc);
-  void on_resize_event (wxSizeEvent &ev);
+  void on_paint (wxDC &dc);
+  void draw_base (wxDC &dc);
+  void on_resize (wxSizeEvent &ev);
   void render_gradient_bar ();
   void set_vudata (c_vudata *v);
   c_vudata *get_vudata ();
@@ -388,41 +410,78 @@ struct sxy {
   int y;  //       " " y " " 
 };
 
-
-// c_waveformwidget (audio waveform viewer/editor)
-
+// c_waveformwidget: combines 1 or more c_wwaveformview's
 class c_waveformwidget : public c_customwidget {
 public:
   c_waveformwidget (wxWindow *parent = NULL,
                     int id = -1,//ID_FOREIGN,
                     wxPoint pos = wxDefaultPosition,
                     wxSize size = wxDefaultSize,
-                    int wtfisthis = -1);
-  ~c_waveformwidget () {}
+                    int i = -1);
+  ~c_waveformwidget ();
   
-  // event handlers: override those from c_customwidget
-  //void on_mousemove (wxMouseEvent &event);
-  void on_mousedown_left (wxMouseEvent &event);
-  //void on_mouseup_left (wxMouseEvent &event);
-  //void on_mousedown_middle (wxMouseEvent &event);
-  //void on_mouseup_middle (wxMouseEvent &event);
-  void on_mousedown_right (wxMouseEvent &event);
-  //void on_mouseup_right (wxMouseEvent &event);
-  //void on_mouseleave (wxMouseEvent &event);
-  void on_keypress (wxKeyEvent &event);
-  void on_keyrelease (wxKeyEvent&event);
-  void on_idle (wxIdleEvent &event);
-  void on_visible (wxShowEvent &ev);
+  bool stereo ();
+
+  void draw_base (wxDC &dc);
+  void on_paint (wxDC &dc);
+  
+  // event handlers, these mostly pass through to waveformview objects
+  void on_mousedown_left ();
+  void on_mousedown_right ();
   void on_mousewheel_h (int howmuch);
   void on_mousewheel_v (int howmuch);
-  void on_mousemove (wxMouseEvent &ev);
-  
-  bool render_base_image ();
-  
-  virtual bool update (wxWindowDC &dc);
+  void on_mousemove (int x, int y);
+  void on_idle ();
+  void on_resize (int x, int y);
+
   bool select_ir (c_ir_entry *entry);
   bool unselect_ir ();
   c_ir_entry *get_selected ();
+  void   zoom_full_x ();
+  void   zoom_full_y ();
+  
+  c_ir_entry *ir;  
+  
+private:
+  void draw_border (wxDC &dc, int x = -1, int y = -1, int w = -1, int h = -1);
+  inline bool mouse_in (wxRect &rect) { return rect.Contains (mouse_x, mouse_y); }
+  
+  c_waveformview *l = NULL;
+  c_waveformview *r = NULL;
+  
+  bool have_l ();
+  bool have_r ();
+};
+
+
+////////////////////////////////////////////////////////////////////////////////
+// c_waveformview (audio waveform viewer/editor)
+
+class c_waveformview {
+public:
+  c_waveformview (c_customwidget *parent = NULL);
+  ~c_waveformview () {}
+
+  // these should be called from container class
+  void on_paint ();
+  void on_resize (int w, int h);
+  void on_mousedown_left ();
+  void on_mousedown_right ();
+  void on_idle ();
+  void on_mousewheel_h (int howmuch);
+  void on_mousewheel_v (int howmuch);
+  void on_mousemove (int x, int y);
+  
+  // TODO: this will eventually be select_wavebuffer, and 2
+  // instances of this class will be used for editing stereo files.
+  bool select_waveform (c_wavebuffer *buf);
+  bool unselect_waveform ();
+  c_wavebuffer *get_selected ();
+  
+  int width   = -1;
+  int height  = -1;
+  int mouse_x = -1;
+  int mouse_y = -1;
   
   // zoom/scroll functions
   size_t get_scroll_pos ();
@@ -451,21 +510,22 @@ public:
   float  get_y_zoom ();
   float  get_y_pos ();
   void   update_scrollbars ();
-  // in case we need these from somewhere else - they just use macros
   float  y_to_amplitude (int y);
   int    amplitude_to_y (float y);
   size_t x_to_samplepos (int x);
   int    samplepos_to_x (size_t s);
   
   wxFont tinyfont;
+  c_customwidget *parent;
+  wxRect rect;
   
-protected:
-
 //private:
-  void draw_border (wxDC &dc, int x = -1, int y = -1, int w = -1, int h = -1);
-  void draw_waveform (wxDC &dc, c_wavebuffer &buf, int x, int y, int w, int h);
+  void draw_grid (wxDC &dc);
+  void draw_waveform (wxDC &dc, c_wavebuffer &buf);
+  void on_paint (wxDC &dc);
+  //void draw_cursor (wxDC &dc, int x, int y, int len);
   int get_dot_at (int x, int y);
-  static size_t get_dot_under_mouse ();
+  size_t get_dot_under_mouse ();
   size_t get_sample_at (int x);
   float get_amplitude_at (int y);
   void clamp_coords ();
@@ -476,10 +536,11 @@ protected:
   size_t last_dragged_handle = -1;
   
   //c_wavebuffer *wavdata = NULL;
-  c_ir_entry *ir = NULL;
+  c_wavebuffer *wb = NULL;
   std::vector<sxy> dothandles;
   bool    dotedit      = false;
   
+protected:
   // zoom / position
   int64_t viewpos_x      = 0;   // visible waveform pos/size in samples
   int64_t viewsize_x     = -1;
@@ -487,11 +548,18 @@ protected:
   float   viewpos_y      = 1.0; // sample values multiplied by 1/this
   float   viewsize_y     = 0.0; // offset, -1 means baseline on top of screen
   float   min_viewsize_y = 0.00001;
+  int     handlesize    = 8;
   
-  
-  wxPen pen_wavefg;
-  wxBrush brush_wavefg;
-  wxPen pen_wavezoom;
+  wxColour col_wave_fg;
+  wxColour col_wave_bg;
+  wxColour col_waveselect_fg;
+  wxColour col_waveselect_bg;
+  wxColour col_cursor;
+  wxColour col_dothandle;
+  wxColour col_dothighlight;
+  wxColour col_wavezoom;  
+  wxColour col_grid;
+  wxColour col_baseline;
 };
 
 int wx_main (int argc, char **argv, c_audioclient *audio);
