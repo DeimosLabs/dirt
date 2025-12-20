@@ -45,6 +45,7 @@
 #include <chrono>
 #include <iomanip>
 #include <sstream>
+#include <atomic>
 #include <stdio.h>
 #include <stdint.h>
 #include <unistd.h>
@@ -276,6 +277,8 @@ public:
   float plus_r    = 0;
   float db_scale  = DEFAULT_VU_DB;
   
+  std::atomic<bool>  needs_redraw  = true;
+  
   float hold_l        = 0;
   float hold_r        = 0;
   bool  clip_l        = false;
@@ -284,7 +287,6 @@ public:
   bool  peak_new      = false;
   bool  is_stereo     = true;
   bool  acknowledged  = false;
-  bool  needs_redraw  = true;
   
   size_t timestamp_now = 0;
   size_t timestamp_hold_l = 0;

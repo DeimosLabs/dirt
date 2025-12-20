@@ -38,6 +38,59 @@
 
 extern int64_t get_unique_id ();
 
+enum gui_flags {
+  UI_NOFLAGS             = 0,
+  // widget->channel
+  UI_KEYBOARD_SHIFT      = 1ul <<  0,
+  UI_KEYBOARD_ALT        = 1ul <<  1,
+  UI_KEYBOARD_CTRL       = 1ul <<  2,
+  UI_KEYBOARD_META       = 1ul <<  3,
+  UI_KEYBOARD_UNKNOWN    = 1ul <<  4,
+  UI_MOUSEBUTTON_LEFT    = 1UL <<  5,
+  UI_MOUSEBUTTON_MIDDLE  = 1UL <<  6,
+  UI_MOUSEBUTTON_RIGHT   = 1UL <<  7,
+  UI_MOUSEWHEEL_H        = 1UL <<  8,
+  UI_MOUSEWHEEL_V        = 1UL <<  9,
+  // channel->widget
+  UI_RESIZE_H            = 1ul << 10,
+  UI_RESIZE_V            = 1ul << 11,
+  UI_CONTENT_CHANGE      = 1ul << 12,
+  UI_SELECTION_CHANGE    = 1ul << 13,
+  UI_SCROLL_V            = 1ul << 14,
+  UI_SCROLL_H            = 1ul << 15,
+  UI_RESIZE              = 1ul << 16,
+  UI_ZOOM                = 1ul << 17,
+  UI_DRAG_SELECT         = 1ul << 18,
+  UI_DRAG_HANDLE         = 1ul << 19,
+  UI_DRAG_OTHER          = 1ul << 20,
+  UI_RELEASE_DRAG        = 1ul << 21,
+  UI_HIGHLIGHT           = 1ul << 22,
+  UI_CURSOR_BLINK_ON     = 1ul << 23,
+  UI_CURSOR_BLINK_OFF    = 1ul << 24,
+  UI_MOUSE_CAPTURE       = 1ul << 25,
+  UI_MOUSE_RELEASE       = 1ul << 26,
+  UI_MOUSECURSOR_ARROW   = 1ul << 27,
+  UI_MOUSECURSOR_HAND    = 1ul << 28,
+  UI_MOUSECURSOR_SIZE_X  = 1ul << 29,
+  UI_MOUSECURSOR_SIZE_Y  = 1ul << 30,
+  UI_MOUSECURSOR_SIZE_XY = 1ul << 31,
+  UI_MOUSECURSOR_CUSTOM  = 1ul << 32,
+  UI_MOUSECURSOR_OTHER   = 1ul << 33,
+  UI_NEEDS_REDRAW        = (UI_HIGHLIGHT|UI_CURSOR_BLINK_ON|UI_CURSOR_BLINK_OFF|
+                            UI_MOUSE_CAPTURE|UI_MOUSE_RELEASE),
+  UI_NEEDS_FULL_REDRAW   = (UI_SELECTION_CHANGE|UI_CONTENT_CHANGE|
+                            UI_SCROLL_V|UI_SCROLL_H|UI_RESIZE|UI_ZOOM),
+  UI_DRAG                = (UI_DRAG_SELECT|UI_DRAG_HANDLE),
+  // both
+  UI_POPUP_TOOLTIP       = 1ul << 34,
+  UI_POPUP_MENU          = 1ul << 35,
+  UI_POPUP_OTHER         = 1ul << 36,
+  UI_OBJECT_DESTROYED    = 1ul << 37,
+  UI_ERROR_GRAPHICS      = 1ul << 38,
+  UI_ERROR_IO            = 1ul << 39,
+  UI_ERROR_UNKNOWN       = 1ul << 40
+};
+
 class c_ir_entry {
 public:
   int64_t id = 0;
@@ -55,7 +108,7 @@ public:
 class c_customwidget;
 class c_meterwidget;
 class c_deconvolver_gui;
-class c_waveformview;
+class c_waveformchannel;
 
 enum class meterwarn {
   REC,
@@ -88,6 +141,8 @@ private:
 };
 
 wxDECLARE_APP (c_app);
+
+extern c_app *g_app;
 
 // main window
 class c_mainwindow : public ui_mainwindow {
@@ -214,12 +269,33 @@ private:
 
 /*
  * Custom widget example/template - (usually) base class.
+ * Dec.2025 major cleanup/rewrite!!
  *
  * Widget class derived directly from wxPanel, where we override/bind
  * paint events etc. to implement our own appearance and behaviour.
  *
  * New custom widget classes should derive from this class, and override
  * the required virtual functions for drawing and event handling.
+ *
+ * Functions of interest to override:
+ *
+ *   - all mouse/keyboard related ones, if the widget needs to respond
+ *     to these events.
+ *   - render_base (wxDC &dc) - to redraw img_base, which is blitted to the
+ *     screen before each redraw. Typically this is done on resize, or
+ *     other contexts where most of the graphics data needs to be redrawn.
+ *   - invalidate_base () - tells this class that the base image is no
+ *   - on_paint (wxDC &dc) - Most grahphics drawing will typically be
+ *     done here.
+ *   - longer valid and should be redrawn (eg. scrolling, etc)
+ *   - render_overlay () - same as for render_base, except img_overlay is
+ *     drawn after the paint handler.
+ *   - invalidate_overlay () - same as for base, except img_overlay is drawn
+ *     after the paint handler.
+ *   - invalidate_overlay_rect () - to redraw only parts of the overlay.
+ *   - on_ui_timer () - parent or app should call this from a timer event if
+ *     the widget needs to redraw at intervals, for example VU meters below
+ *
  *
  */
 
@@ -234,6 +310,8 @@ public:
   ~c_customwidget () = default;
   virtual void set_opacity (int opacity);
   virtual void inspect ();
+  virtual void on_ui_timer () {}
+
   int width, height;
   
   // signal/slot stuff. requires sigslot.h - not including it in this project.
@@ -245,11 +323,14 @@ public:
   //signal1 <c_customwidget *> sig_mouse_leave;
   
 protected:
-  virtual void draw_base (wxDC &dc);
+  virtual void render_base (wxDC &dc);
+  virtual void render_overlay (wxDC &dc);
   
-  // override THESE, not the functions that take wx*Evt & paramters
+  // override THESE, not the functions that take wx*Evt & parameters
   virtual void on_resize (int w, int h) {}
   virtual void on_mousemove (int x, int y) {}
+  virtual void on_mousedown (int which) {}
+  virtual void on_mouseup (int which) {}
   virtual void on_mousedown_left () {}
   virtual void on_mouseup_left () {}
   virtual void on_mousedown_middle () {}
@@ -258,24 +339,25 @@ protected:
   virtual void on_mouseup_right () {}
   virtual void on_mouseleave () {}
   virtual void on_mousewheel () {}
+  virtual void on_idle () {}
   // we manage these, just override from derived class
   virtual void on_mousewheel_v (int howmuch);
   virtual void on_mousewheel_h (int howmuch);
+  virtual void on_keypress (int keycode, bool is_repeat) {}
+  virtual void on_keyrelease (int keycode) {}
   virtual void on_keypress (wxChar unicode_key, int keycode,
                             wxUint32 rawkeycode, bool is_keyrepeat) {}
   virtual void on_keyrelease (wxChar unicode_key, int keycode,
                               wxUint32 rawkeycode) {}
-  virtual void on_idle () {}
   virtual void on_visible () {}
   virtual void on_paint (wxDC &dc) {}
   //virtual void update ();
-  virtual void render_overlay (wxDC &dc);
   virtual void invalidate_base ();
   virtual void invalidate_overlay ();
   virtual void invalidate_overlay_rect (const wxRect &r);
-  //virtual void render_base_image (wxMemoryDC *dc);
   ////virtual bool update (wxWindowDC &dc);
   //void schedule_deletion ();
+  
   
   wxColour col_default_bg;
   wxColour col_default_fg;
@@ -306,6 +388,10 @@ protected:
   wxBitmap image;
   wxFontMetrics fm;
   
+  bool button_left_down ()   { return mouse_buttons & 0x01; }
+  bool button_middle_down () { return mouse_buttons & 0x02; }
+  bool button_right_down ()  { return mouse_buttons & 0x04; }
+  
 private:
   bool render_base_image ();
   // event handler boilerplate - might be more to come if needed
@@ -324,6 +410,7 @@ private:
   void on_keypress (wxKeyEvent &event);
   void on_keyrelease (wxKeyEvent&event);
   void on_idle (wxIdleEvent &event);
+  //void on_ui_timer (wxTimer event *ev); <--- API hook is called from parent
   void on_visible (wxShowEvent &ev);
     
   DECLARE_EVENT_TABLE ();
@@ -341,7 +428,7 @@ public:
                 int border = -1)
   : c_customwidget (parent, id) {}
   
-  void draw_base (wxDC &dc);
+  void render_base (wxDC &dc);
   void on_paint (wxDC &dc);
 };
 
@@ -359,12 +446,13 @@ public:
   
   void set_db_scale (float f);
   void on_paint (wxDC &dc);
-  void draw_base (wxDC &dc);
+  void render_base (wxDC &dc);
   void on_resize (wxSizeEvent &ev);
   void render_gradient_bar ();
   void set_vudata (c_vudata *v);
   c_vudata *get_vudata ();
-  bool needs_redraw () { return data ? data->needs_redraw : false; }
+  bool needs_redraw ();
+  void on_ui_timer ();
   
   void set_stereo (bool b);
   void set_l (float level, float hold, bool clip = false, bool xrun = false);
@@ -410,7 +498,9 @@ struct sxy {
   int y;  //       " " y " " 
 };
 
-// c_waveformwidget: combines 1 or more c_wwaveformview's
+// c_waveformwidget: combines 1 or more c_wwaveformview's (see below) and
+// splits keyb/mouse events between them. Tries to keep the cursor/selection
+// synced between them, but allows for "dot mode" editing individually.
 class c_waveformwidget : public c_customwidget {
 public:
   c_waveformwidget (wxWindow *parent = NULL,
@@ -422,12 +512,14 @@ public:
   
   bool stereo ();
 
-  void draw_base (wxDC &dc);
+  void render_base (wxDC &dc);
   void on_paint (wxDC &dc);
   
   // event handlers, these mostly pass through to waveformview objects
   void on_mousedown_left ();
+  void on_mouseup_left ();
   void on_mousedown_right ();
+  void on_mouseup_right ();
   void on_mousewheel_h (int howmuch);
   void on_mousewheel_v (int howmuch);
   void on_mousemove (int x, int y);
@@ -437,17 +529,20 @@ public:
   bool select_ir (c_ir_entry *entry);
   bool unselect_ir ();
   c_ir_entry *get_selected ();
-  void   zoom_full_x ();
-  void   zoom_full_y ();
+  void zoom_full_x ();
+  void zoom_full_y ();
+  void on_ui_timer ();
   
-  c_ir_entry *ir;  
+  c_ir_entry *ir;
+  
+  inline void sched_redraw () { Refresh (); }
   
 private:
-  void draw_border (wxDC &dc, int x = -1, int y = -1, int w = -1, int h = -1);
+  void draw_border (wxDC &dc, wxRect &rect);
   inline bool mouse_in (wxRect &rect) { return rect.Contains (mouse_x, mouse_y); }
   
-  c_waveformview *l = NULL;
-  c_waveformview *r = NULL;
+  c_waveformchannel *l = NULL;
+  c_waveformchannel *r = NULL;
   
   bool have_l ();
   bool have_r ();
@@ -455,25 +550,35 @@ private:
 
 
 ////////////////////////////////////////////////////////////////////////////////
-// c_waveformview (audio waveform viewer/editor)
+// c_waveformchannel (audio waveform viewer/editor)
 
-class c_waveformview {
+// pixel to sample/amplitude mapping, given view size/pos:
+#define X_TO_SMP(x,vpos,vsz,w) ((vpos)+((float)(x)/(float)((w)-1))*(vsz)+1)
+#define SMP_TO_X(s,vpos,vsz,w) ((int)lroundf((((float)(s)-(vpos))/(vsz))*((w)-1)))
+#define Y_TO_AMP(y,vpos,vsz,h) ((vpos)-((float)(y)/(float)((h)-1))*(vsz))
+#define AMP_TO_Y(a,vpos,vsz,h) ((int)lroundf((((vpos)-(a))/(vsz))*((h)-1)))
+
+class c_waveformchannel {
 public:
-  c_waveformview (c_customwidget *parent = NULL);
-  ~c_waveformview () {}
-
-  // these should be called from container class
-  void on_paint ();
-  void on_resize (int w, int h);
-  void on_mousedown_left ();
-  void on_mousedown_right ();
-  void on_idle ();
-  void on_mousewheel_h (int howmuch);
-  void on_mousewheel_v (int howmuch);
-  void on_mousemove (int x, int y);
+  c_waveformchannel (c_customwidget *parent = NULL);
+  ~c_waveformchannel () {}
   
-  // TODO: this will eventually be select_wavebuffer, and 2
-  // instances of this class will be used for editing stereo files.
+  uint64_t ui_flags = 0;
+  // these should be called from container class
+  uint64_t on_paint ();
+  uint64_t on_resize (int w, int h);
+  uint64_t on_mousedown_left ();
+  uint64_t on_mouseup_left ();
+  uint64_t on_mousedown_middle ();
+  uint64_t on_mouseup_middle ();
+  uint64_t on_mousedown_right ();
+  uint64_t on_mouseup_right();
+  uint64_t on_idle ();
+  uint64_t on_mousewheel_h (int howmuch);
+  uint64_t on_mousewheel_v (int howmuch);
+  uint64_t on_mousemove (int x, int y);
+  void render_base (wxDC &dc);
+  
   bool select_waveform (c_wavebuffer *buf);
   bool unselect_waveform ();
   c_wavebuffer *get_selected ();
@@ -487,60 +592,69 @@ public:
   size_t get_scroll_pos ();
   size_t get_scroll_visible ();
   size_t set_zoom (size_t pos = 0, size_t sz = -1);
-  void   zoom_x (float ratio);
-  void   zoom_in () { zoom_x (1.05); }
-  void   zoom_out () { zoom_x (-1.05); }
-  void   zoom_full_x ();
-  void   zoom_full_y ();
-  void   zoom_y (float ratio, int around_px);
-  void   zoom_full_y (float ratio);
-  void   zoom_in_y (float ratio);
-  void   zoom_out_y (float ratio);
-  void   scroll_left_by (int samples);
-  void   scroll_right_by (int samples);
-  void   scroll_y_by (float offset);
-  void   scroll_up_by (float offset);
-  void   scroll_down_by (float offset);
-  void   scroll_x_to (size_t pos);
-  void   resize_x_to (size_t sz);
-  void   scroll_y_to (float pos);
-  void   resize_y_to (float size);
+  bool   zoom_x (float ratio);
+  bool   zoom_in () { return zoom_x (1.05); }
+  bool   zoom_out () { return zoom_x (-1.05); }
+  bool   zoom_full_x ();
+  bool   zoom_full_y ();
+  bool   zoom_y (float ratio, int around_px);
+  bool   zoom_full_y (float ratio);
+  bool   zoom_in_y (float ratio);
+  bool   zoom_out_y (float ratio);
+  bool   scroll_left_by (int samples);
+  bool   scroll_right_by (int samples);
+  bool   scroll_y_by (float offset);
+  bool   scroll_up_by (float offset);
+  bool   scroll_down_by (float offset);
+  bool   scroll_x_to (size_t pos);
+  bool   resize_x_to (size_t sz);
+  bool   scroll_y_to (float pos);
+  bool   resize_y_to (float size);
   int    get_x_zoom ();
   int    get_x_pos ();
   float  get_y_zoom ();
   float  get_y_pos ();
   void   update_scrollbars ();
-  float  y_to_amplitude (int y);
-  int    amplitude_to_y (float y);
-  size_t x_to_samplepos (int x);
-  int    samplepos_to_x (size_t s);
+  //float  y_to_amplitude (int y);
+  //int    amplitude_to_y (float y);
+  //size_t x_to_samplepos (int x);
+  //int    samplepos_to_x (size_t s);
+  
+  std::atomic<bool> needs_redraw = true;
   
   wxFont tinyfont;
-  c_customwidget *parent;
+  c_customwidget *parent = NULL;
   wxRect rect;
   
-//private:
+  void set_cursor (size_t curs);
+  void set_selection (size_t sel);
   void draw_grid (wxDC &dc);
   void draw_waveform (wxDC &dc, c_wavebuffer &buf);
+  void draw_cursor (wxDC &dc);
   void on_paint (wxDC &dc);
   //void draw_cursor (wxDC &dc, int x, int y, int len);
   int get_dot_at (int x, int y);
-  size_t get_dot_under_mouse ();
+  int get_dot_under_mouse ();
   size_t get_sample_at (int x);
   float get_amplitude_at (int y);
-  void clamp_coords ();
+  bool clamp_coords ();
 
-  // selection
-  size_t cursor = 0;
-  size_t selection = -1;
-  size_t last_dragged_handle = -1;
+  // cursor, selection etc
+  int64_t cursor = 0;
+  int64_t selection = -1;
+  int64_t highlighted_dot = -1;
+  int64_t selected_dot = -1;
   
   //c_wavebuffer *wavdata = NULL;
-  c_wavebuffer *wb = NULL;
+  c_wavebuffer     *wb          = NULL;
   std::vector<sxy> dothandles;
-  bool    dotedit      = false;
+  
+  inline void sched_redraw () { needs_redraw.exchange (true); }
   
 protected:
+  
+  void calculate_positions ();
+  
   // zoom / position
   int64_t viewpos_x      = 0;   // visible waveform pos/size in samples
   int64_t viewsize_x     = -1;
@@ -548,7 +662,24 @@ protected:
   float   viewpos_y      = 1.0; // sample values multiplied by 1/this
   float   viewsize_y     = 0.0; // offset, -1 means baseline on top of screen
   float   min_viewsize_y = 0.00001;
-  int     handlesize    = 8;
+  int     handlesize     = 8;
+  
+  // cache data, avoid recalculating in every func.
+  int     baseline_px    = -1;
+  int     pps            = -1;
+  int     cursor_px      = -1;
+  int     sel_begin_px   = -1;
+  int     sel_end_px     = -1;
+  
+  // let's put our macros above to good use
+  inline float y_to_amp (int y)  { return Y_TO_AMP (y, viewpos_y, viewsize_y, height); }
+  inline int amp_to_y (float a)  { return AMP_TO_Y (a, viewpos_y, viewsize_y, height); }
+  inline size_t x_to_smp (int x) { return X_TO_SMP (x, viewpos_x, viewsize_x, width);  }
+  inline int smp_to_x (size_t s) { return SMP_TO_X (s, viewpos_x, viewsize_x, width);  }
+  
+  inline bool kb_shift () { return g_app->shift; }
+  inline bool kb_alt ()   { return g_app->alt;   }
+  inline bool kb_ctrl ()  { return g_app->ctrl;  }
   
   wxColour col_wave_fg;
   wxColour col_wave_bg;
@@ -557,7 +688,7 @@ protected:
   wxColour col_cursor;
   wxColour col_dothandle;
   wxColour col_dothighlight;
-  wxColour col_wavezoom;  
+  wxColour col_wavezoom;
   wxColour col_grid;
   wxColour col_baseline;
 };

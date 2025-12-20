@@ -268,9 +268,9 @@
           <bool name="proxy-wxFRAME_TOOL_WINDOW">0</bool>
           <bool name="proxy-wxFULL_REPAINT_ON_RESIZE">0</bool>
           <bool name="proxy-wxMAXIMIZE">0</bool>
-          <bool name="proxy-wxMAXIMIZE_BOX">0</bool>
+          <bool name="proxy-wxMAXIMIZE_BOX">1</bool>
           <bool name="proxy-wxMINIMIZE">0</bool>
-          <bool name="proxy-wxMINIMIZE_BOX">0</bool>
+          <bool name="proxy-wxMINIMIZE_BOX">1</bool>
           <bool name="proxy-wxNO_BORDER">0</bool>
           <bool name="proxy-wxNO_FULL_REPAINT_ON_RESIZE">0</bool>
           <bool name="proxy-wxRAISED_BORDER">0</bool>

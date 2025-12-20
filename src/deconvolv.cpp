@@ -1538,7 +1538,7 @@ void c_deconvolver::normalize_and_trim_stereo (std::vector<float> &L,
     } else {
       firstl = find_first_nonsilent(L, thr_start_db);
       firstr = hasR ? find_first_nonsilent(R, thr_start_db) : firstl;
-      first_nonsilent = std::min(firstl, firstr);
+      first_nonsilent = std::min (firstl, firstr);
     }
     first_nonsilent = std::max (first_nonsilent, prefs->sweep_offset_smp);
   } else {
