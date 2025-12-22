@@ -56,39 +56,42 @@ enum gui_flags {
   UI_RESIZE_V            = 1ul << 11,
   UI_CONTENT_CHANGE      = 1ul << 12,
   UI_SELECTION_CHANGE    = 1ul << 13,
-  UI_SCROLL_V            = 1ul << 14,
-  UI_SCROLL_H            = 1ul << 15,
-  UI_RESIZE              = 1ul << 16,
-  UI_ZOOM                = 1ul << 17,
-  UI_DRAG_SELECT         = 1ul << 18,
-  UI_DRAG_HANDLE         = 1ul << 19,
-  UI_DRAG_OTHER          = 1ul << 20,
-  UI_RELEASE_DRAG        = 1ul << 21,
-  UI_HIGHLIGHT           = 1ul << 22,
-  UI_CURSOR_BLINK_ON     = 1ul << 23,
-  UI_CURSOR_BLINK_OFF    = 1ul << 24,
-  UI_MOUSE_CAPTURE       = 1ul << 25,
-  UI_MOUSE_RELEASE       = 1ul << 26,
-  UI_MOUSECURSOR_ARROW   = 1ul << 27,
-  UI_MOUSECURSOR_HAND    = 1ul << 28,
-  UI_MOUSECURSOR_SIZE_X  = 1ul << 29,
-  UI_MOUSECURSOR_SIZE_Y  = 1ul << 30,
-  UI_MOUSECURSOR_SIZE_XY = 1ul << 31,
-  UI_MOUSECURSOR_CUSTOM  = 1ul << 32,
-  UI_MOUSECURSOR_OTHER   = 1ul << 33,
-  UI_NEEDS_REDRAW        = (UI_HIGHLIGHT|UI_CURSOR_BLINK_ON|UI_CURSOR_BLINK_OFF|
+  UI_CURSOR_POS_CHANGE   = 1ul << 14,
+  UI_SCROLL_V            = 1ul << 15,
+  UI_SCROLL_H            = 1ul << 16,
+  UI_RESIZE              = 1ul << 17,
+  UI_ZOOM                = 1ul << 18,
+  UI_DRAG_SELECT         = 1ul << 19,
+  UI_DRAG_HANDLE         = 1ul << 20,
+  UI_DRAG_OTHER          = 1ul << 21,
+  UI_RELEASE_DRAG        = 1ul << 22,
+  UI_HIGHLIGHT           = 1ul << 23,
+  UI_CURSOR_BLINK_ON     = 1ul << 24,
+  UI_CURSOR_BLINK_OFF    = 1ul << 25,
+  UI_MOUSE_CAPTURE       = 1ul << 26,
+  UI_MOUSE_RELEASE       = 1ul << 27,
+  UI_MOUSECURSOR_ARROW   = 1ul << 28,
+  UI_MOUSECURSOR_HAND    = 1ul << 29,
+  UI_MOUSECURSOR_SIZE_X  = 1ul << 30,
+  UI_MOUSECURSOR_SIZE_Y  = 1ul << 31,
+  UI_MOUSECURSOR_SIZE_XY = 1ul << 32,
+  UI_MOUSECURSOR_CUSTOM  = 1ul << 33,
+  UI_MOUSECURSOR_OTHER   = 1ul << 34,
+  UI_CURSOR_CHANGE       = (UI_CURSOR_BLINK_ON|UI_CURSOR_BLINK_OFF|
+                            UI_CURSOR_POS_CHANGE),
+  UI_NEEDS_REDRAW        = (UI_HIGHLIGHT|UI_CURSOR_CHANGE|
                             UI_MOUSE_CAPTURE|UI_MOUSE_RELEASE),
   UI_NEEDS_FULL_REDRAW   = (UI_SELECTION_CHANGE|UI_CONTENT_CHANGE|
                             UI_SCROLL_V|UI_SCROLL_H|UI_RESIZE|UI_ZOOM),
   UI_DRAG                = (UI_DRAG_SELECT|UI_DRAG_HANDLE),
   // both
-  UI_POPUP_TOOLTIP       = 1ul << 34,
-  UI_POPUP_MENU          = 1ul << 35,
-  UI_POPUP_OTHER         = 1ul << 36,
-  UI_OBJECT_DESTROYED    = 1ul << 37,
-  UI_ERROR_GRAPHICS      = 1ul << 38,
-  UI_ERROR_IO            = 1ul << 39,
-  UI_ERROR_UNKNOWN       = 1ul << 40
+  UI_POPUP_TOOLTIP       = 1ul << 35,
+  UI_POPUP_MENU          = 1ul << 36,
+  UI_POPUP_OTHER         = 1ul << 37,
+  UI_OBJECT_DESTROYED    = 1ul << 38,
+  UI_ERROR_GRAPHICS      = 1ul << 39,
+  UI_ERROR_IO            = 1ul << 40,
+  UI_ERROR_UNKNOWN       = 1ul << 41
 };
 
 class c_ir_entry {
@@ -129,6 +132,8 @@ public:
   c_mainwindow *mainwindow = NULL;
   c_deconvolver *dec = NULL;
   c_audioclient *audio = NULL;
+  
+  int64_t frame_counter = 0;
   
   bool shift = false;
   bool alt =   false;
@@ -563,7 +568,7 @@ public:
   c_waveformchannel (c_customwidget *parent = NULL);
   ~c_waveformchannel () {}
   
-  uint64_t ui_flags = 0;
+  std::atomic<uint64_t> ui_flags = 0;
   // these should be called from container class
   uint64_t on_paint ();
   uint64_t on_resize (int w, int h);
@@ -620,7 +625,7 @@ public:
   //size_t x_to_samplepos (int x);
   //int    samplepos_to_x (size_t s);
   
-  std::atomic<bool> needs_redraw = true;
+  //std::atomic<bool> needs_redraw = true;
   
   wxFont tinyfont;
   c_customwidget *parent = NULL;
@@ -629,7 +634,10 @@ public:
   void set_cursor (size_t curs);
   void set_selection (size_t sel);
   void draw_grid (wxDC &dc);
-  void draw_waveform (wxDC &dc, c_wavebuffer &buf);
+  void draw_waveform (wxDC &dc);
+  void draw_bg (wxDC &dc);
+  void draw_select_bg (wxDC &dc);
+  void draw_baseline (wxDC &dc);
   void draw_cursor (wxDC &dc);
   void on_paint (wxDC &dc);
   //void draw_cursor (wxDC &dc, int x, int y, int len);
@@ -649,11 +657,20 @@ public:
   c_wavebuffer     *wb          = NULL;
   std::vector<sxy> dothandles;
   
-  inline void sched_redraw () { needs_redraw.exchange (true); }
+  inline void sched_redraw () { ui_flags |= UI_NEEDS_REDRAW; }
   
 protected:
-  
+  void init ();
   void calculate_positions ();
+  void register_undo (int action_type) {} // TODO: write this
+  
+  // mousedown, mouseup
+  bool begin_drag_selection ();
+  bool begin_drag_dothandle ();
+  bool end_drag (bool cancel = false);
+  bool set_cursor_and_unselect ();
+  bool extend_selection ();
+  
   
   // zoom / position
   int64_t viewpos_x      = 0;   // visible waveform pos/size in samples
@@ -683,8 +700,8 @@ protected:
   
   wxColour col_wave_fg;
   wxColour col_wave_bg;
-  wxColour col_waveselect_fg;
-  wxColour col_waveselect_bg;
+  wxColour col_wave_select_fg;
+  wxColour col_wave_select_bg;
   wxColour col_cursor;
   wxColour col_dothandle;
   wxColour col_dothighlight;

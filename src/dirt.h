@@ -103,6 +103,7 @@ void __die ();
 #define VU_CLIP_HOLD                    1.0
 #define VU_XRUN_HOLD                    5.0
 #define DEFAULT_VU_DB                   -48
+#define CURSOR_BLINK_SPEED              24
 
 //#define THRESH_RELATIVE // relative to peak, comment out for absolute
 //#define DISABLE_LEADING_SILENCE_DETECTION // for debugging
