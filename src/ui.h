@@ -538,7 +538,8 @@ public:
   void zoom_full_y ();
   void on_ui_timer ();
   
-  c_ir_entry *ir;
+  c_ir_entry *ir = NULL;
+  bool sync_channels = true;
   
   inline void sched_redraw () { Refresh (); }
   
@@ -564,6 +565,7 @@ private:
 #define AMP_TO_Y(a,vpos,vsz,h) ((int)lroundf((((vpos)-(a))/(vsz))*((h)-1)))
 
 class c_waveformchannel {
+friend c_waveformwidget;
 public:
   c_waveformchannel (c_customwidget *parent = NULL);
   ~c_waveformchannel () {}
@@ -665,12 +667,13 @@ protected:
   void register_undo (int action_type) {} // TODO: write this
   
   // mousedown, mouseup
-  bool begin_drag_selection ();
+  bool begin_drag_selection (bool extend);
+  bool drag_selection ();
   bool begin_drag_dothandle ();
   bool end_drag (bool cancel = false);
   bool set_cursor_and_unselect ();
   bool extend_selection ();
-  
+  bool set_selection_from_cursor ();
   
   // zoom / position
   int64_t viewpos_x      = 0;   // visible waveform pos/size in samples
@@ -687,6 +690,8 @@ protected:
   int     cursor_px      = -1;
   int     sel_begin_px   = -1;
   int     sel_end_px     = -1;
+  size_t  sel_begin      = -1;
+  size_t  sel_end        = -1;
   
   // let's put our macros above to good use
   inline float y_to_amp (int y)  { return Y_TO_AMP (y, viewpos_y, viewsize_y, height); }
@@ -708,6 +713,8 @@ protected:
   wxColour col_wavezoom;
   wxColour col_grid;
   wxColour col_baseline;
+  
+  bool select_mode_extend = false;
 };
 
 int wx_main (int argc, char **argv, c_audioclient *audio);

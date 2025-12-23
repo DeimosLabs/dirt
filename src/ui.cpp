@@ -96,12 +96,15 @@ size_t c_ir_entry:: size () {
 struct dc_scope {
   wxDC &dc;
   wxPoint origin;
-  dc_scope (wxDC &d, const wxRect &r) : dc (d), origin (d.GetDeviceOrigin ()) { CP
-    dc.DestroyClippingRegion ();
-    dc.SetClippingRegion (r);
+  dc_scope (wxDC &d, const wxRect &r) : dc (d), origin (d.GetDeviceOrigin ()) {
+    debug ("rect %d,%d,%d,%d", r.x, r.y, r.width, r.height);
+    //dc.DestroyClippingRegion ();
+    dc.SetClippingRegion (r.x, r.y, r.width, r.height);
+    //dc.SetDeviceOrigin (r.x, r.y);
     dc.SetDeviceOrigin (origin.x + r.x, origin.y + r.y);
   }
-  ~dc_scope () { CP
+  ~dc_scope () {
+    debug ("restoring origin: %d,%d", origin.x, origin.y);
     dc.SetDeviceOrigin(origin.x, origin.y);
     dc.DestroyClippingRegion ();
   }
@@ -361,19 +364,24 @@ void c_mainwindow::on_timer (wxTimerEvent &ev) {
     //std::cout << "selected tab: " << note_tabs->GetSelection () << "\n";
     
     if (note_tabs->GetSelection () == 2) {
+      
       c_ir_entry *ir = pn_waveform->get_selected ();
+      
       if (!ir) {
         set_statustext ("No file selected.");
-      } else { 
+      } else {
+        char buf [256];
         snprintf (buf, 255, "%ld samples, %s.",
                    ir->size (), (ir->r.size () ? "stereo" : "mono"));
         // TODO: figure out wtf is wrong with this (segfault if incl. name):
         //snprintf (buf, 255, "%s: %ld samples, %s.", ir->name.c_str (),
         //           ir->size (), (ir->r.size () ? "stereo" : "mono"));
-                   
+                
+        
         set_statustext (wxString (buf));
-      }
-    } else if (filedir_scanning) {
+        
+      } 
+    } else if (filedir_scanning) { 
       btn_inputdir_scan->SetLabel ("Cancel");
       set_statustext ("Scanning...");
     } else if (num_files_ok || num_files_error) { 
@@ -2304,7 +2312,7 @@ void  c_meterwidget::render_base (wxDC &dc) {
   };
   
   for (int i = 0; lines [i].pos >= 0; i++) {
-    ln * l = &lines [i];
+    ln *l = &lines [i];
     //debug ("line: %f, rgb (%d,%d,%d)", l->pos, l->r, l->g, l->b);
     dc.SetPen (wxPen (wxColour (l->r, l->g, l->b, l->a)));
     if (vertical) {
@@ -2521,8 +2529,8 @@ bool c_waveformwidget::stereo () {
 #define PASS_MOUSEHANDLER(x,hnd) { if (MOUSEIN(x)) PASS_HANDLER(x,hnd); }
 
 void c_waveformwidget::on_resize (int x, int y) {
-  PASS_HANDLER (l, on_resize (x, y));
-  PASS_HANDLER (r, on_resize (x, y));
+  //PASS_HANDLER (l, on_resize (x, y));
+  //PASS_HANDLER (r, on_resize (x, y));
 }
 
 void c_waveformwidget::on_idle () {
@@ -2561,7 +2569,7 @@ void c_waveformwidget::on_mouseup_right () { CP
 }
 
 void c_waveformwidget::on_mousemove (int x, int y) {
-  PASS_MOUSEHANDLER (l, on_mousemove (mouse_x - r->rect.x, mouse_y - r->rect.y));
+  PASS_MOUSEHANDLER (l, on_mousemove (mouse_x - l->rect.x, mouse_y - l->rect.y));
   PASS_MOUSEHANDLER (r, on_mousemove (mouse_x - r->rect.x, mouse_y - r->rect.y));
 }
 
@@ -2603,20 +2611,22 @@ c_ir_entry *c_waveformwidget::get_selected () {
   return ir;
 }
 
-void c_waveformwidget::zoom_full_x () { CP
+void c_waveformwidget::zoom_full_x () { 
   if (l && l->zoom_full_x ()) sched_redraw ();
   if (r && r->zoom_full_x ()) sched_redraw ();
 }
 
-void c_waveformwidget::zoom_full_y () { CP
+void c_waveformwidget::zoom_full_y () { 
   if (l && l->zoom_full_y ()) sched_redraw ();
   if (r && r->zoom_full_y ()) sched_redraw ();
 }
 
 bool c_waveformwidget::have_l () {
-  if (!l) return false;
-  if (!l->wb) return false;
+  debug ("start");
+  if (!l) return false; 
+  if (!l->wb) return false; 
   if (l->wb->size () <= 0) return false;
+  debug ("end");
   return true;
 }
 
@@ -2628,8 +2638,8 @@ bool c_waveformwidget::have_r () {
 }
 
 void c_waveformwidget::draw_border (wxDC &dc, wxRect &rect) {
-  int x = rect.x - 5;
-  int y = rect.y - 5;
+  int x = rect.x - 1;
+  int y = rect.y - 1;
   int w = rect.width + 2;
   int h = rect.height + 2;
   //if (x < 0) x = 0;
@@ -2653,30 +2663,40 @@ void c_waveformwidget::render_base (wxDC &dc) {
   debug ("width=%d, height=%d", width, height);
   wxRect rect_l, rect_r;
   
-  if (ir) {
-    if (have_l () && !have_r ()) {
+  if (ir) { 
+    if (have_l () && !have_r ()) { debug ("havel_l && !have_r");
       rect_l = wxRect (4, 4, width - 8, height - 8);
-    } else if (have_r ()) {
-      rect_l = wxRect (4, 4, width - 8, height / 2 - 12);
-      rect_r = wxRect (4, height / 2 + 12 , width - 8, height / 2 - 12);
-    } else return;
-
-    if (have_l ()) {
+    } else if (have_r ()) { debug ("havel_l && have_r");
+      rect_l = wxRect (4, 4, width - 8, height / 2 - 8);
+      rect_r = wxRect (4, height / 2 + 6 , width - 8, height / 2 - 8); 
+    } else { return; }
+    
+    if (have_l ()) { 
+      debug ("l->rect %d,%d,%d,%d", l->rect.x, l->rect.y, l->rect.width, l->rect.height);
       if (rect_l != l->rect) {
         l->rect = rect_l;
         l->on_resize (rect_l.width, rect_l.height);
       }
-      dc_scope (dc, l->rect);
+      dc_scope (dc, rect_l);
+      //dc.SetClippingRegion (l->rect);
+      //dc.SetDeviceOrigin (l->rect.x, l->rect.y);
       l->render_base (dc);
     }
-    if (have_r ()) {
+    
+    if (have_r ()) { debug ("have_r");
+      debug ("r->rect %d,%d,%d,%d", r->rect.x, r->rect.y, r->rect.width, r->rect.height);
       if (rect_r != r->rect) {
         r->rect = rect_r;
         r->on_resize (rect_r.width, rect_r.height);
       }
-      dc_scope (dc, r->rect);
+      dc_scope (dc, rect_r);
+      //dc.SetClippingRegion (l->rect);
+      //dc.SetDeviceOrigin (r->rect.x, r->rect.y);
       r->render_base (dc);
     }
+    
+    dc.SetDeviceOrigin (0, 0);
+    dc.DestroyClippingRegion ();
     if (l) draw_border (dc, l->rect);
     if (r) draw_border (dc, r->rect);
   } else {
@@ -2687,13 +2707,22 @@ void c_waveformwidget::render_base (wxDC &dc) {
 void c_waveformwidget::on_paint (wxDC &dc) {
   //wxPoint old_origin = dc.GetDeviceOrigin ();
   
-  if (have_l ()) {
-    dc_scope (dc, r->rect);
-    l->on_paint (dc);
-  }
-  if (have_r ()) {
+  if (have_l ()) { 
     dc_scope (dc, l->rect);
+    //dc.SetClippingRegion (l->rect);
+    //dc.SetDeviceOrigin (l->rect.x, l->rect.y);
+    l->on_paint (dc);
+    //dc.SetDeviceOrigin (0, 0);
+    //dc.DestroyClippingRegion ();
+  }
+  
+  if (have_r ()) {
+    dc_scope (dc, r->rect);
+    //dc.SetClippingRegion (r->rect);
+    //dc.SetDeviceOrigin (r->rect.x, r->rect.y);
     r->on_paint (dc);
+    //dc.SetDeviceOrigin (0, 0);
+    //dc.DestroyClippingRegion ();
   }
 }
 
@@ -2719,8 +2748,8 @@ void c_waveformwidget::on_ui_timer () {
 ////////////////////////////////////////////////////////////////////////////////
 // c_waveformchannel
 
-c_waveformchannel::c_waveformchannel (c_customwidget *_parent) { CP
-  CP
+c_waveformchannel::c_waveformchannel (c_customwidget *_parent) { 
+  
   parent = _parent;
   
   col_wave_fg        = wxColour (  0, 255,   0, 255);
@@ -2768,13 +2797,25 @@ uint64_t c_waveformchannel::on_resize (int w, int h) {
   return UI_NEEDS_FULL_REDRAW;
 }
 
-bool c_waveformchannel::begin_drag_selection () {
-  return set_cursor_and_unselect ();
+bool c_waveformchannel::begin_drag_selection (bool extend) {
+  debug ("start, extend=%d", (int) extend);
+  select_mode_extend = extend;
+  if (extend) {
+    cursor = x_to_smp (mouse_x);
+    if (cursor < 0) cursor = 0;
+    if (cursor >= wb->size ()) cursor = wb->size () - 1;
+  }
+  ui_flags |= UI_DRAG_SELECT;
+  if (extend)
+    return extend_selection ();
+  else
+    return set_selection_from_cursor ();
+  return true;
 }
 
-// extends from middle of selection, either left or right
+// extends from (extend ? middle of selection : cursor) either left or right
 // selection = end being dragged, cursor = other end
-bool c_waveformchannel::extend_selection () { CP
+bool c_waveformchannel::extend_selection () { 
   size_t sel_left, sel_right, sel_middle, mouse_pos;
   sel_left = std::min (cursor, selection);
   sel_right = std::max (cursor, selection);
@@ -2785,14 +2826,37 @@ bool c_waveformchannel::extend_selection () { CP
     return false;
   }
   
-  if (mouse_pos < sel_middle) {
-    sel_left = mouse_pos;
-    sel_right = cursor;
-  } else {
-    sel_right = mouse_pos;
-    sel_left = cursor;
+  if (mouse_pos >= 0 && mouse_pos < wb->size ()) {
+    if (mouse_pos < sel_middle) {
+      if (sel_right >= 0 && sel_right < wb->size ()) {
+        selection = mouse_pos;
+        cursor = sel_right;// = cursor;
+      }
+    } else {
+      if (sel_left >= 0 && sel_left < wb->size ()) {
+        selection = mouse_pos;
+        cursor = sel_left;// = cursor;
+      }
+    }
   }
+  //selection = mouse_pos;
+  
+  ui_flags |= UI_SELECTION_CHANGE;
+  
+  debug ("cursor=%ld, selection=%ld, mouse_pos=%ld", cursor, selection, mouse_pos);
   return true;
+}
+
+bool c_waveformchannel::set_selection_from_cursor () {
+  bool ret = false;
+  size_t new_sel = x_to_smp (mouse_x);
+  if (new_sel != selection) {
+    ret = true;
+    ui_flags |= UI_SELECTION_CHANGE;
+    selection = new_sel;
+  }
+  
+  return ret;
 }
 
 bool c_waveformchannel::end_drag (bool cancel) { CP
@@ -2846,12 +2910,16 @@ bool c_waveformchannel::begin_drag_dothandle () { CP
 
 bool c_waveformchannel::set_cursor_and_unselect () {
   bool ret = true;
+  
+  /*if (selection >= 0)*/ ui_flags = UI_SELECTION_CHANGE;
   //ui_flags |= UI_CURSOR_CHANGE;
   size_t smp = x_to_smp (mouse_x);
-  if (smp < 0 || smp >= wb->size ())
+  if (smp < 0 || smp >= wb->size ()) {
     ret = false;
-  
-  selection = -1;
+    selection = -1;
+  } else {
+    selection = smp;
+  }
   cursor = smp;
   return ret;
 }
@@ -2862,8 +2930,8 @@ uint64_t c_waveformchannel::on_mousedown_left () { CP
     end_drag (true); // mouse-up happened outside of widget
     ui_flags |= UI_NEEDS_FULL_REDRAW;
   } else {
-    if (kb_shift ()) {
-      begin_drag_selection ();
+    if (kb_shift ()) { debug ("SHIFT, DRAGGING SELECTION");
+      begin_drag_selection (selection > -1);
     } else {
       int dot = get_dot_under_mouse ();
       if (dot >= 0 && dot < dothandles.size ()) {
@@ -2881,7 +2949,7 @@ uint64_t c_waveformchannel::on_mouseup_left () { CP
 
   ui_flags |= end_drag () ? UI_NEEDS_FULL_REDRAW : 0;
   
-  ui_flags &= ~(UI_MOUSEBUTTON_LEFT|UI_DRAG_HANDLE|UI_DRAG_SELECT);
+  ui_flags &= ~(UI_MOUSEBUTTON_LEFT|UI_DRAG_HANDLE|UI_DRAG);
   return ui_flags;
 }
 
@@ -2935,6 +3003,14 @@ uint64_t c_waveformchannel::on_mousewheel_v (int howmuch) {
   return redraw ? UI_NEEDS_FULL_REDRAW : 0;
 }
 
+bool c_waveformchannel::drag_selection () {
+  ui_flags |= UI_SELECTION_CHANGE;
+  if (select_mode_extend)
+    return extend_selection ();
+  else
+    return set_selection_from_cursor ();
+}
+
 uint64_t c_waveformchannel::on_mousemove (int x, int y) {
   uint64_t ret = 0;
   mouse_x = x;
@@ -2947,17 +3023,19 @@ uint64_t c_waveformchannel::on_mousemove (int x, int y) {
   
   if (ui_flags & UI_DRAG_HANDLE && 
       smp >= 0 && smp < len) { 
-    debug ("dragging dot handle %d to %d", selected_dot, mouse_y);
+    //debug ("dragging dot handle %d to %d", selected_dot, mouse_y);
     ret |= UI_NEEDS_FULL_REDRAW;
   } else if (ui_flags & UI_DRAG_SELECT) {
-    debug ("extending selection");
-    ret |= extend_selection ();
+    //debug ("extending selection");
+    ret |= drag_selection ();
   } else { // just hovering, check for sample dot/handle to highlight
-    debug ("hovering");
+    //debug ("hovering");
     int dot_old = highlighted_dot;
     highlighted_dot = get_dot_under_mouse ();
     if (dot_old != highlighted_dot) { CP ret |= UI_NEEDS_REDRAW; }
   }
+  debug ("cur=%ld, sel=%ld, pps=%d, sel_px=%d,%d",
+         cursor, selection, pps, sel_begin_px, sel_end_px);
   return ret;
 }
 
@@ -3076,20 +3154,23 @@ int c_waveformchannel::get_dot_under_mouse () {
 void c_waveformchannel::calculate_positions () {
   
   baseline_px = amp_to_y (0);
-  pps = sel_begin_px + smp_to_x (viewpos_x + 1) -
-           (sel_begin_px + smp_to_x (viewpos_x));
+  
+  pps = width / viewsize_x;
   
   sel_begin_px = -1;
   sel_end_px = -1;
   
   // selection
-  if (cursor >= 0 && selection < viewsize_x + 1 && selection >= 0) {
+  //if (cursor >= 0 && selection < viewsize_x + 1 && selection >= 0) {
+  if (cursor >= 0 && selection < wb->size () && selection >= 0) {
     // samples where to draw selection rect
-    int sel_begin = std::min (cursor, selection);
-    int sel_end = std::max (cursor, selection);
+    sel_begin = std::min (cursor, selection);
+    sel_end = std::max (cursor, selection);
+
     // clamp to visible
     sel_begin = std::max ((size_t) sel_begin, (size_t) viewpos_x);
     sel_end = std::min ((size_t) sel_end, (size_t) (viewpos_x + viewsize_x));
+    
     // convert to pixel coords
     sel_begin_px = smp_to_x (sel_begin);
     sel_end_px = smp_to_x (sel_end);
@@ -3107,6 +3188,8 @@ void c_waveformchannel::on_paint (wxDC &dc) {
   int draw_y = -1;
   struct sxy *h = NULL;
   wxRect rect;
+  
+  //dc_scope scope (dc, rect);
   
   if (ui_flags & UI_DRAG_HANDLE && mouse_x > -1 && mouse_y > -1) {
     
@@ -3153,6 +3236,7 @@ void c_waveformchannel::render_base (wxDC &dc) { CP
   draw_bg (dc);
   draw_select_bg (dc);
   draw_waveform (dc);
+  draw_baseline (dc);
 }
 
 void c_waveformchannel::draw_grid (wxDC & dc) {
@@ -3161,10 +3245,10 @@ void c_waveformchannel::draw_grid (wxDC & dc) {
   int distance_thresh = height / 64;
   
   dc.SetPen (wxPen (col_grid));
-  for (int i = 0; i < 18; i += 6) {
+  for (int i = 0; i < 12; i += 3) {
     l = db_to_linear (i * -1);
     yt = amp_to_y (l);
-    baseline_px = amp_to_y (l * -1);
+    yb = amp_to_y (l * -1);
     //debug ("i=%d, l=%f, yt=%d, yb=%d", i, l, yt, yb);
     if (yt >= 0 && yt < height) {
       if (abs (yt - last_yt) > distance_thresh) {
@@ -3172,19 +3256,23 @@ void c_waveformchannel::draw_grid (wxDC & dc) {
         last_yt = yt;
       }
     }
-    if (baseline_px >= 0 && baseline_px < height) {
-      if (abs (baseline_px - last_yb) > distance_thresh) {
-        dc.DrawLine (0, baseline_px, width, baseline_px);
-        last_yb = baseline_px;
+    if (yb >= 0 && yb < height) {
+      if (abs (yb - last_yb) > distance_thresh) {
+        dc.DrawLine (0, yb, width, yb);
+        last_yb = yb;
       }
     }
   }
 }
 
 void c_waveformchannel::draw_baseline (wxDC & dc) {
-  dc.SetPen (wxColour (col_baseline));
-  dc.DrawLine (0, baseline_px, width, baseline_px);
-  ui_flags &= ~UI_NEEDS_FULL_REDRAW;
+  baseline_px = amp_to_y (0);
+  if (baseline_px > 0 && baseline_px < height) {
+    dc.SetPen (wxColour (col_baseline));
+    dc.DrawLine (0, baseline_px, width, baseline_px);
+    ui_flags &= ~UI_NEEDS_FULL_REDRAW;
+  } else
+    baseline_px = -1;
 }
 
 void c_waveformchannel::draw_bg (wxDC &dc) {
@@ -3198,12 +3286,30 @@ void c_waveformchannel::draw_bg (wxDC &dc) {
 }
 
 void c_waveformchannel::draw_select_bg (wxDC &dc) {
-  if (sel_begin_px < 0 || sel_begin_px >= width) return;
-  if (sel_end_px < 0 || sel_end_px >= width) return;
+  debug ("sel_begin/end=%ld,%ld  px=%d,%d", sel_begin, sel_end, sel_begin_px, sel_end_px);
+  /*size_t total = wb->size ();
+  if (selection < 0 || cursor < 0) return
+  if (selection >= total || cursor >= total) return;
+  if (selection == cursor) {
+    selection = -1;
+    return;
+  }
+  
+  size_t sel_begin = std::min (selection, cursor);
+  size_t sel_end = std::max (slection, cursor);
+  
+  sel_begin = 
+  */
+  if (selection == cursor)
+    selection = -1;
+  
+  if (selection < 0 || selection >= wb->size ())
+    return;
   
   dc.SetBrush (wxBrush (col_wave_select_bg));
   dc.SetPen (wxPen (col_wave_select_bg));
-  dc.DrawRectangle (sel_begin_px, 1, sel_end_px - sel_begin_px, height - 2);
+  dc.DrawRectangle (sel_begin_px/* - pps / 2*/, 1, 
+                    sel_end_px - sel_begin_px/* + pps*/, height - 2);
 }
 
 // draws waveform to dc, and calculates positions & sample mapping of dot handles
@@ -3221,7 +3327,7 @@ void c_waveformchannel::draw_waveform (wxDC &dc) {
   int sz = viewsize_x + 1;
   int pos = viewpos_x;
   size_t sel_begin, sel_end;
-  int sel_begin_px, sel_end_px;
+  //int sel_begin_px, sel_end_px;
   int w = width - 1;
   int h = height - 1;
   int i, j, wl, wr, si, lx, ly, x, y, dh;
@@ -3307,9 +3413,16 @@ void c_waveformchannel::draw_waveform (wxDC &dc) {
       si = spos * (float) sz;
       v = buf [pos + si];
       y = amp_to_y (v);
-      if (y < h && y >= 0 && i > 0) {
+      
+      if (i == sel_begin_px)
+        dc.SetPen (wxPen (col_wave_select_fg));
+      else if (i == sel_end_px + 1)
+        dc.SetPen (wxPen (col_wave_fg));
+
+      //if (y < h && y >= 0 && i > 0) {
+      if (i > 0)
         dc.DrawLine (i, ly, i + 1, y);
-      }
+      //}
       ly = y;
     }
   } else if (sz > w / dotmode_thr) { // zigzag bewidtheen samples
@@ -3322,7 +3435,14 @@ void c_waveformchannel::draw_waveform (wxDC &dc) {
       v = buf [i + pos];
       x = smp_to_x (i + pos) - pps / 2;
       y = amp_to_y (v);
-      if (y < h && y >= 0)
+      
+      if (i == sel_begin)
+        dc.SetPen (wxPen (col_wave_select_fg));
+      else if (i == sel_end + 1)
+        dc.SetPen (wxPen (col_wave_fg));
+
+      //if (y < h && y >= 0)
+      if (i > 0)
         dc.DrawLine (lx, ly, x, y);
       lx = x;
       ly = y;
@@ -3338,11 +3458,11 @@ void c_waveformchannel::draw_waveform (wxDC &dc) {
     dh = 0;
     lx = smp_to_x (pos);
     ly = amp_to_y (buf [pos]);
-    for (i = 1; i < sz; i++) {
+    for (i = 0; i < sz; i++) {
       v = buf [i + pos];
-      x = smp_to_x (i + pos);
+      x = smp_to_x (i + pos) + pps / 2;
       
-      if (selected_dot >= 0 && selected_dot < dothandles.size () &&
+      if (selected_dot >= 1 && selected_dot < dothandles.size () &&
                 dothandles [selected_dot].s == pos) {
         y = mouse_y;
         debug ("dothandles [%d].s == %ld - using mouse_y to draw line",
@@ -3351,12 +3471,17 @@ void c_waveformchannel::draw_waveform (wxDC &dc) {
         y = amp_to_y (v);
       }
       
-      if (y >= 0 && y < h)
-        if (!(ui_flags & UI_DRAG_HANDLE) || (i != selected_dot + 1 &&
-            i != selected_dot + 2)) 
+      /*if (i + pos == sel_begin)
+        dc.SetPen (wxPen (col_wave_select_fg));
+      else if (i + pos == sel_end + 1)
+        dc.SetPen (wxPen (col_wave_fg));*/
+      
+      //if (y >= 0 && y < h)
+        if (!(ui_flags & UI_DRAG_HANDLE) || (i != selected_dot &&
+            i != selected_dot + 1)) 
           dc.DrawLine (lx, ly, x, y);
         else
-          dot_skip = i - 2;
+          dot_skip = i - 1;
         
       if (dh < nh) {
         dothandles [dh].x = x;
@@ -3393,12 +3518,12 @@ void c_waveformchannel::draw_cursor (wxDC &dc) {
     selection = -1;
   
   if (cursor >= viewpos_x && cursor < viewsize_x + viewpos_x && selection < 0) {
-    if (pps <= 0) pps = 1;
-    cursor_px = smp_to_x (cursor);
+    //if (pps <= 0) pps = 1;
+    cursor_px = smp_to_x (cursor);// - pps / 2;
     //debug ("viewpos_x=%d, viewsize_x=%d, pps=%d, cursor=%ld, cursor_px=%d",
     //       viewpos_x, viewsize_x, pps, cursor, cursor_px);
     dc.SetPen (wxPen (wxColour (col_cursor)));
-    for (int i = 0; i < height; i += 2) {
+    for (int i = 0; i < height / 2; i += 2) {
       dc.DrawLine (cursor_px, i * 2, cursor_px, 1 + i * 2);
     }
   }

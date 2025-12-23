@@ -165,6 +165,8 @@ void ui_mainwindow::Init()
     btn_ir_load = NULL;
     btn_ir_save = NULL;
     pn_waveform = NULL;
+    scrollbar_v = NULL;
+    scrollbar_h = NULL;
     btn_zoomfull = NULL;
     btn_ir_play = NULL;
     btn_ir_trim = NULL;
@@ -678,15 +680,15 @@ void ui_mainwindow::CreateControls()
     pn_waveform->SetExtraStyle(wxWS_EX_VALIDATE_RECURSIVELY);
     itemFlexGridSizer1->Add(pn_waveform, 1, wxGROW|wxALL, 5);
 
-    wxScrollBar* itemScrollBar1 = new wxScrollBar( itemPanel3, ID_SCROLLBAR1, wxDefaultPosition, wxDefaultSize, wxSB_VERTICAL );
-    itemScrollBar1->SetScrollbar(0, 1, 100, 1);
-    itemFlexGridSizer1->Add(itemScrollBar1, 1, wxGROW|wxLEFT|wxRIGHT, 8);
+    scrollbar_v = new wxScrollBar( itemPanel3, ID_SCROLLBAR_V, wxDefaultPosition, wxDefaultSize, wxSB_VERTICAL );
+    scrollbar_v->SetScrollbar(0, 1, 100, 1);
+    itemFlexGridSizer1->Add(scrollbar_v, 1, wxGROW|wxLEFT|wxRIGHT, 8);
 
     itemFlexGridSizer1->Add(5, 5, 0, wxALIGN_CENTER_HORIZONTAL|wxALIGN_CENTER_VERTICAL|wxALL, 5);
 
-    wxScrollBar* itemScrollBar2 = new wxScrollBar( itemPanel3, ID_SCROLLBAR, wxDefaultPosition, wxDefaultSize, wxSB_HORIZONTAL );
-    itemScrollBar2->SetScrollbar(0, 1, 100, 1);
-    itemFlexGridSizer1->Add(itemScrollBar2, 0, wxALIGN_CENTER_HORIZONTAL|wxGROW|wxTOP|wxBOTTOM, 8);
+    scrollbar_h = new wxScrollBar( itemPanel3, ID_IRSCROLLBAR_H, wxDefaultPosition, wxDefaultSize, wxSB_HORIZONTAL );
+    scrollbar_h->SetScrollbar(0, 1, 100, 1);
+    itemFlexGridSizer1->Add(scrollbar_h, 0, wxALIGN_CENTER_HORIZONTAL|wxGROW|wxTOP|wxBOTTOM, 8);
 
     btn_zoomfull = new wxButton( itemPanel3, ID_ZOOMFULL, wxEmptyString, wxDefaultPosition, wxSize(5, 5), 0 );
     if (ui_mainwindow::ShowToolTips())
@@ -722,6 +724,14 @@ void ui_mainwindow::CreateControls()
 
     itemFlexGridSizer1->AddGrowableRow(1);
     itemFlexGridSizer1->AddGrowableCol(1);
+
+    wxBoxSizer* itemBoxSizer32 = new wxBoxSizer(wxVERTICAL);
+    itemBoxSizer20->Add(itemBoxSizer32, 0, wxGROW|wxALL, 5);
+    wxSlider* itemSlider33 = new wxSlider( itemPanel3, ID_SLIDER, 0, 0, 255, wxDefaultPosition, wxDefaultSize, wxSL_VERTICAL );
+    itemBoxSizer32->Add(itemSlider33, 1, wxGROW|wxALL, 5);
+
+    wxStaticText* itemStaticText39 = new wxStaticText( itemPanel3, wxID_STATIC, _("vol"), wxDefaultPosition, wxDefaultSize, 0 );
+    itemBoxSizer32->Add(itemStaticText39, 0, wxALIGN_CENTER_HORIZONTAL|wxALL, 5);
 
     note_tabs->AddPage(itemPanel3, _("IR files"));
 
