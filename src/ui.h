@@ -348,11 +348,11 @@ protected:
   // we manage these, just override from derived class
   virtual void on_mousewheel_v (int howmuch);
   virtual void on_mousewheel_h (int howmuch);
-  virtual void on_keypress (int keycode, bool is_repeat) {}
-  virtual void on_keyrelease (int keycode) {}
-  virtual void on_keypress (wxChar unicode_key, int keycode,
+  virtual void on_keydown (int keycode, bool is_repeat) {}
+  virtual void on_keyup (int keycode) {}
+  virtual void on_keydown (wxChar unicode_key, int keycode,
                             wxUint32 rawkeycode, bool is_keyrepeat) {}
-  virtual void on_keyrelease (wxChar unicode_key, int keycode,
+  virtual void on_keyup (wxChar unicode_key, int keycode,
                               wxUint32 rawkeycode) {}
   virtual void on_visible () {}
   virtual void on_paint (wxDC &dc) {}
@@ -412,8 +412,8 @@ private:
   void on_mouseleave (wxMouseEvent &event);
   void on_mousewheel (wxMouseEvent &event);
   // we manage these, just override from derived class
-  void on_keypress (wxKeyEvent &event);
-  void on_keyrelease (wxKeyEvent&event);
+  void on_keydown (wxKeyEvent &event);
+  void on_keyup (wxKeyEvent&event);
   void on_idle (wxIdleEvent &event);
   //void on_ui_timer (wxTimer event *ev); <--- API hook is called from parent
   void on_visible (wxShowEvent &ev);
@@ -530,7 +530,8 @@ public:
   void on_mousemove (int x, int y);
   void on_idle ();
   void on_resize (int x, int y);
-
+  void on_keydown (int keycode, bool keyrepeat);
+  
   bool select_ir (c_ir_entry *entry);
   bool unselect_ir ();
   c_ir_entry *get_selected ();
@@ -546,6 +547,7 @@ public:
 private:
   void draw_border (wxDC &dc, wxRect &rect);
   inline bool mouse_in (wxRect &rect) { return rect.Contains (mouse_x, mouse_y); }
+  void sync_state_to (c_waveformchannel *which);
   
   c_waveformchannel *l = NULL;
   c_waveformchannel *r = NULL;
@@ -553,7 +555,6 @@ private:
   bool have_l ();
   bool have_r ();
 };
-
 
 ////////////////////////////////////////////////////////////////////////////////
 // c_waveformchannel (audio waveform viewer/editor)
@@ -563,6 +564,15 @@ private:
 #define SMP_TO_X(s,vpos,vsz,w) ((int)lroundf((((float)(s)-(vpos))/(vsz))*((w)-1)))
 #define Y_TO_AMP(y,vpos,vsz,h) ((vpos)-((float)(y)/(float)((h)-1))*(vsz))
 #define AMP_TO_Y(a,vpos,vsz,h) ((int)lroundf((((vpos)-(a))/(vsz))*((h)-1)))
+
+struct s_waveformstate {
+  int64_t cursor;
+  int64_t selection;
+  size_t viewpos_x;
+  size_t viewsize_x;
+  float viewpos_y;
+  float viewsize_y;
+};
 
 class c_waveformchannel {
 friend c_waveformwidget;
@@ -588,6 +598,8 @@ public:
   
   bool select_waveform (c_wavebuffer *buf);
   bool unselect_waveform ();
+  void get_state (s_waveformstate *s);
+  void set_state (s_waveformstate *s);
   c_wavebuffer *get_selected ();
   
   int width   = -1;
@@ -600,10 +612,12 @@ public:
   size_t get_scroll_visible ();
   size_t set_zoom (size_t pos = 0, size_t sz = -1);
   bool   zoom_x (float ratio);
+  bool   zoom_x_to (size_t pos, size_t size);
   bool   zoom_in () { return zoom_x (1.05); }
   bool   zoom_out () { return zoom_x (-1.05); }
   bool   zoom_full_x ();
   bool   zoom_full_y ();
+  bool   zoom_y_to (float pos, float size);
   bool   zoom_y (float ratio, int around_px);
   bool   zoom_full_y (float ratio);
   bool   zoom_in_y (float ratio);
@@ -702,6 +716,9 @@ protected:
   inline bool kb_shift () { return g_app->shift; }
   inline bool kb_alt ()   { return g_app->alt;   }
   inline bool kb_ctrl ()  { return g_app->ctrl;  }
+
+  inline void draw_curve (wxDC &dc, int x1, int y1, int x2, int y2)
+      { dc.DrawLine (x1, y1, x2, y2); }
   
   wxColour col_wave_fg;
   wxColour col_wave_bg;

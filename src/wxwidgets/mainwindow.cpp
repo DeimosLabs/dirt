@@ -726,12 +726,20 @@ void ui_mainwindow::CreateControls()
     itemFlexGridSizer1->AddGrowableCol(1);
 
     wxBoxSizer* itemBoxSizer32 = new wxBoxSizer(wxVERTICAL);
-    itemBoxSizer20->Add(itemBoxSizer32, 0, wxGROW|wxALL, 5);
-    wxSlider* itemSlider33 = new wxSlider( itemPanel3, ID_SLIDER, 0, 0, 255, wxDefaultPosition, wxDefaultSize, wxSL_VERTICAL );
+    itemBoxSizer20->Add(itemBoxSizer32, 0, wxGROW|wxALL, 0);
+    wxSlider* itemSlider33 = new wxSlider( itemPanel3, ID_SLIDER, 0, 0, 255, wxDefaultPosition, wxDefaultSize, wxSL_VERTICAL|wxSL_INVERSE );
     itemBoxSizer32->Add(itemSlider33, 1, wxGROW|wxALL, 5);
 
-    wxStaticText* itemStaticText39 = new wxStaticText( itemPanel3, wxID_STATIC, _("vol"), wxDefaultPosition, wxDefaultSize, 0 );
+    wxStaticText* itemStaticText39 = new wxStaticText( itemPanel3, wxID_STATIC, _("Dry"), wxDefaultPosition, wxDefaultSize, 0 );
     itemBoxSizer32->Add(itemStaticText39, 0, wxALIGN_CENTER_HORIZONTAL|wxALL, 5);
+
+    wxBoxSizer* itemBoxSizer35 = new wxBoxSizer(wxVERTICAL);
+    itemBoxSizer20->Add(itemBoxSizer35, 0, wxGROW|wxALL, 0);
+    wxSlider* itemSlider36 = new wxSlider( itemPanel3, ID_SLIDER1, 0, 0, 255, wxDefaultPosition, wxDefaultSize, wxSL_VERTICAL|wxSL_INVERSE );
+    itemBoxSizer35->Add(itemSlider36, 1, wxGROW|wxALL, 5);
+
+    wxStaticText* itemStaticText41 = new wxStaticText( itemPanel3, wxID_STATIC, _("Wet"), wxDefaultPosition, wxDefaultSize, 0 );
+    itemBoxSizer35->Add(itemStaticText41, 0, wxALIGN_CENTER_HORIZONTAL|wxALL, 5);
 
     note_tabs->AddPage(itemPanel3, _("IR files"));
 

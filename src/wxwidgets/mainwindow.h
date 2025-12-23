@@ -122,6 +122,7 @@ class c_waveformwidget;
 #define ID_IR_AMPLIFY 10064
 #define ID_IR_STEREO 10065
 #define ID_SLIDER 10077
+#define ID_SLIDER1 10078
 #define ID_PANEL 10032
 #define ID_LOG 10076
 #define wxID_STATUSBAR 10066
