@@ -10048,7 +10048,7 @@ F"</string>
                       <bool name="proxy-wxSIMPLE_BORDER">0</bool>
                       <bool name="proxy-wxSL_AUTOTICKS">0</bool>
                       <bool name="proxy-wxSL_HORIZONTAL">0</bool>
-                      <bool name="proxy-wxSL_INVERSE">0</bool>
+                      <bool name="proxy-wxSL_INVERSE">1</bool>
                       <bool name="proxy-wxSL_LABELS">0</bool>
                       <bool name="proxy-wxSL_LEFT">0</bool>
                       <bool name="proxy-wxSL_RIGHT">0</bool>
@@ -10225,7 +10225,7 @@ F"</string>
                       <bool name="proxy-wxSIMPLE_BORDER">0</bool>
                       <bool name="proxy-wxSL_AUTOTICKS">0</bool>
                       <bool name="proxy-wxSL_HORIZONTAL">0</bool>
-                      <bool name="proxy-wxSL_INVERSE">0</bool>
+                      <bool name="proxy-wxSL_INVERSE">1</bool>
                       <bool name="proxy-wxSL_LABELS">0</bool>
                       <bool name="proxy-wxSL_LEFT">0</bool>
                       <bool name="proxy-wxSL_RIGHT">0</bool>

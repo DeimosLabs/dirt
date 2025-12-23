@@ -104,6 +104,10 @@ void __die ();
 #define VU_XRUN_HOLD                    5.0
 #define DEFAULT_VU_DB                   -48
 #define CURSOR_BLINK_SPEED              24
+// "48 px/sample because sometimes you need to stare at a waveform
+// until it confesses."  - Chatgpt, 2025
+// "Nah juuuuust over 48" - me. 
+#define MAX_PIXELS_PER_SAMPLE           48.0000001
 
 //#define THRESH_RELATIVE // relative to peak, comment out for absolute
 //#define DISABLE_LEADING_SILENCE_DETECTION // for debugging

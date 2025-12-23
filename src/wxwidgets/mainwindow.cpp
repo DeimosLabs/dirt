@@ -175,6 +175,8 @@ void ui_mainwindow::Init()
     btn_ir_dcoffset = NULL;
     btn_ir_amplify = NULL;
     btn_ir_stereo = NULL;
+    slider_dry = NULL;
+    slider_wet = NULL;
     text_log = NULL;
     text_statusbar = NULL;
     btn_about = NULL;
@@ -727,16 +729,16 @@ void ui_mainwindow::CreateControls()
 
     wxBoxSizer* itemBoxSizer32 = new wxBoxSizer(wxVERTICAL);
     itemBoxSizer20->Add(itemBoxSizer32, 0, wxGROW|wxALL, 0);
-    wxSlider* itemSlider33 = new wxSlider( itemPanel3, ID_SLIDER, 0, 0, 255, wxDefaultPosition, wxDefaultSize, wxSL_VERTICAL|wxSL_INVERSE );
-    itemBoxSizer32->Add(itemSlider33, 1, wxGROW|wxALL, 5);
+    slider_dry = new wxSlider( itemPanel3, ID_SLIDER_DRY, 0, 0, 255, wxDefaultPosition, wxDefaultSize, wxSL_VERTICAL|wxSL_INVERSE );
+    itemBoxSizer32->Add(slider_dry, 1, wxGROW|wxALL, 5);
 
     wxStaticText* itemStaticText39 = new wxStaticText( itemPanel3, wxID_STATIC, _("Dry"), wxDefaultPosition, wxDefaultSize, 0 );
     itemBoxSizer32->Add(itemStaticText39, 0, wxALIGN_CENTER_HORIZONTAL|wxALL, 5);
 
     wxBoxSizer* itemBoxSizer35 = new wxBoxSizer(wxVERTICAL);
     itemBoxSizer20->Add(itemBoxSizer35, 0, wxGROW|wxALL, 0);
-    wxSlider* itemSlider36 = new wxSlider( itemPanel3, ID_SLIDER1, 0, 0, 255, wxDefaultPosition, wxDefaultSize, wxSL_VERTICAL|wxSL_INVERSE );
-    itemBoxSizer35->Add(itemSlider36, 1, wxGROW|wxALL, 5);
+    slider_wet = new wxSlider( itemPanel3, ID_SLIDER_WET, 0, 0, 255, wxDefaultPosition, wxDefaultSize, wxSL_VERTICAL|wxSL_INVERSE );
+    itemBoxSizer35->Add(slider_wet, 1, wxGROW|wxALL, 5);
 
     wxStaticText* itemStaticText41 = new wxStaticText( itemPanel3, wxID_STATIC, _("Wet"), wxDefaultPosition, wxDefaultSize, 0 );
     itemBoxSizer35->Add(itemStaticText41, 0, wxALIGN_CENTER_HORIZONTAL|wxALL, 5);

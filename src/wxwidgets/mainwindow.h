@@ -121,8 +121,8 @@ class c_waveformwidget;
 #define ID_IR_DCOFFSET 10063
 #define ID_IR_AMPLIFY 10064
 #define ID_IR_STEREO 10065
-#define ID_SLIDER 10077
-#define ID_SLIDER1 10078
+#define ID_SLIDER_DRY 10077
+#define ID_SLIDER_WET 10078
 #define ID_PANEL 10032
 #define ID_LOG 10076
 #define wxID_STATUSBAR 10066
@@ -251,6 +251,8 @@ public:
     wxButton* btn_ir_dcoffset;
     wxButton* btn_ir_amplify;
     wxButton* btn_ir_stereo;
+    wxSlider* slider_dry;
+    wxSlider* slider_wet;
     wxTextCtrl* text_log;
     wxStaticText* text_statusbar;
     wxButton* btn_about;

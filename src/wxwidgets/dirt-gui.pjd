@@ -10019,12 +10019,12 @@ F"</string>
                       <long name="proxy-Height">-1</long>
                       <string name="proxy-Help text">""</string>
                       <bool name="proxy-Hidden">0</bool>
-                      <string name="proxy-Id name">"ID_SLIDER"</string>
+                      <string name="proxy-Id name">"ID_SLIDER_DRY"</string>
                       <long name="proxy-Id value">10077</long>
                       <string name="proxy-Implementation filename">""</string>
                       <long name="proxy-Initial value">0</long>
                       <long name="proxy-Maximum value">255</long>
-                      <string name="proxy-Member variable name">""</string>
+                      <string name="proxy-Member variable name">"slider_dry"</string>
                       <long name="proxy-Minimum value">0</long>
                       <string name="proxy-Name">""</string>
                       <string name="proxy-Platform">"&lt;Any platform&gt;"</string>
@@ -10061,7 +10061,7 @@ F"</string>
                       <bool name="proxy-wxWANTS_CHARS">0</bool>
                       <long name="proxy-X">-1</long>
                       <long name="proxy-Y">-1</long>
-                      <string name="title">"wxSlider: ID_SLIDER"</string>
+                      <string name="title">"wxSlider: ID_SLIDER_DRY"</string>
                       <long name="title-mode">0</long>
                       <string name="type">"dialog-control-document"</string>
                     </document>
@@ -10196,12 +10196,12 @@ F"</string>
                       <long name="proxy-Height">-1</long>
                       <string name="proxy-Help text">""</string>
                       <bool name="proxy-Hidden">0</bool>
-                      <string name="proxy-Id name">"ID_SLIDER1"</string>
+                      <string name="proxy-Id name">"ID_SLIDER_WET"</string>
                       <long name="proxy-Id value">10078</long>
                       <string name="proxy-Implementation filename">""</string>
                       <long name="proxy-Initial value">0</long>
                       <long name="proxy-Maximum value">255</long>
-                      <string name="proxy-Member variable name">""</string>
+                      <string name="proxy-Member variable name">"slider_wet"</string>
                       <long name="proxy-Minimum value">0</long>
                       <string name="proxy-Name">""</string>
                       <string name="proxy-Platform">"&lt;Any platform&gt;"</string>
@@ -10238,7 +10238,7 @@ F"</string>
                       <bool name="proxy-wxWANTS_CHARS">0</bool>
                       <long name="proxy-X">-1</long>
                       <long name="proxy-Y">-1</long>
-                      <string name="title">"wxSlider: ID_SLIDER1"</string>
+                      <string name="title">"wxSlider: ID_SLIDER_WET"</string>
                       <long name="title-mode">0</long>
                       <string name="type">"dialog-control-document"</string>
                     </document>
